@@ -14,12 +14,6 @@ The network is modeled with abstraction elements:
     * given flow value (PQI-measurements, real value)
     * given node value (measurement or setpoint of voltage, real value)
 
-The intention is to be able to model any topology and use measured/given
-values associated to any terminal of the real network. The abstraction
-shall provide all means to model any real (balanced) network. A transforming
-process shall be possible to create the correct abstraction from data
-of a real network in an easy way.
-
 The estimation goal is to scale injections in order to meet the measured values
 or setpoints as accurately as possible. A minimization problem is created 
 which minimizes the deviation of measured and calculated values. The power 

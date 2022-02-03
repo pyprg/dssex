@@ -13,6 +13,8 @@ from operator import itemgetter
 from egrid.builder import DEFAULT_FACTOR_ID, defk, Loadfactor
 # helper
 
+_empty_tuple = ()
+
 def _create_symbols(prefix, names):
     """Creates symbols."""
     return names.map(lambda x:casadi.SX.sym(prefix + x))
@@ -748,7 +750,8 @@ def _get_measured_and_calculated_power(
         branchoutputs, branch_terminal_data, 
         injectionoutputs, injection_data,
         pqvalues):
-    """Arranges calculated and measured power per id_of_batch.
+    """Arranges calculated (or expression of casadi.SX for calculation) 
+    and measured power per id_of_batch.
     
     Parameters
     ----------
@@ -780,8 +783,11 @@ def _get_measured_and_calculated_power(
         .groupby('id_of_batch')
         .sum())
     PQgiven = _measured_power_per_batch(pqvalues)
-    return PQgiven.join(
+    result = PQgiven.join(
         PQcalculated, lsuffix='_measured', rsuffix='_calculated', how='inner')
+    return result if len(result) else pd.DataFrame(
+        _empty_tuple, 
+        columns=['P_measured', 'P_calculated', 'Q_measured', 'Q_calculated'])
 
 def _get_measured_and_calculated_current(
         branchoutputs, branch_terminal_data, 
@@ -821,7 +827,8 @@ def _get_measured_and_calculated_current(
             (Icalculated_ri.Ire.pow(2) + Icalculated_ri.Iim.pow(2)).pow(0.5)
             .rename('I'))
     except:
-        return pd.DataFrame([], columns=['I_measured', 'I_calculated'])
+        return pd.DataFrame(
+            _empty_tuple, columns=['I_measured', 'I_calculated'])
     Igiven = _measured_current_per_batch(ivalues)
     return Igiven.join(
         Icalculated, lsuffix='_measured', rsuffix="_calculated", how='inner')
@@ -856,7 +863,7 @@ def _get_measured_and_calculated_voltage(Vvalues, Vnode):
             .join(ids_of_nodes)
             .set_index('id_of_node'))
     return pd.DataFrame(
-        (), 
+        _empty_tuple, 
         columns=['V_measured', 'V_calculated'], 
         index=pd.Index([], name='id_of_node'),
         dtype=float)
@@ -2091,17 +2098,33 @@ def estimate(vslack_tappos, estimation_data, previous_data, mynlp,
         solver.stats()['success'],
         create_evaluating_function(mynlp.nlp, values_of_params, r['x']))
 
-def estimation_steps(model, parameters_of_steps, tap_positions=()):
+def calculate(model, parameters_of_steps=(), tap_positions=()):
     """Estimates grid status stepwise.
     
     Parameters
     ----------
-    model: gridmodel.Model
+    model: egrid.gridmodel.Model
         
     parameters_of_steps: array_like
-        float/int heterogen
+        dict {'objectives': objectives, 'constraints': constraints}
+            if empty the function calculates power flow, 
+            each dict triggersan estimization step
+        * objectives, ''|'P'|'Q'|'I'|'V' (string or tuple of characters)
+          'P' - objective function is created with terms for active power
+          'Q' - objective function is created with terms for reactive power
+          'I' - objective function is created with terms for electric current
+          'V' - objective function is created with terms for voltage
+        * constraints, ''|'P'|'Q'|'I'|'V' (string or tuple of characters)
+          'P' - adds constraints keeping the initial values 
+                of active powers at the location of given values
+          'Q' - adds constraints keeping the initial values 
+                of reactive powers at the location of given values
+          'I' - adds constraints keeping the initial values 
+                of electric current at the location of given values
+          'V' - adds constraints keeping the initial values 
+                of voltages at the location of given values
     tap_positions: array_like
-        tuple str, int - (ID, position)
+        tuple str, int - (ID of Branchtap, position)
     
     Yields
     ------
