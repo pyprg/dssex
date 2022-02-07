@@ -9,7 +9,7 @@ import numpy as np
 from collections import namedtuple
 from operator import attrgetter, methodcaller
 
-
+_EMPTY_TUPLE = ()
 get_IPQV = attrgetter('I', 'PQ', 'V')
 
 #
@@ -135,19 +135,26 @@ def get_branch_values(terminal_values):
         * .Q_B, float, reactive power flow into terminal B
         * .P_loss, float, active power losses
         * .Q_loss, float, reactive power losses"""
-    branch_losses = (
-        terminal_values[['index_of_branch', 'P', 'Q']]
-        .groupby('index_of_branch')
-        .sum()
-        .rename(columns={'P': 'P_loss', 'Q': 'Q_loss'}))
-    terminal_values.set_index(['index_of_branch', 'side'], inplace=True)
-    branches = terminal_values.unstack('side')
-    branches.columns = np.array([f'{p}_{q}' for p, q in branches.columns])
-    branches.drop('id_of_branch_B', axis=1, inplace=True)
-    branches.rename(
-        columns={'id_of_branch_A': 'id_of_branch'}, 
-        inplace=True)
-    return branches.join(branch_losses)
+    if len(terminal_values):
+        branch_losses = (
+            terminal_values[['index_of_branch', 'P', 'Q']]
+            .groupby('index_of_branch')
+            .sum()
+            .rename(columns={'P': 'P_loss', 'Q': 'Q_loss'}))
+        terminal_values.set_index(['index_of_branch', 'side'], inplace=True)
+        branches = terminal_values.unstack('side')
+        branches.columns = np.array([f'{p}_{q}' for p, q in branches.columns])
+        branches.drop('id_of_branch_B', axis=1, inplace=True)
+        branches.rename(
+            columns={'id_of_branch_A': 'id_of_branch'}, 
+            inplace=True)
+        return branches.join(branch_losses)
+    else:
+        return pd.DataFrame(
+            _EMPTY_TUPLE,
+            columns=[
+                'id_of_branch', 'Vabs_A', 'Vabs_B', 'Iabs_A', 'Iabs_B', 
+                'P_A', 'P_B', 'Q_A', 'Q_B', 'P_loss', 'Q_loss'])
 
 def _create_branch_value_frame(branch_terminal_data, terminal_vals):
     terminal_values = _add_VIPQ(
