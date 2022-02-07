@@ -7,7 +7,7 @@ Created on Sun Jan 30 14:02:59 2022
 import unittest
 import src.dssex.estim as estim
 
-class Parsing(unittest.TestCase):
+class Estim(unittest.TestCase):
     
     pass    
 
