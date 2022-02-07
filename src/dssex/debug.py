@@ -4,8 +4,8 @@ Created on Sun Aug  19 08:36:10 2021
 
 @author: pyprg
 """
-from estim import get_load_scaling_factors
-from egrid.builder import make_model, make_data_frames
+from dssex.estim import get_load_scaling_factors
+from egrid import make_model, make_data_frames
 from functools import singledispatch
 
 @singledispatch
