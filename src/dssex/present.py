@@ -161,7 +161,6 @@ def _create_terminal_value_frame(branch_terminal_data, terminal_vals):
         (branch_terminal_data[['id_of_branch', 'index_of_branch', 'side']]
          .copy()), 
         terminal_vals)
-    return get_branch_values(terminal_values)
 
 Result_factory = namedtuple(
     'Result_factory', 

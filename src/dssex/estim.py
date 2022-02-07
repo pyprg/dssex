@@ -13,7 +13,7 @@ from operator import itemgetter
 from egrid.builder import DEFAULT_FACTOR_ID, defk, Loadfactor
 # helper
 
-_empty_tuple = ()
+_EMPTY_TUPLE = ()
 
 def _create_symbols(prefix, names):
     """Creates symbols."""
@@ -40,11 +40,11 @@ type: 'k'
 
 def _get_branch_tap_factors(branchtaps):
     """Arranges data of taps for branches.
-    
+
     Parameters
     ----------
     branchtaps: pandas.DataFrame
-    
+
     Returns
     -------
     pandas.DataFrame
@@ -61,31 +61,31 @@ def _get_branch_tap_factors(branchtaps):
     return (
         branchtaps
         .reindex([
-            'Vstep', 'positionmin', 'positionneutral', 'positionmax', 
-            'pos', 'flo', 'ftr'], 
+            'Vstep', 'positionmin', 'positionneutral', 'positionmax',
+            'pos', 'flo', 'ftr'],
             axis=1))
 
 def _calculate_current_into_branch(
         g_tot, b_tot, g_mn, b_mn, Vre, Vim, Vre_other, Vim_other):
     """Computes real and imaginary current flowing into a branch.
-    
+
     current flow into one branch
-    ::    
+    ::
         +-   -+   +-                                -+ +-   -+
         | Ire |   | (g_mm/2 + g_mn) -(b_mm/2 + b_mn) | | Vre |
         |     | = |                                  | |     |
         | Iim |   | (b_mm/2 + b_mn)  (g_mm/2 + g_mn) | | Vim |
         +-   -+   +-                                -+ +-   -+
-        
+
                        +-          -+ +-         -+
                        | g_mn -b_mn | | Vre_other |
                      - |            | |           |
                        | b_mn  g_mn | | Vim_other |
-                       +-          -+ +-         -+    
+                       +-          -+ +-         -+
     Parameters
     ----------
     g_tot: float
-        g_mm / 2 + g_mn 
+        g_mm / 2 + g_mn
     b_tot: float
         b_mm / 2 + b_mn
     g_mn: float
@@ -100,7 +100,7 @@ def _calculate_current_into_branch(
         voltage in other node, real part
     Vim_other: float
         voltage in other node, imaginary part
-    
+
     Returns
     -------
     tuple
@@ -112,26 +112,26 @@ def _calculate_current_into_branch(
 
 def _calculate_branch_terminal_current(branch_terminals):
     """Calculates real and imaginary current flowing into one branch.
-    
+
     current flow into one branch
-    ::    
+    ::
         +-   -+   +-                                -+ +-   -+
         | Ire |   | (g_mm/2 + g_mn) -(b_mm/2 + b_mn) | | Vre |
         |     | = |                                  | |     |
         | Iim |   | (b_mm/2 + b_mn)  (g_mm/2 + g_mn) | | Vim |
         +-   -+   +-                                -+ +-   -+
-        
+
                        +-          -+ +-         -+
                        | g_mn -b_mn | | Vre_other |
                      - |            | |           |
                        | b_mn  g_mn | | Vim_other |
-                       +-          -+ +-         -+    
+                       +-          -+ +-         -+
     Parameters
     ----------
     branch_terminals: pandas.DataFrame
         with columns
             g_tot: float
-                g_mm / 2 + g_mn 
+                g_mm / 2 + g_mn
             b_tot: float
                 b_mm / 2 + b_mn
             g_mn: float
@@ -146,14 +146,14 @@ def _calculate_branch_terminal_current(branch_terminals):
                 voltage in other node, real part
             Vim_other: float
                 voltage in other node, imaginary part
-    
+
     Returns
     -------
     tuple
         * Ire
         * Iim"""
     return _calculate_current_into_branch(
-        branch_terminals.g_tot, branch_terminals.b_tot, 
+        branch_terminals.g_tot, branch_terminals.b_tot,
         branch_terminals.g_mn, branch_terminals.b_mn,
         branch_terminals.Vre, branch_terminals.Vim,
         branch_terminals.Vre_other, branch_terminals.Vim_other)
@@ -171,31 +171,31 @@ def _power_into_branch(
         I = (y_mm/2 + y_mn) V - y_mn V_other
         I = y_tot V - y_mn V_other
     S is:
-    ::    
-    
+    ::
+
         S = V (y_tot V - y_mn V_other)'
         S = y_tot' V' V - y_mn' V_other' V = S_tot - S_mn
     matrix form of y_tot and y_tot' (== conjugate(y_tot))
     ::
-                +-            -+           +-            -+ 
-                | g_tot -b_tot |           |  g_tot b_tot | 
-        y_tot = |              |  y_tot' = |              | 
-                | b_tot  g_tot |           | -b_tot g_tot | 
-                +-            -+           +-            -+ 
+                +-            -+           +-            -+
+                | g_tot -b_tot |           |  g_tot b_tot |
+        y_tot = |              |  y_tot' = |              |
+                | b_tot  g_tot |           | -b_tot g_tot |
+                +-            -+           +-            -+
     V' V in matrix form:
     ::
                                  +-   -+
                                  | 1 0 |
         V' V = (Vre**2 + Vim**2) |     |
-                                 | 0 1 | 
+                                 | 0 1 |
                                  +-   -+
-    matrix form for S_tot:                                 
+    matrix form for S_tot:
     ::
-        +-            -+                     +-   -+ +-            -+ 
-        | P_tot -Q_tot |                     | 1 0 | |  g_tot b_tot | 
-        |              | = (Vre**2 + Vim**2) |     | |              | 
-        | Q_tot  P_tot |                     | 0 1 | | -b_tot g_tot | 
-        +-            -+                     +-   -+ +-            -+ 
+        +-            -+                     +-   -+ +-            -+
+        | P_tot -Q_tot |                     | 1 0 | |  g_tot b_tot |
+        |              | = (Vre**2 + Vim**2) |     | |              |
+        | Q_tot  P_tot |                     | 0 1 | | -b_tot g_tot |
+        +-            -+                     +-   -+ +-            -+
                                              +-            -+
                                              |  g_tot b_tot |
                          = (Vre**2 + Vim**2) |              |
@@ -220,25 +220,25 @@ def _power_into_branch(
          = |                                                                 |
            | (-Vre Vim_other + Vim Vre_other) (Vre Vre_other + Vim Vim_other)|
            +-                                                               -+
-           +-    -+ 
+           +-    -+
            | A -B |    A = (Vre Vre_other + Vim Vim_other)
          = |      |
            | B  A |    B = (-Vre Vim_other + Vim Vre_other)
            +-    -+
     multiply y_mn' with V_other' V:
     ::
-                           +-          -+ +-    -+ 
-                           |  g_mn b_mn | | A -B | 
-        y_mn' V_other' V = |            | |      |  
-                           | -b_mn g_mn | | B  A | 
-                           +-          -+ +-    -+ 
-    					   +-                                   -+  
-    					   |  (g_mn A + b_mn B) (b_mn A - g_mn B)|  
-    					 = |                                     |  
-    					   | (-b_mn A + g_mn B) (g_mn A + b_mn B)|  
-    					   +-                                   -+  
+                           +-          -+ +-    -+
+                           |  g_mn b_mn | | A -B |
+        y_mn' V_other' V = |            | |      |
+                           | -b_mn g_mn | | B  A |
+                           +-          -+ +-    -+
+    					   +-                                   -+
+    					   |  (g_mn A + b_mn B) (b_mn A - g_mn B)|
+    					 = |                                     |
+    					   | (-b_mn A + g_mn B) (g_mn A + b_mn B)|
+    					   +-                                   -+
     S_mn:
-    ::                       
+    ::
         +-    -+   +-                  -+
         | P_mn |   |  (g_mn A + b_mn B) |
         |      | = |                    |
@@ -246,18 +246,18 @@ def _power_into_branch(
         +-    -+   +-                  -+
     terms for P and Q
     ::
-        P =  g_tot (Vre**2 + Vim**2) 
-    	    - (  g_mn ( Vre Vre_other + Vim Vim_other) 
+        P =  g_tot (Vre**2 + Vim**2)
+    	    - (  g_mn ( Vre Vre_other + Vim Vim_other)
     		   + b_mn (-Vre Vim_other + Vim Vre_other))
-            
-        Q = -b_tot (Vre**2 + Vim**2) 
-    	    + (  b_mn ( Vre Vre_other + Vim Vim_other) 
+
+        Q = -b_tot (Vre**2 + Vim**2)
+    	    + (  b_mn ( Vre Vre_other + Vim Vim_other)
     		   - g_mn (-Vre Vim_other + Vim Vre_other))
-    
+
     Parameters
     ----------
     g_tot: float
-        g_mm + g_mn 
+        g_mm + g_mn
     b_tot: float
          b_mm + b_mn
     g_mn: float
@@ -274,7 +274,7 @@ def _power_into_branch(
         voltage in other node, real part
     Vim_other: float
         voltage in other node, imaginary part
-    
+
     Returns
     -------
     tuple
@@ -309,7 +309,7 @@ def _injected_power2(P_10, Q_10, exp_p_half, exp_q_half, V_abs_sqr):
         value for half of voltage exponent of reactive power
     V_abs_sqr: float
         V_real ** 2 + V_imag ** 2
-    
+
     Returns
     -------
     tuple
@@ -319,7 +319,7 @@ def _injected_power2(P_10, Q_10, exp_p_half, exp_q_half, V_abs_sqr):
 
 def _injected_power(injections):
     """Calculates power flowing through injections.
-    
+
     Parameters
     ----------
     injections: pandas.DataFrame
@@ -330,7 +330,7 @@ def _injected_power(injections):
         * .Exp_v_p
         * .Exp_v_q
         * .V_abs_sqr
-    
+
     Returns
     -------
     tuple
@@ -338,16 +338,16 @@ def _injected_power(injections):
         * reactive power Q"""
     if injections.size:
         return _injected_power2(
-            injections.kp * injections.P10, injections.kq * injections.Q10, 
-            injections.Exp_v_p / 2, injections.Exp_v_q / 2, 
+            injections.kp * injections.P10, injections.kq * injections.Q10,
+            injections.Exp_v_p / 2, injections.Exp_v_q / 2,
             injections.V_abs_sqr)
     return 0., 0.
 
 def _injected_current2(
         P_10, Q_10, exp_p_half, exp_q_half, V_abs_sqr, Vre, Vim):
-    """Calculates real and imaginary part of injected current according 
+    """Calculates real and imaginary part of injected current according
     to scheduled, not scaled power.
-    Injected power is calculated this way 
+    Injected power is calculated this way
     (P = |V|**Exvp * P10, Q = |V|**Exvq * Q10; with |V| - magnitude of V):
     ::
         +- -+   +-                                           -+
@@ -355,9 +355,9 @@ def _injected_current2(
         |   | = |                                             |
         | Q |   | (Vre ** 2 + Vim ** 2) ** (Expvq / 2) * Q_10 |
         +- -+   +-                                           -+
-    
+
     How to calculate current from given complex power and from voltage:
-    ::    
+    ::
                 S_conjugate
         I_inj = -----------
                 V_conjugate
@@ -372,7 +372,7 @@ def _injected_current2(
 
                                   +-        -+   +-    -+
                        1          | Vre -Vim |   |  P Q |
-              = --------------- * |          | * |      | 
+              = --------------- * |          | * |      |
                 Vre**2 + Vim**2   | Vim  Vre |   | -Q P |
                                   +-        -+   +-    -+
 
@@ -384,10 +384,10 @@ def _injected_current2(
 
     How to calculate injected real and imaginary current from voltage:
     ::
-        Ire =  (Vre ** 2 + Vim ** 2) ** (Expvp / 2 - 1) * P_10 * Vre 
+        Ire =  (Vre ** 2 + Vim ** 2) ** (Expvp / 2 - 1) * P_10 * Vre
              + (Vre ** 2 + Vim ** 2) ** (Expvq / 2 - 1) * Q_10 * Vim
 
-        Iim = -(Vre ** 2 + Vim ** 2) ** (Expvq / 2 - 1) * Q_10 * Vre 
+        Iim = -(Vre ** 2 + Vim ** 2) ** (Expvq / 2 - 1) * Q_10 * Vre
              + (Vre ** 2 + Vim ** 2) ** (Expvp / 2 - 1) * P_10 * Vim
 
     Parameters
@@ -406,7 +406,7 @@ def _injected_current2(
         voltage at terminal of injection, real part
     Vim: float
         voltage at terminal of injection, imaginary part
-    
+
     Returns
     -------
     tuple
@@ -421,7 +421,7 @@ def _injected_current2(
 def _injected_current(injections):
     """Calculates current flowing into an injection. Returns separate
     real and imaginary parts.
-    
+
     Parameters
     ----------
     injections: pandas.DataFrame
@@ -444,7 +444,7 @@ def _injected_current(injections):
                 scaling factor for active power
             kq: float
                 scaling factor for reactive power
-    
+
     Returns
     -------
     tuple
@@ -463,7 +463,7 @@ def _injected_current(injections):
 
 def _add_vk_to_injections(injections, Vnode, k, default_value):
     """Joins injection data with symbols of node voltage and scaling factors.
-    
+
     Parameters
     ----------
     injections: pandas.DataFrame (index of injection)
@@ -484,11 +484,11 @@ def _add_vk_to_injections(injections, Vnode, k, default_value):
         * .kq, casadi.SX, symbol of scaling factor for reactive power
     default_value: float
         * substitue for not existing scaling factors
-        
+
     Returns
     -------
     pandas.DataFrame (index of injection)
-        with columns: 'id', 'id_of_node', 'P10', 'Q10', 'Exp_v_p', 'Exp_v_q', 
+        with columns: 'id', 'id_of_node', 'P10', 'Q10', 'Exp_v_p', 'Exp_v_q',
             'index_of_node', 'kp', 'kq', 'Vre', 'Vim', 'V_abs_sqr'"""
     tmp = injections.join(k)
     tmp.fillna(default_value, inplace=True)
@@ -497,16 +497,16 @@ def _add_vk_to_injections(injections, Vnode, k, default_value):
 
 def _add_v_to_branch_terminals(branch_terminals, Vnode):
     """Adds node voltages to branch terminal data.
-    
+
     Parameters
     ----------
     branches: pandas.DataFrame (index of branch)
         * .index_of_node
         * .index_of_other_node
     Vnode: pandas.DataFrame (index of node)
-        * .Vre, real part of voltage 
+        * .Vre, real part of voltage
         * .Vim, imaginary part of voltage
-    
+
     Returns
     -------
     pandas.DataFrame (index of terminal)
@@ -526,12 +526,12 @@ def _add_v_to_branch_terminals(branch_terminals, Vnode):
 
 def _create_v_symbols(nodes):
     """Creates symbols for real and imaginary part of node voltages.
-    
+
     Parameters
     ----------
     nodes: pandas.DataFrame (str, id_of_node)
         * .idx, int, index of node
-    
+
     Returns
     -------
     pandas.DataFrame (index of node)
@@ -542,28 +542,28 @@ def _create_v_symbols(nodes):
     Vre = pd.Series(_create_symbols('Vre_', id_of_node))
     Vim = pd.Series(_create_symbols('Vim_', id_of_node))
     return pd.DataFrame(
-        {'id_of_node': id_of_node, 
-         'Vre': Vre, 
-         'Vim': Vim, 
-         'V_abs_sqr': Vre**2 + Vim**2}, 
+        {'id_of_node': id_of_node,
+         'Vre': Vre,
+         'Vim': Vim,
+         'V_abs_sqr': Vre**2 + Vim**2},
         index=nodes.idx)
 
 def _create_factor_symbols(unique_factors):
     """Creates symbols for variables and parameters of scaling factors.
-    
+
     Parameters
     ----------
     unique_factors: pandas.MultiIndex
         int (step), str (id_of_factor)
-    
+
     Returns
     -------
     pandas.Series (nt (step), str (id_of_factor))
         casadi.SX"""
     return(
         pd.Series(
-#            (f"{id}:{step}" for step, id in unique_factors.values), 
-            (f"{id}" for step, id in unique_factors.values), 
+#            (f"{id}:{step}" for step, id in unique_factors.values),
+            (f"{id}" for step, id in unique_factors.values),
             index=unique_factors,
             name='symbol')
         .apply(casadi.SX.sym)
@@ -576,7 +576,7 @@ def _create_factor_symbols(unique_factors):
 def _power_into_measured_branches(
         branchoutputs, branch_terminal_data):
     """Calculates power flowing into measured branches.
-    
+
     Parameters
     ----------
     branchoutputs: pandas.DataFrame
@@ -611,15 +611,15 @@ def _power_into_measured_branches(
         * .Q, casadi.SX, reacive power"""
     return (
         branchoutputs.merge(
-            right=branch_terminal_data, 
-            how='inner', 
+            right=branch_terminal_data,
+            how='inner',
             on=['index_of_node', 'index_of_branch'])
         [['id_of_batch', 'P', 'Q']])
 
 def _current_into_measured_branches(
         branchoutputs, branch_terminal_data):
     """Calculates current flowing into measured branches.
-    
+
     Parameters
     ----------
     branchoutputs: pandas.DataFrame
@@ -654,21 +654,21 @@ def _current_into_measured_branches(
         * .Im, casadi.SX, imaginary part of electric current"""
     return (
         branchoutputs.merge(
-            right=branch_terminal_data, 
-            how='inner', 
+            right=branch_terminal_data,
+            how='inner',
             on=['index_of_node', 'index_of_branch'])
         [['id_of_batch', 'Ire', 'Iim']])
 
 def _power_into_measured_injection(injectionoutputs, injection_data):
     """Calculates injected active and reactive power at terminals of measured
     injections.
-    
+
     Parameters
     ----------
     injectionoutputs: pandas.DataFrame
-    
+
     injection_data: pandas.DataFrame
-    
+
     Returns
     -------
     pandas.DataFrame
@@ -677,20 +677,20 @@ def _power_into_measured_injection(injectionoutputs, injection_data):
         * .Q, float, reactive power"""
     return (
         injectionoutputs.join(
-            injection_data[['P', 'Q']], 
-            on='index_of_injection', 
+            injection_data[['P', 'Q']],
+            on='index_of_injection',
             how='inner')
         [['id_of_batch', 'P', 'Q']])
 
 def _current_into_measured_injection(injectionoutputs, injection_data):
     """Calculates injected current at measured injections.
-    
+
     Parameters
     ----------
     injectionoutputs: pandas.DataFrame
-    
+
     injection_data: pandas.DataFrame
-    
+
     Returns
     -------
     pandas.DataFrame
@@ -700,20 +700,20 @@ def _current_into_measured_injection(injectionoutputs, injection_data):
     return (
         injectionoutputs.join(
             injection_data, on='index_of_injection', how='inner')
-        [['id_of_batch', 'Ire', 'Iim']])    
+        [['id_of_batch', 'Ire', 'Iim']])
 
 def _measured_power_per_batch(pqvalues):
     """Sums up active and reactive power values per measurement point.
-    
+
     Parameters
     ----------
     pqvalues: pandas.DataFrame
         * .id_of_batch
         * .P
         * .Q
-        * .direction 
+        * .direction
           (-1: 'from device into node' or 1: 'from node into device')
-    
+
     Returns
     -------
     pandas.DataFrame (id_of_batch)
@@ -730,13 +730,13 @@ def _measured_power_per_batch(pqvalues):
 
 def _measured_current_per_batch(ivalues):
     """Sums up electric current values per measurement point.
-    
+
     Parameters
     ----------
     pqvalues: pandas.DataFrame
         * .id_of_batch
         * .I
-    
+
     Returns
     -------
     pandas.DataFrame (id_of_batch)
@@ -745,26 +745,26 @@ def _measured_current_per_batch(ivalues):
         pd.DataFrame({'id_of_batch': ivalues.id_of_batch, 'I': ivalues.I})
         .groupby('id_of_batch')
         .sum())
-    
+
 def _get_measured_and_calculated_power(
-        branchoutputs, branch_terminal_data, 
+        branchoutputs, branch_terminal_data,
         injectionoutputs, injection_data,
         pqvalues):
-    """Arranges calculated (or expression of casadi.SX for calculation) 
+    """Arranges calculated (or expression of casadi.SX for calculation)
     and measured power per id_of_batch.
-    
+
     Parameters
     ----------
     branchoutputs: pandas.DataFrame
-    
+
     branch_terminal_data: pandas.DataFrame
-    
+
     injectionoutputs: pandas.DataFrame
-    
+
     injection_data: pandas.DataFrame
-    
+
     pqvalues: pandas.DataFrame
-    
+
     Returns
     -------
     pandas.DataFrame
@@ -786,27 +786,27 @@ def _get_measured_and_calculated_power(
     result = PQgiven.join(
         PQcalculated, lsuffix='_measured', rsuffix='_calculated', how='inner')
     return result if len(result) else pd.DataFrame(
-        _empty_tuple, 
+        _EMPTY_TUPLE,
         columns=['P_measured', 'P_calculated', 'Q_measured', 'Q_calculated'])
 
 def _get_measured_and_calculated_current(
-        branchoutputs, branch_terminal_data, 
+        branchoutputs, branch_terminal_data,
         injectionoutputs, injection_data,
         ivalues):
     """Arranges calculated and measured current per id_of_batch.
-    
+
     Parameters
     ----------
     branchoutputs: pandas.DataFrame
-    
+
     branch_terminal_data: pandas.DataFrame
-    
+
     injectionoutputs: pandas.DataFrame
-    
+
     injection_data: pandas.DataFrame
-    
+
     ivalues: pandas.DataFrame
-    
+
     Returns
     -------
     pandas.DataFrame
@@ -828,14 +828,14 @@ def _get_measured_and_calculated_current(
             .rename('I'))
     except:
         return pd.DataFrame(
-            _empty_tuple, columns=['I_measured', 'I_calculated'])
+            _EMPTY_TUPLE, columns=['I_measured', 'I_calculated'])
     Igiven = _measured_current_per_batch(ivalues)
     return Igiven.join(
         Icalculated, lsuffix='_measured', rsuffix="_calculated", how='inner')
 
 def _get_measured_and_calculated_voltage(Vvalues, Vnode):
     """Arranges calculated and measured current per node id.
-    
+
     Parameters
     ----------
     Vvalues: pandas.DataFrame
@@ -844,7 +844,7 @@ def _get_measured_and_calculated_voltage(Vvalues, Vnode):
     Vnode: pandas.DataFrame (index of node)
         * .id_of_node
         * .V_abs_sqr
-    
+
     Returns
     -------
     pandas.DataFrame
@@ -863,8 +863,8 @@ def _get_measured_and_calculated_voltage(Vvalues, Vnode):
             .join(ids_of_nodes)
             .set_index('id_of_node'))
     return pd.DataFrame(
-        _empty_tuple, 
-        columns=['V_measured', 'V_calculated'], 
+        _EMPTY_TUPLE,
+        columns=['V_measured', 'V_calculated'],
         index=pd.Index([], name='id_of_node'),
         dtype=float)
 
@@ -874,12 +874,12 @@ def _get_measured_and_calculated_voltage(Vvalues, Vnode):
 
 def _get_Vslacks(slacks):
     """Calculates real and imaginary part of given slack voltages.
-    
+
     Parameters
     ----------
-    Vslacks: pandas.DataFrame (index of node)
+    slacks: pandas.DataFrame (index of node)
         * .V, complex
-        
+
     Returns
     -------
     pandas.DataFrame (index of node)
@@ -887,11 +887,12 @@ def _get_Vslacks(slacks):
         * Vim, float"""
     return (
         slacks.V.apply([np.real, np.imag])
-        .rename(columns={'real': 'Vre', 'imag': 'Vim'}))
+        .rename(columns={'real': 'Vre', 'imag': 'Vim'})
+        if len(slacks) else pd.DataFrame((), columns=['Vre', 'Vim']))
 
 def _get_Vslack_symbols(Vsymbols, slacks):
     """Filters symbols of slack voltages.
-    
+
     Parameters
     ----------
     Vsymbols: pandas.DataFrame (index of node)
@@ -899,7 +900,7 @@ def _get_Vslack_symbols(Vsymbols, slacks):
         * .Vim, symbol
     Vslacks: pandas.DataFrame (index of node)
         * .V, complex
-        
+
     Returns
     -------
     tuple
@@ -912,7 +913,7 @@ def _get_Vslack_symbols(Vsymbols, slacks):
 def _get_slack_data(Vsymbols, slacks):
     """Filters symbols of slack voltages and calculates real and imaginary
     part from given slack voltages
-    
+
     Parameters
     ----------
     Vsymbols: pandas.DataFrame (index of node)
@@ -920,7 +921,7 @@ def _get_slack_data(Vsymbols, slacks):
         * .Vim, symbol
     Vslacks: pandas.DataFrame (index of node)
         * .V, complex
-        
+
     Returns
     -------
     tuple
@@ -937,7 +938,7 @@ def _get_slack_data(Vsymbols, slacks):
 def get_step_factor_to_injection_part(
         injectionids, assoc_frame, step_factors, count_of_steps):
     """Arranges ids for all steps and injections.
-    
+
     Parameters
     ----------
     injectionids: pandas.Series
@@ -945,10 +946,10 @@ def get_step_factor_to_injection_part(
     assoc_frame: (str (step), str (injid), 'p'|'q' (part))
         * .id, str
     step_factors: pandas.DataFrame
-        
+
     count_of_steps: int
         number of optimization steps
-        
+
     Returns
     -------
     pandas.Dataframe (int (step), str (id of injection))
@@ -956,7 +957,7 @@ def get_step_factor_to_injection_part(
         * .part, 'p'|'q'"""
     # all injections, create step, id, (pq) for all injections
     index_all = pd.MultiIndex.from_product(
-        [range(count_of_steps), injectionids, ('p', 'q')], 
+        [range(count_of_steps), injectionids, ('p', 'q')],
         names=('step', 'injid', 'part'))
     # step injid part => id
     return (
@@ -967,13 +968,13 @@ def get_step_factor_to_injection_part(
 
 def get_factor_ini_values(myfactors, symbols):
     """Returns expressions for initial values of scaling variables/parameters.
-    
+
     Parameters
     ----------
     myfactors: pandas.DataFrame
-    
+
     symbols: pandas.Series
-    
+
     Returns
     -------
     pandas.Series
@@ -991,7 +992,7 @@ def get_factor_ini_values(myfactors, symbols):
 def get_load_scaling_factors(injectionids, given_factors, assoc, count_of_steps):
     """Creates and arranges symbols for scaling factors and initialization
     data.
-    
+
     Parameters
     ----------
     injectionids: pandas.Series
@@ -1003,7 +1004,7 @@ def get_load_scaling_factors(injectionids, given_factors, assoc, count_of_steps)
         * str (id of factor)
     count_of_steps: int
         number of optimization steps
-    
+
     Returns
     -------
     tuple
@@ -1020,7 +1021,7 @@ def get_load_scaling_factors(injectionids, given_factors, assoc, count_of_steps)
     default_factors = (
         pd.DataFrame(
             defk(range(count_of_steps), DEFAULT_FACTOR_ID,
-                 type='const', value=1.0, min=1.0, max=1.0),
+                 type_='const', value=1.0, min_=1.0, max_=1.0),
             columns=Loadfactor._fields)
         .set_index(['step', 'id']))
     # replace nan with values (for required default factors)
@@ -1040,8 +1041,8 @@ def get_load_scaling_factors(injectionids, given_factors, assoc, count_of_steps)
         injection_factors.columns=['id_p', 'id_q', 'kp', 'kq']
     else:
         injection_factors = pd.DataFrame(
-            [], 
-            columns=['id_p', 'id_q', 'kp', 'kq'], 
+            [],
+            columns=['id_p', 'id_q', 'kp', 'kq'],
             index=pd.MultiIndex.from_arrays(
                 [[],[]], names=['step', 'injid']))
     injids = injection_factors.index.get_level_values(1)
@@ -1061,14 +1062,14 @@ def get_load_scaling_factors(injectionids, given_factors, assoc, count_of_steps)
 def get_branch_terminal_data(branchterminals, branchtapfactors, Vnode):
     """Arranges data of branchterminals in a DataFrame. Adds voltages of nodes
     and current to data given by branchterminals.
-    
+
     Parameters
     ----------
     branchterminals: pandas.DataFrame
         power flow calculation model
     Vnode: pandas.Series, casadi.SX
         node voltages
-    
+
     Returns
     -------
     pandas.DataFrame
@@ -1100,7 +1101,7 @@ def get_branch_terminal_data(branchterminals, branchtapfactors, Vnode):
         .fillna(-1)
         .join(branchtapfactors[['flo', 'ftr']], on='index_of_taps')
         .join(
-            branchtapfactors[['flo']], 
+            branchtapfactors[['flo']],
             on='index_of_other_taps',
             rsuffix='_other'))
     branch_with_taps = (
@@ -1119,8 +1120,8 @@ def get_branch_terminal_data(branchterminals, branchtapfactors, Vnode):
     term_data['Ire'] = Ire
     term_data['Iim'] = Iim
     P, Q = _power_into_branch(
-        term_data.g_tot, term_data.b_tot, term_data.g_mn, term_data.b_mn, 
-        term_data.V_abs_sqr, term_data.Vre, term_data.Vim, 
+        term_data.g_tot, term_data.b_tot, term_data.g_mn, term_data.b_mn,
+        term_data.V_abs_sqr, term_data.Vre, term_data.Vim,
         term_data.Vre_other, term_data.Vim_other)
     term_data['P'] = P
     term_data['Q'] = Q
@@ -1129,7 +1130,7 @@ def get_branch_terminal_data(branchterminals, branchtapfactors, Vnode):
 def get_injection_data(injections, Vnode, k):
     """Arranges data of injections in a DataFrame. Adds voltages of nodes
     and current to data given by injections.
-    
+
     Parameters
     ----------
     injections: pandas.DataFrame
@@ -1138,7 +1139,7 @@ def get_injection_data(injections, Vnode, k):
         node voltages
     k: pandas.Series, casadi.SX
         scaling factors
-    
+
     Returns
     -------
     pandas.DataFrame
@@ -1273,7 +1274,7 @@ Inode: casadi.SX
 def calculate_Y_by_V(node_index, Vsymbols, gb):
     """Creates a vector of node currents (selected nodes only) from
     branches and node voltages.
-    
+
     Parameters
     ----------
     node_index: pandas.Index
@@ -1282,7 +1283,7 @@ def calculate_Y_by_V(node_index, Vsymbols, gb):
         vector of node voltage symbols
     gb: casadi.SX
         branch admittance matrix with separated conductance and susceptance
-    
+
     Returns
     -------
     casadi.SX
@@ -1292,9 +1293,9 @@ def calculate_Y_by_V(node_index, Vsymbols, gb):
     return casadi.mtimes(gb[node_index_ri, :], V_node)
 
 def add_I_injected(node_index, Y_by_V, injection_data):
-    """Creates a vector of node current casadi.SX-expressions 
+    """Creates a vector of node current casadi.SX-expressions
     (selected nodes only).
-    
+
     Parameters
     ----------
     node_index: pandas.Index
@@ -1302,7 +1303,7 @@ def add_I_injected(node_index, Y_by_V, injection_data):
     Y_by_V: casadi.SX (2nx1)
         current vector
     injection_data: pandas.DataFrame
-    
+
     Returns
     -------
     casadi.SX
@@ -1312,29 +1313,29 @@ def add_I_injected(node_index, Y_by_V, injection_data):
 
 def get_branch_estimation_data(model, Vsymbols):
     """Arranges data for estimation.
-    
+
     Parameters
     ----------
     model: gridmodel.Model
-    
+
     Vsymbols: pandas.DataFrame (index of node)
         * .id_of_node, str, identifier of node
         * .Vre, casadi.SX, symbol of node voltage, real part
         * .Vim, casadi.SX, symbol of node voltage, imaginary part
         * .V_abs_sqr, casadi.SX, expression Vre**2 + Vim**2
-    
+
     Returns
     -------
     tuple
         * pandas.DataFrame, terminal data with columns:
-            'index_of_branch', 'id_of_branch', 'index_of_node', 
-            'index_of_other_node', 'g_tot', 'b_tot', 'g_mn', 'b_mn', 
-            'g_mm_half', 'b_mm_half', 'index_of_taps', 'index_of_other_taps', 
-            'side', 'Vre', 'Vim', 'V_abs_sqr', 'Vre_other', 'Vim_other', 
-            'V_abs_sqr_other', 'flo', 'ftr', 'flo_other', 'Ire', 'Iim', 
+            'index_of_branch', 'id_of_branch', 'index_of_node',
+            'index_of_other_node', 'g_tot', 'b_tot', 'g_mn', 'b_mn',
+            'g_mm_half', 'b_mm_half', 'index_of_taps', 'index_of_other_taps',
+            'side', 'Vre', 'Vim', 'V_abs_sqr', 'Vre_other', 'Vim_other',
+            'V_abs_sqr_other', 'flo', 'ftr', 'flo_other', 'Ire', 'Iim',
             'P', 'Q'
         * pandas.DataFrame, tap data with columns:
-            'id', 'Vstep', 'positionmin', 'positionneutral', 'positionmax', 
+            'id', 'Vstep', 'positionmin', 'positionneutral', 'positionmax',
             'pos'"""
     branchtaps = model.branchtaps.copy()
     possymbols = _create_symbols('pos_', model.branchtaps.id)
@@ -1345,28 +1346,28 @@ def get_branch_estimation_data(model, Vsymbols):
     return (
         branch_terminal_data,
         branchtaps[
-            ['id', 'Vstep', 'positionmin', 'positionneutral', 
+            ['id', 'Vstep', 'positionmin', 'positionneutral',
              'positionmax', 'position', 'pos']])
 
 _empty_load_scaling_factors = pd.DataFrame(
-    [], 
+    [],
     columns=(Loadfactor._fields + ('symbol', 'ini')))
 
 def query_load_scaling_factors_of_type(type_, load_scaling_factors_step):
     """Computes load_scaling_factors_step.loc[type_], returns an empty
     pandas.DataFrame if key 'type_' is not in data frame
-    
+
     Parameters
     ----------
     type_: 'var'|'const'
-    
+
     load_scaling_factors_step: pandas.DataFrame
         ...
-    
+
     Returns
     -------
     pandas.DataFrame
-        with columns: 'id', 'Vstep', 'positionmin', 'positionneutral', 
+        with columns: 'id', 'Vstep', 'positionmin', 'positionneutral',
              'positionmax', 'pos'"""
     try:
         return load_scaling_factors_step.loc[type_].reset_index()
@@ -1376,19 +1377,19 @@ def query_load_scaling_factors_of_type(type_, load_scaling_factors_step):
 def get_estimation_data(model, count_of_steps):
     """Prepares data for estimation.
     Vsymbols and expressions of V are reused in all steps.
-    ksymbols are specific for each step, hence, expressions of PQ, I and Inode 
+    ksymbols are specific for each step, hence, expressions of PQ, I and Inode
     are (potentially) specific for each step.
-    k_ini expressions (for initial load scaling factors) reference the 
-    previous optimization step. Therefore, data retrieval needs the 
+    k_ini expressions (for initial load scaling factors) reference the
+    previous optimization step. Therefore, data retrieval needs the
     evaluation function of the previous step.
-    
+
     Parameters
     ----------
     model: gridmodel.Model
-    
+
     count_of_steps: int
         number of optimization steps
-    
+
     Returns
     -------
     function (int) -> (Estimation_data)"""
@@ -1402,18 +1403,18 @@ def get_estimation_data(model, count_of_steps):
     Y_by_V = calculate_Y_by_V(
         node_index, Vsymbols, create_gb_branch_matrix(branch_terminal_data))
     load_scaling_factors, injection_factors = get_load_scaling_factors(
-        model.injections.id, 
+        model.injections.id,
         model.load_scaling_factors,
         model.injection_factor_association,
         count_of_steps)
     def of_step(step):
         """Arranges data for estimation of one step.
-        
+
         Parameters
         ----------
         step: int
             optimization step which the data shall be prepared for
-        
+
         Returns
         -------
         Estimation_data"""
@@ -1440,21 +1441,21 @@ def get_estimation_data(model, count_of_steps):
         except:
             kpq = pd.DataFrame(
                 (),
-                columns=['kp', 'kq'], 
+                columns=['kp', 'kq'],
                 index=pd.Index([], name='index_of_injection'))
         injection_data = get_injection_data(model.injections, Vsymbols, kpq)
         V = _get_measured_and_calculated_voltage(model.vvalues, Vsymbols)
         PQ = _get_measured_and_calculated_power(
-            model.branchoutputs, 
-            branch_terminal_data, 
-            model.injectionoutputs, 
-            injection_data, 
+            model.branchoutputs,
+            branch_terminal_data,
+            model.injectionoutputs,
+            injection_data,
             model.pqvalues)
         I = _get_measured_and_calculated_current(
-            model.branchoutputs, 
-            branch_terminal_data, 
-            model.injectionoutputs, 
-            injection_data, 
+            model.branchoutputs,
+            branch_terminal_data,
+            model.injectionoutputs,
+            injection_data,
             model.ivalues)
         Inode = add_I_injected(node_index, Y_by_V, injection_data)
         return Estimation_data(
@@ -1477,12 +1478,12 @@ def get_estimation_data(model, count_of_steps):
 
 def calculate_norm(ars):
     """Calculates a norm.
-    
+
     Parameters
     ----------
     ars: list
         numpy.array (nx2)
-    
+
     Returns
     -------
     float"""
@@ -1494,7 +1495,7 @@ def calculate_norm(ars):
 def create_constraints(target_frames):
     """Creates expressions for constraints of target values (measurements and
     setpoint).
-    
+
     Parameters
     ----------
     target_frames: iterable
@@ -1504,7 +1505,7 @@ def create_constraints(target_frames):
                 * expression for calculating the value from the state
                   variables
             * str, 'P'|'Q'|'I'|'V'
-    
+
     Returns
     -------
     tuple
@@ -1519,16 +1520,16 @@ def create_constraints(target_frames):
         list_expressions += target_frame.iloc[:,1].to_list()
     vars = casadi.vcat(list_var)
     return ((vars, vars - casadi.vcat(list_expressions))
-        if vars.size1() else 
+        if vars.size1() else
         (vars, vars))
 
-def create_gb_branch_matrix(terms):  
+def create_gb_branch_matrix(terms):
     """Creates a conductance-susceptance branch matrix for power flow
     calculation. The matrix is equivalent to an admittance branch matrix.
     However the admittances are split into real and imaginary parts.
-    
+
     Before power flow calculation the slack rows need modification.
-    
+
     Parameters
     ----------
     terms: pandas.DataFrame
@@ -1538,13 +1539,14 @@ def create_gb_branch_matrix(terms):
         * .b_mn, float, longitudinal susceptance
         * .g_tot, float, half of self conductance plus g_mn
         * .b_tot, float, half of self susceptance plus b_mn
-    
+
     Returns
     -------
     casadi.SX"""
-    idx_a = 2 * terms.index_of_node  
+    idx_a = 2 * terms.index_of_node
     idx_a_p_1 = idx_a + 1
-    size = idx_a_p_1.max() + 1 #index is zero based, unlike shape
+    #index is zero based, unlike shape
+    size = idx_a_p_1.max() + 1 if len(idx_a_p_1) else 0
     idx_b = 2 * terms.index_of_other_node
     idx_b_p_1 = idx_b + 1
     rows = pd.concat([idx_a, idx_a_p_1, idx_a_p_1, idx_a])
@@ -1562,12 +1564,12 @@ def create_gb_branch_matrix(terms):
 def get_index_ri(index):
     """Creates an index for separate real and imaginary parts from
     an index of complex.
-    
+
     Parameters
     ----------
     index: pandas.Series
         int
-        
+
     Returns
     -------
     pandas.Series
@@ -1578,7 +1580,7 @@ def get_index_ri(index):
 
 def get_injected_node_current(injection_data, node_index):
     """Creates a vector of injected node currents (index_of_node->current).
-    
+
     Parameters
     ----------
     injection_data: pandas.DataFrame
@@ -1587,7 +1589,7 @@ def get_injected_node_current(injection_data, node_index):
         * .Iim
     V_node_index: pandas.Series
         bool
-    
+
     Returns
     -------
     casasdi.SX
@@ -1607,7 +1609,7 @@ def get_injected_node_current(injection_data, node_index):
 
 def get_symbols_pf(estimation_data):
     """Extracts symbols from estimation_data for power flow calculation.
-    
+
     Returns
     -------
     list
@@ -1629,18 +1631,18 @@ def get_symbols_pf(estimation_data):
     branch_tap_pos = estimation_data.branch_taps.pos.to_numpy()
     params = casadi.vertcat(
         Vslack_const,
-        branch_tap_pos, 
+        branch_tap_pos,
         casadi.vcat(estimation_data.kconsts.symbol),
         casadi.vcat(estimation_data.kvars.symbol))
     return [Vnode_vars, params]
 
 def create_rootfinder(estimation_data):
     """Creates a root finding function which solves the power flow problem.
-    
+
     Parameters
     ----------
     estimation_data: Estimation_data
-    
+
     Returns
     -------
     casadi.casadi.Function"""
@@ -1652,13 +1654,13 @@ def create_rootfinder(estimation_data):
 def calculate_pf(rootfinder, values_of_parameters, Vguess):
     """Function for power flow calculation.
     (parameters: Vslack, positions_of_branch_taps, kconsts, kvars)
-    
+
     Parameters
     ----------
     rootfinder: casadi.casadi.Function
         function ([float], [float]) -> casadi.casadi.DM,
-        (in particular: 
-             (initial_node_voltages_ri, values_of_parameter) -> 
+        (in particular:
+             (initial_node_voltages_ri, values_of_parameter) ->
              (node_voltages_ri))
     values_of_parameters: array_like
         value of parameters
@@ -1672,25 +1674,25 @@ def calculate_pf(rootfinder, values_of_parameters, Vguess):
         float, load scaling factors, parameters
     kvars: array_like
         float, load scaling factors, parameters
-        
+
     Returns
     -------
     tuple
         * bool, success
-        * casadi.casadi.DM, vector of voltages,  
+        * casadi.casadi.DM, vector of voltages,
             sequence of separated, alternating real and imaginary parts"""
     voltages = rootfinder(Vguess, values_of_parameters)
     return rootfinder.stats()['success'], voltages
 
 def get_calculate_power_flow(estimation_data, values_of_parameters):
     """Parameterizes function calculate_pf for power flow calculation.
-    
+
     Parameters
     ----------
     estimation_data: Estimation_data
-    
+
     values_of_parameters: array_like
-    
+
     Returns
     -------
     casadi.casadi.Function
@@ -1707,7 +1709,7 @@ def get_calculate_power_flow(estimation_data, values_of_parameters):
 
 def update_branch_tap_positions(branch_taps, tap_positions):
     """Returns tap position. Updates column 'position'.
-    
+
     Parameters
     ----------
     branch_taps: pandas.DataFrame
@@ -1715,7 +1717,7 @@ def update_branch_tap_positions(branch_taps, tap_positions):
         * .positionneutral
     tap_positions: array_like
         tuple (str (id_of_taps), int (position))
-    
+
     Returns
     -------
     numpy.array
@@ -1735,17 +1737,17 @@ def update_branch_tap_positions(branch_taps, tap_positions):
 
 def get_calculated(target_frames):
     """Arranges expressions of target values (measurements and setpoint).
-    
+
     Parameters
     ----------
     target_arrays: list
         numpy.array<float>
-    
+
     Returns
     -------
     casadi.SX(n, 1)"""
     return casadi.vcat(
-        [target_frame.iloc[:,1].to_numpy() 
+        [target_frame.iloc[:,1].to_numpy()
          for target_frame, _ in target_frames])
 
 target_value_getter = {
@@ -1853,26 +1855,26 @@ def _(include, estimation_data):
     return [get_objective_array(include, estimation_data)]
 
 def get_target_values(include, estimation_data):
-    return (target_value_getter.get(key)(estimation_data) 
+    return (target_value_getter.get(key)(estimation_data)
             for key in include)
 
 def get_target_calculated(estimation_data, include):
-    """Arranges expressions (formulas) for calculation of values from node 
+    """Arranges expressions (formulas) for calculation of values from node
     voltages, power of injections and branch admittances. The expressions
     are retrieved for measurements and set-points (targets). The function
-    returns for instance the expression for calculating the active power 
+    returns for instance the expression for calculating the active power
     flowing into a branch from voltges at both terminals and admittances
     if there are data for an active power measurement at this particular
     terminal.
-    
+
     Parameters
     ----------
     estimation_data: Estimation_data
-    
+
     include: str
         concatenation of characters 'P', 'Q', 'I', 'V', each character
         is a symbol for the type of measurements to include in the output
-    
+
     Returns
     -------
     casadi.SX(n, 1)"""
@@ -1885,8 +1887,8 @@ def get_target_calculated(estimation_data, include):
 Nlp = namedtuple( 'Nlp', 'nlp lbx ubx Vslacks')
 
 def get_nlp(estimation_data, objectives='PQIV', constraints=''):
-    """Creates a none linear program for electrical network state estimation. 
-    
+    """Creates a none linear program for electrical network state estimation.
+
     Parameters
     ----------
     model: gridmodel.Model
@@ -1903,7 +1905,7 @@ def get_nlp(estimation_data, objectives='PQIV', constraints=''):
     constraints: str
          terms of targets values to include in constraints
         "P?Q?I?V?", default ""
-    
+
     Returns
     -------
     Nlp
@@ -1927,15 +1929,15 @@ def get_nlp(estimation_data, objectives='PQIV', constraints=''):
         [[np.inf] * count_of_voltage_vars, estimation_data.kvars.kmax])
     # decision variables
     sym_x = casadi.vertcat(
-        Vsymbols_var, 
+        Vsymbols_var,
         casadi.vcat(estimation_data.kvars.symbol))
     # parameters
     slack_voltage_symbols, Vslacks = _get_slack_data(
-        estimation_data.Vsymbols, 
+        estimation_data.Vsymbols,
         estimation_data.slacks)
     sym_p = casadi.vertcat(
-        slack_voltage_symbols, 
-        estimation_data.branch_taps.pos.to_numpy(), 
+        slack_voltage_symbols,
+        estimation_data.branch_taps.pos.to_numpy(),
         casadi.vcat(estimation_data.kconsts.symbol),
         constraint_parameters)
     return Nlp(
@@ -1950,7 +1952,7 @@ def get_nlp(estimation_data, objectives='PQIV', constraints=''):
 
 def calculate_values(xp, values_of_params, x, expressions):
     """Extracts values for expressions from optimization result vector.
-    
+
     Parameters
     ----------
     xp: tuple
@@ -1962,7 +1964,7 @@ def calculate_values(xp, values_of_params, x, expressions):
         result vector of optimization
     expressions: numpy.array
         casadi.casadi.SX
-        
+
     Returns
     -------
     casadi.casadi.DM"""
@@ -1971,7 +1973,7 @@ def calculate_values(xp, values_of_params, x, expressions):
 
 def create_evaluating_function(nlp, values_of_params, x):
     """Creates a function which calculates values for expression.
-    
+
     Parameters
     ----------
     nlp: dict
@@ -1980,7 +1982,7 @@ def create_evaluating_function(nlp, values_of_params, x):
         values for parameters
     x: casadi.DM
         values for variables
-    
+
     Returns
     -------
     function
@@ -1990,16 +1992,16 @@ def create_evaluating_function(nlp, values_of_params, x):
 def prepare_initial_data(values_of_parameters, estimation_data):
     """Calculates power flow on given data in order to create
     initial data for the first optimization step.
-    
+
     Parameters
     ----------
     values_of_parameters: array_like
-        float/int, values for parameters of mynlp 
+        float/int, values for parameters of mynlp
         (slack voltages, positions of taps, values of constant scaling factors)
     estimation_data: Estimation_data
         source of decision variables, parameter variables and
         target data (measurement and set-point data)
-    
+
     Returns
     -------
     tuple
@@ -2014,38 +2016,38 @@ def prepare_initial_data(values_of_parameters, estimation_data):
     # create evaluating function
     # decision variables
     sym_x = casadi.vertcat(
-        estimation_data.Vsymbols_var, 
+        estimation_data.Vsymbols_var,
         casadi.vcat(estimation_data.kvars.symbol))
     voltages_k_pf = casadi.vertcat(voltages_pf_calc, kvars_guess)
     # do not include measurement constraints, create constraints especially
     #   for initial power flow calculation
     slack_voltage_symbols = _get_Vslack_symbols(
-        estimation_data.Vsymbols, 
+        estimation_data.Vsymbols,
         estimation_data.slacks)
     sym_p = casadi.vertcat(
-        slack_voltage_symbols, 
-        estimation_data.branch_taps.pos.to_numpy(), 
+        slack_voltage_symbols,
+        estimation_data.branch_taps.pos.to_numpy(),
         casadi.vcat(estimation_data.kconsts.symbol))
     evaluate_expression = partial(
-        calculate_values, 
-        (sym_x, sym_p), 
-        values_of_parameters, 
+        calculate_values,
+        (sym_x, sym_p),
+        values_of_parameters,
         voltages_k_pf)
     return success, evaluate_expression
 
-def estimate(vslack_tappos, estimation_data, previous_data, mynlp, 
+def estimate(vslack_tappos, estimation_data, previous_data, mynlp,
              evaluate_expression, constraint_types):
     """Runs an optimization step.
-    
+
     Parameters
     ----------
     vslack_tappos: array_like
-        float/int, values for parameters of mynlp 
+        float/int, values for parameters of mynlp
         (slack voltages, positions of taps)
     estimation_data: Estimation_data
         source of scaling factor variables (decisision variables)
     previous_data: Estimation_data
-        source of initial values for voltage (decision) variables and 
+        source of initial values for voltage (decision) variables and
         constraint parameters for target data (measurement and set-point data)
     mynlp: Nlp
         non-linear program returned by function 'get_nlp'
@@ -2058,24 +2060,24 @@ def estimate(vslack_tappos, estimation_data, previous_data, mynlp,
         indicates type of target values to fix in optimization by constraints,
         the string may contain characters 'P', 'Q'. 'I', 'V'
         for active power, reactive power, electric current and voltage
-    
+
     Returns
     -------
     tuple
         * bool, success
         * funtion (casadi.SX) -> (casadi.DM) for result retrieval"""
     # 'estimation_data.kvars.ini' and 'estimation_data.kconsts.ini' provide
-    #   scaling factor symbols of previous run (or skalar values - especially 
+    #   scaling factor symbols of previous run (or skalar values - especially
     #   for the initial run), 'evaluate_expression' provides
     #   the context of the previous run, thus the initial values are
     #   retrieved from previous run
     initial_values = casadi.vcat(
-        evaluate_expression( 
-            [previous_data.Vsymbols_var, 
+        evaluate_expression(
+            [previous_data.Vsymbols_var,
              casadi.vcat(estimation_data.kvars.ini)]))
-    kconst_ini = evaluate_expression( 
+    kconst_ini = evaluate_expression(
         [casadi.vcat(estimation_data.kconsts.ini)])
-    values_of_constraint_parameters = evaluate_expression( 
+    values_of_constraint_parameters = evaluate_expression(
         [get_target_calculated(previous_data, constraint_types)])
     values_of_params = casadi.vertcat(
         vslack_tappos, kconst_ini, values_of_constraint_parameters)
@@ -2090,9 +2092,9 @@ def estimate(vslack_tappos, estimation_data, previous_data, mynlp,
     solver = casadi.nlpsol('solver', 'ipopt', mynlp.nlp)
     # solve
     r = solver(
-        x0=initial_values, 
-        lbg=0, ubg=0, 
-        lbx=mynlp.lbx, ubx=mynlp.ubx, 
+        x0=initial_values,
+        lbg=0, ubg=0,
+        lbx=mynlp.lbx, ubx=mynlp.ubx,
         p=values_of_params)
     return (
         solver.stats()['success'],
@@ -2100,14 +2102,14 @@ def estimate(vslack_tappos, estimation_data, previous_data, mynlp,
 
 def calculate(model, parameters_of_steps=(), tap_positions=()):
     """Estimates grid status stepwise.
-    
+
     Parameters
     ----------
     model: egrid.gridmodel.Model
-        
+
     parameters_of_steps: array_like
         dict {'objectives': objectives, 'constraints': constraints}
-            if empty the function calculates power flow, 
+            if empty the function calculates power flow,
             each dict triggersan estimization step
         * objectives, ''|'P'|'Q'|'I'|'V' (string or tuple of characters)
           'P' - objective function is created with terms for active power
@@ -2115,21 +2117,21 @@ def calculate(model, parameters_of_steps=(), tap_positions=()):
           'I' - objective function is created with terms for electric current
           'V' - objective function is created with terms for voltage
         * constraints, ''|'P'|'Q'|'I'|'V' (string or tuple of characters)
-          'P' - adds constraints keeping the initial values 
+          'P' - adds constraints keeping the initial values
                 of active powers at the location of given values
-          'Q' - adds constraints keeping the initial values 
+          'Q' - adds constraints keeping the initial values
                 of reactive powers at the location of given values
-          'I' - adds constraints keeping the initial values 
+          'I' - adds constraints keeping the initial values
                 of electric current at the location of given values
-          'V' - adds constraints keeping the initial values 
+          'V' - adds constraints keeping the initial values
                 of voltages at the location of given values
     tap_positions: array_like
         tuple str, int - (ID of Branchtap, position)
-    
+
     Yields
     ------
     tuple
-        * int, estimation step, 
+        * int, estimation step,
           (initial power flow calculation result is -1, first estimation is 0)
         * bool, success?
         * Estimation_data,
@@ -2141,7 +2143,7 @@ def calculate(model, parameters_of_steps=(), tap_positions=()):
     positions_of_branch_taps = update_branch_tap_positions(
         estimation_data.branch_taps, tap_positions)
     values_of_parameters = casadi.vertcat(
-        _get_Vslacks(estimation_data.slacks).to_numpy().reshape(-1), 
+        _get_Vslacks(estimation_data.slacks).to_numpy().reshape(-1),
         positions_of_branch_taps)
     # initial power flow calculation
     success, evaluate_expression = prepare_initial_data(
@@ -2156,11 +2158,11 @@ def calculate(model, parameters_of_steps=(), tap_positions=()):
                 estimation_data = get_estimation_data_for_step(step)
             types_of_constraints = parameters.get('constraints','')
             mynlp = get_nlp(
-                estimation_data, 
-                objectives=parameters.get('objectives',''), 
+                estimation_data,
+                objectives=parameters.get('objectives',''),
                 constraints=types_of_constraints)
-            success, evaluate_expression = estimate(values_of_parameters, 
-                estimation_data, previous_data, mynlp, evaluate_expression, 
+            success, evaluate_expression = estimate(values_of_parameters,
+                estimation_data, previous_data, mynlp, evaluate_expression,
                 types_of_constraints)
             yield step, success, estimation_data, evaluate_expression
             if not success:
