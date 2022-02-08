@@ -19,7 +19,7 @@ def _create_symbols(prefix, names):
     """Creates symbols."""
     return names.map(lambda x:casadi.SX.sym(prefix + x))
 
-get_xp = itemgetter('x', 'p')
+_get_xp = itemgetter('x', 'p')
 
 Term = namedtuple('Term', 'a b factor type', defaults=('', '', 1.0, 'k'))
 Term.__doc__ = """Relation for use in objective function. One
@@ -1896,7 +1896,7 @@ def get_nlp(estimation_data, objectives='PQIV', constraints=''):
     objectives: str
         "P?Q?I?V?", default "PQIV'"
         terms of targets value norms (norms of measurements and setpoints;
-        (value_measured - value_claculated) ** 2)
+        (value_measured - value_calculated) ** 2)
         to include into the objective function
         P - active power
         Q - reactive power
@@ -1987,7 +1987,7 @@ def create_evaluating_function(nlp, values_of_params, x):
     -------
     function
         (casadi.SX) -> (casadi.DM)"""
-    return partial(calculate_values, get_xp(nlp), values_of_params, x)
+    return partial(calculate_values, _get_xp(nlp), values_of_params, x)
 
 def prepare_initial_data(values_of_parameters, estimation_data):
     """Calculates power flow on given data in order to create
@@ -2154,7 +2154,7 @@ def calculate(model, parameters_of_steps=(), tap_positions=()):
     if success:
         for step, parameters in enumerate(parameters_of_steps):
             previous_data = estimation_data
-            if step != 0:
+            if step:
                 estimation_data = get_estimation_data_for_step(step)
             types_of_constraints = parameters.get('constraints','')
             mynlp = get_nlp(
