@@ -94,7 +94,7 @@ This split avoids numeric problems created by different magnitudes of
 voltages, powers and currents. Weighting factors shall be avoided. 
 Including additional (consistent) measurements shall yield better results.
 
-## Separate Real and Imaginary Part
+## Separate Real and Imaginary Parts
 
 The non-linear solver and the CasADi-package do not support complex numbers.
 That is why the complex calculation is processed with separate real and
