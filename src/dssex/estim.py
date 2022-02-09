@@ -935,7 +935,7 @@ def _get_slack_data(Vsymbols, slacks):
 # scaling factors
 #
 
-def get_step_factor_to_injection_part(
+def _get_step_factor_to_injection_part(
         injectionids, assoc_frame, step_factors, count_of_steps):
     """Arranges ids for all steps and injections.
 
@@ -966,7 +966,7 @@ def get_step_factor_to_injection_part(
         .set_index(['step', 'id'])
         .join(step_factors[[]]))
 
-def get_factor_ini_values(myfactors, symbols):
+def _get_factor_ini_values(myfactors, symbols):
     """Returns expressions for initial values of scaling variables/parameters.
 
     Parameters
@@ -1012,7 +1012,7 @@ def get_load_scaling_factors(injectionids, given_factors, assoc, count_of_steps)
         * pandas.DataFrame, injections with scaling factors"""
     # given factors
     # step, id_of_factor => id_of_injection, 'id_p'|'id_q'
-    step_injection_part_factor = get_step_factor_to_injection_part(
+    step_injection_part_factor = _get_step_factor_to_injection_part(
         injectionids, assoc, given_factors, count_of_steps)
     # remove factors not needed, add default (nan) factors if necessary
     required_factors_index = step_injection_part_factor.index.unique()
@@ -1029,7 +1029,7 @@ def get_load_scaling_factors(injectionids, given_factors, assoc, count_of_steps)
     symbols = _create_factor_symbols(factors.index)
     factors['symbol'] = symbols
     # add data for initialization
-    factors['ini'] = get_factor_ini_values(factors, symbols)
+    factors['ini'] = _get_factor_ini_values(factors, symbols)
     if step_injection_part_factor.shape[0]:
         injection_factors = (
             step_injection_part_factor
@@ -1059,7 +1059,7 @@ def get_load_scaling_factors(injectionids, given_factors, assoc, count_of_steps)
 # arrange input for estimation
 #
 
-def get_branch_terminal_data(branchterminals, branchtapfactors, Vnode):
+def _get_branch_terminal_data(branchterminals, branchtapfactors, Vnode):
     """Arranges data of branchterminals in a DataFrame. Adds voltages of nodes
     and current to data given by branchterminals.
 
@@ -1127,7 +1127,7 @@ def get_branch_terminal_data(branchterminals, branchtapfactors, Vnode):
     term_data['Q'] = Q
     return term_data
 
-def get_injection_data(injections, Vnode, k):
+def _get_injection_data(injections, Vnode, k):
     """Arranges data of injections in a DataFrame. Adds voltages of nodes
     and current to data given by injections.
 
@@ -1271,7 +1271,7 @@ V: pandas.DataFrame
 Inode: casadi.SX
     expressions for calculation of node current without slack nodes"""
 
-def calculate_Y_by_V(node_index, Vsymbols, gb):
+def _calculate_Y_by_V(node_index, Vsymbols, gb):
     """Creates a vector of node currents (selected nodes only) from
     branches and node voltages.
 
@@ -1288,11 +1288,11 @@ def calculate_Y_by_V(node_index, Vsymbols, gb):
     -------
     casadi.SX
         shape 2n,1"""
-    node_index_ri = get_index_ri(node_index)
+    node_index_ri = _get_index_ri(node_index)
     V_node = casadi.vertcat(Vsymbols[['Vre', 'Vim']].to_numpy().reshape(-1, 1))
     return casadi.mtimes(gb[node_index_ri, :], V_node)
 
-def add_I_injected(node_index, Y_by_V, injection_data):
+def _add_I_injected(node_index, Y_by_V, injection_data):
     """Creates a vector of node current casadi.SX-expressions
     (selected nodes only).
 
@@ -1308,10 +1308,10 @@ def add_I_injected(node_index, Y_by_V, injection_data):
     -------
     casadi.SX
         shape (2nx1)"""
-    I_injected = get_injected_node_current(injection_data, node_index)
+    I_injected = _get_injected_node_current(injection_data, node_index)
     return casadi.simplify(Y_by_V + I_injected)
 
-def get_branch_estimation_data(model, Vsymbols):
+def _get_branch_estimation_data(model, Vsymbols):
     """Arranges data for estimation.
 
     Parameters
@@ -1341,7 +1341,7 @@ def get_branch_estimation_data(model, Vsymbols):
     possymbols = _create_symbols('pos_', model.branchtaps.id)
     branchtaps['pos'] = possymbols
     branchtapfactors = _get_branch_tap_factors(branchtaps)
-    branch_terminal_data = get_branch_terminal_data(
+    branch_terminal_data = _get_branch_terminal_data(
         model.branchterminals, branchtapfactors, Vsymbols)
     return (
         branch_terminal_data,
@@ -1349,11 +1349,11 @@ def get_branch_estimation_data(model, Vsymbols):
             ['id', 'Vstep', 'positionmin', 'positionneutral',
              'positionmax', 'position', 'pos']])
 
-_empty_load_scaling_factors = pd.DataFrame(
+_EMPTY_LOAD_SCALING_FACTORS = pd.DataFrame(
     [],
     columns=(Loadfactor._fields + ('symbol', 'ini')))
 
-def query_load_scaling_factors_of_type(type_, load_scaling_factors_step):
+def _query_load_scaling_factors_of_type(type_, load_scaling_factors_step):
     """Computes load_scaling_factors_step.loc[type_], returns an empty
     pandas.DataFrame if key 'type_' is not in data frame
 
@@ -1372,7 +1372,7 @@ def query_load_scaling_factors_of_type(type_, load_scaling_factors_step):
     try:
         return load_scaling_factors_step.loc[type_].reset_index()
     except:
-        return _empty_load_scaling_factors.copy();
+        return _EMPTY_LOAD_SCALING_FACTORS.copy();
 
 def get_estimation_data(model, count_of_steps):
     """Prepares data for estimation.
@@ -1394,14 +1394,14 @@ def get_estimation_data(model, count_of_steps):
     -------
     function (int) -> (Estimation_data)"""
     Vsymbols = _create_v_symbols(model.nodes)
-    branch_terminal_data, branch_taps = get_branch_estimation_data(
+    branch_terminal_data, branch_taps = _get_branch_estimation_data(
         model, Vsymbols)
     slack_indexer = Vsymbols.index.isin(model.slacks.index_of_node)
     Vsymbols_var =  (
         Vsymbols.loc[~slack_indexer][['Vre', 'Vim']].to_numpy().reshape(-1))
     node_index = Vsymbols.index[~slack_indexer]
-    Y_by_V = calculate_Y_by_V(
-        node_index, Vsymbols, create_gb_branch_matrix(branch_terminal_data))
+    Y_by_V = _calculate_Y_by_V(
+        node_index, Vsymbols, _create_gb_branch_matrix(branch_terminal_data))
     load_scaling_factors, injection_factors = get_load_scaling_factors(
         model.injections.id,
         model.load_scaling_factors,
@@ -1422,13 +1422,13 @@ def get_estimation_data(model, count_of_steps):
             load_scaling_factors_step = load_scaling_factors.loc[step]
         except:
             load_scaling_factors_step = None
-        kvars = query_load_scaling_factors_of_type(
+        kvars = _query_load_scaling_factors_of_type(
             'var', load_scaling_factors_step)
         kvars.rename(
             columns={'id': 'id_of_k', 'min': 'kmin', 'max': 'kmax'},
             inplace=True)
         kvars.set_index('id_of_k', inplace=True)
-        kconsts = query_load_scaling_factors_of_type(
+        kconsts = _query_load_scaling_factors_of_type(
             'const', load_scaling_factors_step)
         kconsts.rename(
             columns={'id': 'id_of_k', 'min': 'kmin', 'max': 'kmax'},
@@ -1443,7 +1443,7 @@ def get_estimation_data(model, count_of_steps):
                 (),
                 columns=['kp', 'kq'],
                 index=pd.Index([], name='index_of_injection'))
-        injection_data = get_injection_data(model.injections, Vsymbols, kpq)
+        injection_data = _get_injection_data(model.injections, Vsymbols, kpq)
         V = _get_measured_and_calculated_voltage(model.vvalues, Vsymbols)
         PQ = _get_measured_and_calculated_power(
             model.branchoutputs,
@@ -1457,7 +1457,7 @@ def get_estimation_data(model, count_of_steps):
             model.injectionoutputs,
             injection_data,
             model.ivalues)
-        Inode = add_I_injected(node_index, Y_by_V, injection_data)
+        Inode = _add_I_injected(node_index, Y_by_V, injection_data)
         return Estimation_data(
             # constant part
             slacks=model.slacks,
@@ -1476,7 +1476,7 @@ def get_estimation_data(model, count_of_steps):
             Inode=Inode)
     return of_step
 
-def calculate_norm(ars):
+def _calculate_norm(ars):
     """Calculates a norm.
 
     Parameters
@@ -1492,7 +1492,7 @@ def calculate_norm(ars):
     ar = casadi.vcat(ars)
     return casadi.sum1((ar[:,0] - ar[:,1]) ** 2)
 
-def create_constraints(target_frames):
+def _create_constraints(target_frames):
     """Creates expressions for constraints of target values (measurements and
     setpoint).
 
@@ -1523,7 +1523,7 @@ def create_constraints(target_frames):
         if vars.size1() else
         (vars, vars))
 
-def create_gb_branch_matrix(terms):
+def _create_gb_branch_matrix(terms):
     """Creates a conductance-susceptance branch matrix for power flow
     calculation. The matrix is equivalent to an admittance branch matrix.
     However the admittances are split into real and imaginary parts.
@@ -1561,7 +1561,7 @@ def create_gb_branch_matrix(terms):
         gb[r, c] += v
     return gb
 
-def get_index_ri(index):
+def _get_index_ri(index):
     """Creates an index for separate real and imaginary parts from
     an index of complex.
 
@@ -1578,7 +1578,7 @@ def get_index_ri(index):
     index_i = index_r + 1
     return np.hstack([index_r, index_i]).reshape(-1)
 
-def get_injected_node_current(injection_data, node_index):
+def _get_injected_node_current(injection_data, node_index):
     """Creates a vector of injected node currents (index_of_node->current).
 
     Parameters
@@ -1607,7 +1607,7 @@ def get_injected_node_current(injection_data, node_index):
 # power flow calculation
 #
 
-def get_symbols_pf(estimation_data):
+def _get_symbols_pf(estimation_data):
     """Extracts symbols from estimation_data for power flow calculation.
 
     Returns
@@ -1636,7 +1636,7 @@ def get_symbols_pf(estimation_data):
         casadi.vcat(estimation_data.kvars.symbol))
     return [Vnode_vars, params]
 
-def create_rootfinder(estimation_data):
+def _create_rootfinder(estimation_data):
     """Creates a root finding function which solves the power flow problem.
 
     Parameters
@@ -1646,12 +1646,12 @@ def create_rootfinder(estimation_data):
     Returns
     -------
     casadi.casadi.Function"""
-    vars_and_consts_symbols = get_symbols_pf(estimation_data)
+    vars_and_consts_symbols = _get_symbols_pf(estimation_data)
     fn_Iresidual = casadi.Function(
         'fn_Iresidual', vars_and_consts_symbols, [estimation_data.Inode])
     return casadi.rootfinder('rf', 'nlpsol', fn_Iresidual, {'nlpsol':'ipopt'})
 
-def calculate_pf(rootfinder, values_of_parameters, Vguess):
+def _calculate_pf(rootfinder, values_of_parameters, Vguess):
     """Function for power flow calculation.
     (parameters: Vslack, positions_of_branch_taps, kconsts, kvars)
 
@@ -1684,8 +1684,8 @@ def calculate_pf(rootfinder, values_of_parameters, Vguess):
     voltages = rootfinder(Vguess, values_of_parameters)
     return rootfinder.stats()['success'], voltages
 
-def get_calculate_power_flow(estimation_data, values_of_parameters):
-    """Parameterizes function calculate_pf for power flow calculation.
+def _get_calculate_power_flow(estimation_data, values_of_parameters):
+    """Parameterizes function _calculate_pf for power flow calculation.
 
     Parameters
     ----------
@@ -1699,8 +1699,8 @@ def get_calculate_power_flow(estimation_data, values_of_parameters):
         (initial_voltages, positions_of_branch_taps, load_scaling_factors)
         ->(bool, casadi.casadi.DM) which is (success, vector of voltages)"""
     return partial(
-        calculate_pf,
-        create_rootfinder(estimation_data),
+        _calculate_pf,
+        _create_rootfinder(estimation_data),
         values_of_parameters)
 
 #
@@ -1912,9 +1912,9 @@ def get_nlp(estimation_data, objectives='PQIV', constraints=''):
         * .nlp, none-linear-program for the casadi solver
         * .is_slack, pandas.Indexer filters slack nodes or voltages
         * .Vslacks, pandas.DataFrame of slack voltages (.Vre, .Vim)"""
-    objective = calculate_norm(
+    objective = _calculate_norm(
         get_objective_arrays(objectives, estimation_data))
-    constraint_parameters, measurement_constraints = create_constraints(
+    constraint_parameters, measurement_constraints = _create_constraints(
         get_target_values(constraints, estimation_data))
     myconstraints = casadi.vertcat(
         estimation_data.Inode, measurement_constraints)
@@ -2010,7 +2010,7 @@ def prepare_initial_data(values_of_parameters, estimation_data):
     count_of_none_slack_nodes = np.sum(~estimation_data.slack_indexer)
     Vguess = [1., .0] * count_of_none_slack_nodes
     kvars_guess = estimation_data.kvars.value.to_numpy()
-    calculate_power_flow = get_calculate_power_flow(
+    calculate_power_flow = _get_calculate_power_flow(
         estimation_data, casadi.vertcat(values_of_parameters, kvars_guess))
     success, voltages_pf_calc = calculate_power_flow(Vguess)
     # create evaluating function

@@ -10,6 +10,13 @@ from functools import singledispatch
 
 @singledispatch
 def show_factors(model, count_of_steps=3):
+    """
+    
+    Returns
+    -------
+    tuple
+        pandas.DataFrame of strings for debugging only,
+        makes scaling factors visible"""
     factors, injection_factors = get_load_scaling_factors(
         model.injections.id, 
         model.load_scaling_factors,

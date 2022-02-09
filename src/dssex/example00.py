@@ -45,7 +45,7 @@ model00 = make_model(model_devices)
 #%% calculate power flow
 results = [*calculate(model00)]
 # print the result
-pr.print_estim_result(results)
+pr.print_estim_results(results)
 pr.print_measurements(results)
 #%% scale load in order to meet values for active power P
 model_PQ_measurements = [
@@ -73,7 +73,7 @@ results01 = [
         model01,
         parameters_of_steps=[{'objectives': 'P'}])]
 # print the result
-pr.print_estim_result(results01)
+pr.print_estim_results(results01)
 pr.print_measurements(results01)
 #%%  scale load in order to meet values for reactive power Q
 model_scale_q = [
@@ -90,7 +90,7 @@ results02 = [
         model02,
         parameters_of_steps=[{'objectives': 'Q'}])]
 # print the result
-pr.print_estim_result(results02)
+pr.print_estim_results(results02)
 pr.print_measurements(results02)
 #%% scale load with active power P and reactive power Q
 model03 = make_model(
@@ -103,7 +103,7 @@ results03 = [
         model03,
         parameters_of_steps=[{'objectives': 'PQ'}])]
 # print the result
-pr.print_estim_result(results03)
+pr.print_estim_results(results03)
 pr.print_measurements(results03)
 #%% PV-generator
 # node: 0               1               2
@@ -135,7 +135,7 @@ model04_devices = [
 model04 = make_model(model04_devices)
 results04 = [*calculate(model04)]
 # print the result
-pr.print_estim_result(results04)
+pr.print_estim_results(results04)
 pr.print_measurements(results04)
 #%% scale Q to meet the voltage setpoint
 #   (power flow calculation with PV-generator)
@@ -154,5 +154,5 @@ results05 = [
         model05,
         parameters_of_steps=[{'objectives': 'V'}])]
 # print the result
-pr.print_estim_result(results05)
+pr.print_estim_results(results05)
 pr.print_measurements(results05)

@@ -342,7 +342,7 @@ def create_measurement_result_factory(estimation_data, evaluate_expression):
 # result printing
 #
 
-def print_results(grid_values):
+def print_result(grid_values):
     """(Generic) printing function. Assumes grid_values fields are funtions
     and calls one after another. Prints the return values.
     
@@ -353,48 +353,63 @@ def print_results(grid_values):
     for method_name in grid_values._fields:
         print()
         print(method_name)
-        print(methodcaller(method_name)(grid_values).to_markdown())
+        frame = methodcaller(method_name)(grid_values)
+        print(frame.to_markdown() if len(frame) else 'no values')
 
-def print_estim_result(estim_results):
-    """Prints results of estimation  for each step.
+def print_estim_result(estim_result):
+    """Prints results of estimation of one step.
     
     Parameters
     ----------
-    estim_result: itarable
+    estim_result: iterable
         tuple 
             * int
             * bool
             * function (casadi.SX) -> (casadi.DM)
             * Estimation_data"""
-    for step, success, estimation_data, evaluate_expression in estim_results:
+    step, success, estimation_data, evaluate_expression = estim_result
+    print()
+    #                       :1 is the format
+    print(f"===[ step: {step:1} ]========================================")
+    if success:
+        results = create_value_factory(
+            estimation_data, evaluate_expression)
+        print_result(results)
+        measurement_results = create_measurement_result_factory(
+            estimation_data, evaluate_expression)
+        print_result(measurement_results)
+        # analysis of residual node currents
+        Inode_calc = evaluate_expression([estimation_data.Inode])
         print()
-        # :1 is the format
-        print(f"===[ step: {step:1} ]========================================")
-        if success:
-            results = create_value_factory(
-                estimation_data, evaluate_expression)
-            print_results(results)
-            measurement_results = create_measurement_result_factory(
-                estimation_data, evaluate_expression)
-            print_results(measurement_results)
-            # analysis of residual node currents
-            Inode_calc = evaluate_expression([estimation_data.Inode])
-            print()
-            print('residual Inode: ', Inode_calc)
-        else:
-            print('failed')
+        print('residual Inode: ', Inode_calc)
+    else:
+        print('no result - calculation failed')
+        
+def print_estim_results(estim_results):
+    """Prints results of estimation for each step.
+    
+    Parameters
+    ----------
+    estim_result: iterable
+        tuple 
+            * int
+            * bool
+            * function (casadi.SX) -> (casadi.DM)
+            * Estimation_data"""
+    for res in estim_results:
+        print_estim_result(res)
 
-_caller_name = {
+_CALLER_NAME = {
     'P': 'PQmeasured_calculated', 
     'Q': 'PQmeasured_calculated',
     'I': 'Imeasured_calculated', 
     'V': 'Vmeasured_calculated'}
 
-def arrange_measurement_results(step_resultfn, quantity):
+def _arrange_measurement_results(step_resultfn, quantity):
     measured_quantity = f"{quantity}_measured"
     calculated_quantity = f"{quantity}_calculated"
     level_names=['quantity', 'step']
-    get_results = methodcaller(_caller_name[quantity])
+    get_results = methodcaller(_CALLER_NAME[quantity])
     first_step, results_first_step = step_resultfn[0]
     measured_calculated = get_results(results_first_step)
     df = measured_calculated[[measured_quantity, calculated_quantity]]
@@ -410,13 +425,16 @@ def arrange_measurement_results(step_resultfn, quantity):
     return pd.concat([df, calculated], axis=1)
 
 def print_measurements(estim_results, quantities='VPQI'):
+    """Prints tables of calculated data"""
     step_resultfn = [
         (step, create_measurement_result_factory(
             estimation_data, evaluate_expression))
         for step, success, estimation_data, evaluate_expression 
         in estim_results]
     for quantity in quantities:
+        frame = _arrange_measurement_results(step_resultfn, quantity)
         print()
         print(
-            arrange_measurement_results(step_resultfn, quantity)
-            .to_markdown())
+            frame.to_markdown() if len(frame) else 
+            f'no {quantity}-measurements') 
+            
