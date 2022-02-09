@@ -1,5 +1,20 @@
 # -*- coding: utf-8 -*-
 """
+Copyright (C) 2022 pyprg
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 Created on Sun Aug  8 08:36:10 2021
 
 @author: pyprg
@@ -33,5 +48,10 @@ def print_power_flow(*args):
         """
         n0<-------------cable------------>n1--((~)) motor
          slack=True      y_mn=1e3-1e3j               P10=42""")
-    *_, res = calculate(model) # res is last value from generator
-    print_estim_result(res)
+    msg = model.errormessages
+    if len(msg):
+        print()
+        print(msg.to_markdown())
+    else:
+        *_, res = calculate(model) # res is last value from generator
+        print_estim_result(res)

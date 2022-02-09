@@ -2105,7 +2105,7 @@ def calculate(model, parameters_of_steps=(), tap_positions=()):
 
     Parameters
     ----------
-    model: egrid.gridmodel.Model
+    model: egrid.model.Model
 
     parameters_of_steps: array_like
         dict {'objectives': objectives, 'constraints': constraints}
