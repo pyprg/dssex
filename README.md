@@ -25,7 +25,7 @@ Non-goals:
 
 ## Kick Start
 
-**dssex.print_power_flow(*args)** calculates power flow for a given network
+__dssex.print_power_flow(*args)__ calculates power flow for a given network
 and prints the results. If args are not provided the function calculates
 the power flow for a simple configuration, prints this simple configuration
 and the results.
