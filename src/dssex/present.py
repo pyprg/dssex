@@ -1,5 +1,20 @@
 # -*- coding: utf-8 -*-
 """
+Copyright (C) 2022 pyprg
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 Created on Sun Aug  19 08:36:10 2021
 
 @author: Carsten Laves
@@ -10,7 +25,7 @@ from collections import namedtuple
 from operator import attrgetter, methodcaller
 
 _EMPTY_TUPLE = ()
-get_IPQV = attrgetter('I', 'PQ', 'V')
+_GET_IPQV = attrgetter('I', 'PQ', 'V')
 
 #
 # results related to network elements
@@ -18,7 +33,7 @@ get_IPQV = attrgetter('I', 'PQ', 'V')
 
 def _create_vnode_value_frame(Vsymbols, vnode_vals):
     """Creates a pandas.DataFrame (id of node) with voltage.
-    
+
     Parameters
     ----------
     Vsymbols: pandas.DataFrame (index of node)
@@ -62,9 +77,9 @@ def _add_VIPQkpkq(df, values):
     return df2
 
 def _create_injection_value_frame(injection_data, injection_vals):
-    """Creates a pandas.DataFrame with result values of injections 
+    """Creates a pandas.DataFrame with result values of injections
     (index of injection).
-    
+
     Parameters
     ----------
     injection_data: pandas.DataFrame
@@ -96,7 +111,7 @@ def _create_injection_value_frame(injection_data, injection_vals):
         * [4] - Q
         * [5] - kp
         * [6] - kq
-    
+
     Returns
     -------
     pandas.DataFrame (index of injection)
@@ -110,7 +125,7 @@ def _create_injection_value_frame(injection_data, injection_vals):
 def get_branch_values(terminal_values):
     """Arranges branch terminal data per branch. Calculates active and
     reactive 'losses' P_loss, Q_loss.
-    
+
     Parameters
     ----------
     terminal_values: pandas.DataFrame
@@ -120,7 +135,7 @@ def get_branch_values(terminal_values):
         * .Iabs, float
         * .P, float
         * .Q, float
-    
+
     Returns
     -------
     pandas.DataFrame (index of branch)
@@ -146,31 +161,31 @@ def get_branch_values(terminal_values):
         branches.columns = np.array([f'{p}_{q}' for p, q in branches.columns])
         branches.drop('id_of_branch_B', axis=1, inplace=True)
         branches.rename(
-            columns={'id_of_branch_A': 'id_of_branch'}, 
+            columns={'id_of_branch_A': 'id_of_branch'},
             inplace=True)
         return branches.join(branch_losses)
     else:
         return pd.DataFrame(
             _EMPTY_TUPLE,
             columns=[
-                'id_of_branch', 'Vabs_A', 'Vabs_B', 'Iabs_A', 'Iabs_B', 
+                'id_of_branch', 'Vabs_A', 'Vabs_B', 'Iabs_A', 'Iabs_B',
                 'P_A', 'P_B', 'Q_A', 'Q_B', 'P_loss', 'Q_loss'])
 
 def _create_branch_value_frame(branch_terminal_data, terminal_vals):
     terminal_values = _add_VIPQ(
         (branch_terminal_data[['id_of_branch', 'index_of_branch', 'side']]
-         .copy()), 
+         .copy()),
         terminal_vals)
     return get_branch_values(terminal_values)
 
 def _create_terminal_value_frame(branch_terminal_data, terminal_vals):
     return _add_term_results(
         (branch_terminal_data[['id_of_branch', 'index_of_branch', 'side']]
-         .copy()), 
+         .copy()),
         terminal_vals)
 
 Result_factory = namedtuple(
-    'Result_factory', 
+    'Result_factory',
     'node_values injection_values branch_values terminal_values')
 Result_factory.__doc__ = """Collection of functions returning
 arranged results.
@@ -195,7 +210,7 @@ BRANCH_TERMINAL_RESULT_COLUMNS = [
 
 def _get_vnode_formulas(estimation_data):
     return np.sqrt(
-        estimation_data.Vsymbols[VNODE_RESULT_COLUMNS].to_numpy())    
+        estimation_data.Vsymbols[VNODE_RESULT_COLUMNS].to_numpy())
 
 def _get_injection_formulas(estimation_data):
     return (
@@ -211,14 +226,14 @@ def _get_terminal_formulas(estimation_data):
 
 def create_value_factory(estimation_data, evaluate_expression):
     """Creates a factory object for estimation results.
-    
+
     Parameters
     ----------
     estimation_data: Estimation_data
-    
+
     evaluate_expression: function
         (array_like<casadi.SX>) -> (array_like<casadi.DM>)
-    
+
     Returns
     -------
     Result_factory
@@ -243,14 +258,14 @@ def create_value_factory(estimation_data, evaluate_expression):
 
 def get_branch_data(estimation_data, evaluate_expression):
     """Extracts branch values from result of estimation.
-    
+
     Parameters
     ----------
     estimation_data: Estimation_data
-    
+
     evaluate_expression: function
         (array_like<casadi.SX>) -> (array_like<casadi.DM>)
-    
+
     Returns
     -------
     pandas.DataFrame"""
@@ -263,7 +278,7 @@ def get_branch_data(estimation_data, evaluate_expression):
 #
 
 Measurement_Result_factory = namedtuple(
-    'Measurement_Result_factory', 
+    'Measurement_Result_factory',
     'Vmeasured_calculated PQmeasured_calculated Imeasured_calculated')
 Measurement_Result_factory.__doc__ = """Collection of functions returning
 arranged results for measured data.
@@ -279,16 +294,16 @@ Imeasured_calculated: function
 
 def _add_values(df, vals, column_names):
     """Adds a new column to pandas.DataFrame df.
-    
+
     Parameters
     ----------
     df: pandas.DataFrame
-    
+
     vals: casadi.DM
         values of new column
     column_name: array_like
         str, name of new columns
-        
+
     Returns
     -------
     pandas.DataFrame"""
@@ -301,23 +316,23 @@ def _add_values(df, vals, column_names):
 
 def create_measurement_result_factory(estimation_data, evaluate_expression):
     """Creates a factory object for estimation results of measured values.
-    
+
     Parameters
     ----------
     estimation_data: Estimation_data
-    
+
     evaluate_expression: function
         (array_like<casadi.SX>) -> (array_like<casadi.DM>)
         the function is returned by the estimation function, it is the
         container for accessing estimation results
-    
+
     Returns
     -------
     Measurement_Result_factory
         * .Vmeasured_calculated, function, () -> (pandas.DataFrame)
         * .PQmeasured_calculated, function, () -> (pandas.DataFrame)
         * .Imeasured_calculated, function, () -> (pandas.DataFrame)"""
-    Idata, PQdata, Vdata = get_IPQV(estimation_data)
+    Idata, PQdata, Vdata = _GET_IPQV(estimation_data)
     # retrieve values from estimation result
     Imeasured_calc, PQmeasured_calc, Vmeasured_calc = evaluate_expression(
         [Idata.I_calculated.to_numpy(),
@@ -334,35 +349,77 @@ def create_measurement_result_factory(estimation_data, evaluate_expression):
                 ['P_calculated', 'Q_calculated'])
             [['P_measured', 'P_calculated', 'Q_measured', 'Q_calculated']],
         Imeasured_calculated=lambda:_add_values(
-            Idata[['I_measured']].copy(), 
-            Imeasured_calc, 
+            Idata[['I_measured']].copy(),
+            Imeasured_calc,
             ['I_calculated']))
 
 #
 # result printing
 #
 
+def get_values(value_factory, filter_='nib'):
+    """Function calling each field as a function.
+
+    Parameters
+    ----------
+    value_factory: Value_factory
+        object providing methods for value generation
+    filter: str (devault value 'nibt')
+        string of characters
+        n - node voltages
+        i - injection results
+        b - branch results
+        t - terminal results
+
+    Returns
+    -------
+    iterator
+        fieldname, return value of call to value_factory.fieldname()"""
+    return (
+        (field, methodcaller(field)(value_factory))
+         for field in value_factory._fields if field[0] in filter_)
+
+def result_as_dict(res):
+    """Arranges the results of one estimation step into a dict.
+
+    Parameter
+    ---------
+    res: tuple
+        int, bool, Estimation_data, casadi-function
+
+    Returns
+    -------
+    dict
+        * 'step': int
+        * 'success': bool
+        * [key]: pandas.DataFrame
+        ..."""
+    step, success, estimation_data, evaluate_expression = res
+    value_factory = create_value_factory(
+        estimation_data, evaluate_expression)
+    return dict(
+        [('step', step), ('success', success), *get_values(value_factory)])
+
 def print_result(grid_values):
-    """(Generic) printing function. Assumes grid_values fields are funtions
+    """(Generic) printing function. Assumes grid_values` fields are funtions
     and calls one after another. Prints the return values.
-    
+
     Parameters
     ----------
     grid_values: namedtuple
         all fields are callable functions: ()->(printable object)"""
-    for method_name in grid_values._fields:
+    for name, frame in get_values(grid_values):
         print()
-        print(method_name)
-        frame = methodcaller(method_name)(grid_values)
+        print(name)
         print(frame.to_markdown() if len(frame) else 'no values')
 
 def print_estim_result(estim_result):
     """Prints results of estimation of one step.
-    
+
     Parameters
     ----------
     estim_result: iterable
-        tuple 
+        tuple
             * int
             * bool
             * function (casadi.SX) -> (casadi.DM)
@@ -384,14 +441,14 @@ def print_estim_result(estim_result):
         print('residual Inode: ', Inode_calc)
     else:
         print('no result - calculation failed')
-        
+
 def print_estim_results(estim_results):
     """Prints results of estimation for each step.
-    
+
     Parameters
     ----------
     estim_result: iterable
-        tuple 
+        tuple
             * int
             * bool
             * function (casadi.SX) -> (casadi.DM)
@@ -400,9 +457,9 @@ def print_estim_results(estim_results):
         print_estim_result(res)
 
 _CALLER_NAME = {
-    'P': 'PQmeasured_calculated', 
+    'P': 'PQmeasured_calculated',
     'Q': 'PQmeasured_calculated',
-    'I': 'Imeasured_calculated', 
+    'I': 'Imeasured_calculated',
     'V': 'Vmeasured_calculated'}
 
 def _arrange_measurement_results(step_resultfn, quantity):
@@ -414,13 +471,13 @@ def _arrange_measurement_results(step_resultfn, quantity):
     measured_calculated = get_results(results_first_step)
     df = measured_calculated[[measured_quantity, calculated_quantity]]
     df.columns = pd.MultiIndex.from_tuples(
-        [(measured_quantity, -1), (calculated_quantity, -1)], 
+        [(measured_quantity, -1), (calculated_quantity, -1)],
         names=level_names)
     calculated = pd.DataFrame(
-        {step:get_results(result).loc[:,calculated_quantity] 
+        {step:get_results(result).loc[:,calculated_quantity]
          for step, result in step_resultfn[1:]})
     calculated.columns = pd.MultiIndex.from_tuples(
-        [(calculated_quantity, step) for step in calculated.columns], 
+        [(calculated_quantity, step) for step in calculated.columns],
         names=level_names)
     return pd.concat([df, calculated], axis=1)
 
@@ -429,12 +486,11 @@ def print_measurements(estim_results, quantities='VPQI'):
     step_resultfn = [
         (step, create_measurement_result_factory(
             estimation_data, evaluate_expression))
-        for step, success, estimation_data, evaluate_expression 
+        for step, success, estimation_data, evaluate_expression
         in estim_results]
     for quantity in quantities:
         frame = _arrange_measurement_results(step_resultfn, quantity)
         print()
         print(
-            frame.to_markdown() if len(frame) else 
-            f'no {quantity}-measurements') 
-            
+            frame.to_markdown() if len(frame) else
+            f'no {quantity}-measurements')
