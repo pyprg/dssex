@@ -180,10 +180,12 @@ schema06 = """
                                                                                                        Q10=-4 Exp_v_q=2
                                                                                                 n4-|| cap_4_
                                                                                                 |
+                                                                                                |
                                                          Exp_v_p=1.2                            |      
                                                          Exp_v_q=1                              |     
                                   P10=4 Q10=4            P10=8.3 Q10=4          P10=4 Q10=1     |      P10=4 Q10=1            P10=4 Q10=2      
                            n1--> load_1_          n2--> load_2_          n3--> load_3_          n4--> load_4_          n5--> load_51_          
+                           |                      |                      |                      |                      |                      
                            |                      |                      |                      |                      |                      
                            |                      |                      |                      |                      |                      
         I=31               |                      |                      |                      |                      |                      
@@ -191,6 +193,7 @@ schema06 = """
     n0(--------line_1-----)n1(--------line_2-----)n2(--------line_3-----)n3(--------line_4-----)n4(--------line_5-----)n5-------> load_52_
     slack=True  y_mn=1e3-1e3j          y_mn=1k-1kj            y_mn=0.9k-0.95kj       y_mn=1k-1kj            y_mn=1k-1kj            P10=4 Q10=2
     V=1.00      y_mm_half=1e-6+1e-6j   y_mm_half=1µ+1µj       y_mm_half=1.3µ+1.5µj   y_mm_half=1e-6+1e-6j   y_mm_half=1e-6+1e-6j   
+                           |                                                                                           |
                            |                                                                                           |
                            |                                                                                           |
                            |                                                                                           |
@@ -224,7 +227,7 @@ model07 = make_model(
     Defk(step=(0, 1), id=('kp_load', 'kq_load')),
     Link(
         step=(0, 1), 
-        objid=('load_1', 'load_2', 'load_3'), 
+        objid=('load_1', 'load_2', 'load_3', 'load_4', 'load_51'), 
         part='pq', 
         id=('kp_load', 'kq_load')),
     # generator scaling

@@ -561,7 +561,7 @@ def _create_v_symbols(nodes):
          'Vre': Vre,
          'Vim': Vim,
          'V_abs_sqr': Vre**2 + Vim**2},
-        index=nodes.idx)
+        index=nodes.index_of_node)
 
 def _create_factor_symbols(unique_factors):
     """Creates symbols for variables and parameters of scaling factors.
@@ -1356,8 +1356,9 @@ def _get_branch_estimation_data(model, Vsymbols):
     possymbols = _create_symbols('pos_', model.branchtaps.id)
     branchtaps['pos'] = possymbols
     branchtapfactors = _get_branch_tap_factors(branchtaps)
+    terminals = model.branchterminals
     branch_terminal_data = _get_branch_terminal_data(
-        model.branchterminals, branchtapfactors, Vsymbols)
+        terminals[~terminals.is_bridge], branchtapfactors, Vsymbols)
     return (
         branch_terminal_data,
         branchtaps[
@@ -1420,7 +1421,7 @@ def get_estimation_data(model, count_of_steps):
     load_scaling_factors, injection_factors = get_load_scaling_factors(
         model.injections.id,
         model.load_scaling_factors,
-        model.injection_factor_association,
+        model.injection_factor_associations,
         count_of_steps)
     def of_step(step):
         """Arranges data for estimation of one step.
