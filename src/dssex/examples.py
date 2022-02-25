@@ -247,3 +247,53 @@ result07 = [
 # print the result
 pr.print_estim_results(result07)
 pr.print_measurements(result07)
+#%% power flow meshed configuration, consumers, capacitor, PV-generator,
+#   line6 has very hight admittance and is treated as a short circuit
+#
+# leading and trailing underscores are not part of the IDs
+# P and Q are accepted in pairs only
+#
+schema08 = """
+                                                                                                       Q10=-4 Exp_v_q=2
+                                                                                                n4-|| cap_4_
+                                                                                                |
+                                                                                                |
+                                                         Exp_v_p=1.2                            |      
+                                                         Exp_v_q=1                              |     
+                                  P10=4 Q10=4            P10=8.3 Q10=4          P10=4 Q10=1     |      P10=4 Q10=1            P10=4 Q10=2      
+                           n1--> load_1_          n2--> load_2_          n3--> load_3_          n4--> load_4_          n5--> load_51_          
+                           |                      |                      |                      |                      |                      
+                           |                      |                      |                      |                      |                      
+                           |                      |                      |                      |                      |                      
+        I=31               |                      |                      |                      |                      |                      
+        P=30 Q=10          |                      |                      |                      |                      |           
+    n0(--------line_1-----)n1(--------line_2-----)n2(--------line_3-----)n3(--------line_4-----)n4(--------line_5-----)n5-------> load_52_
+    slack=True  y_mn=1e3-1e3j          y_mn=1k-1kj            y_mn=0.9k-0.95kj       y_mn=1k-1kj            y_mn=1k-1kj            P10=4 Q10=2
+    V=1.00      y_mm_half=1e-6+1e-6j   y_mm_half=1µ+1µj       y_mm_half=1.3µ+1.5µj   y_mm_half=1e-6+1e-6j   y_mm_half=1e-6+1e-6j   
+                           |                                                                                           |
+                           |                                                                                           |
+                           |                                                                                           |
+                           |                                                                                           |
+                           |           y_mn=1e9-1e9j          y_mn=1e3-1e3j                       y_mn=1e3-1e3j        |
+                           |   I=10    y_mm_half=1e-6+1e-6j   y_mm_half=1e-6+1e-6j      V=.974    y_mm_half=1e-6+1e-6j |
+                           n1(--------line_6-----)n6(--------line_7--------------------)n7(------line_8---------------)n5
+                                                  |                                     |
+                                                  |                                     |
+                                                  |                                     |
+                                                  n6--> load_6_          _load_7 <------n7---((~)) Gen_7_
+                                                         P10=8             P10=8                    P10=-12
+                                                         Q10=8             Q10=4                    Q10=-10 
+    """
+model08 = make_model(
+    schema08,
+    # define a scaling factor
+    Defk(step=0, id='kq'),
+    # link the factor to the generator
+    Link(step=0, objid='Gen_7', part='q', id='kq'))
+result06 = [
+    *calculate(
+        model08,
+        parameters_of_steps=[{'objectives': 'V'}])]
+# print the result
+pr.print_estim_results(result06)
+pr.print_measurements(result06)

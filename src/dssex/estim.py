@@ -26,6 +26,7 @@ from functools import partial, singledispatch
 from collections import namedtuple
 from operator import itemgetter
 from egrid.builder import DEFAULT_FACTOR_ID, defk, Loadfactor
+from egrid.model import get_pfc_nodes
 # helper
 
 _EMPTY_TUPLE = ()
@@ -1409,12 +1410,13 @@ def get_estimation_data(model, count_of_steps):
     Returns
     -------
     function (int) -> (Estimation_data)"""
-    Vsymbols = _create_v_symbols(model.nodes)
+    pfc_nodes = get_pfc_nodes(model.nodes)
+    Vsymbols = _create_v_symbols(pfc_nodes)
     branch_terminal_data, branch_taps = _get_branch_estimation_data(
         model, Vsymbols)
-    slack_indexer = Vsymbols.index.isin(model.slacks.index_of_node)
+    slack_indexer = pfc_nodes.reset_index().set_index('index_of_node').is_slack
     Vsymbols_var =  (
-        Vsymbols.loc[~slack_indexer][['Vre', 'Vim']].to_numpy().reshape(-1))
+        Vsymbols.loc[~slack_indexer, ['Vre', 'Vim']].to_numpy().reshape(-1))
     node_index = Vsymbols.index[~slack_indexer]
     Y_by_V = _calculate_Y_by_V(
         node_index, Vsymbols, _create_gb_branch_matrix(branch_terminal_data))
