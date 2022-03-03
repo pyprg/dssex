@@ -40,7 +40,8 @@ def calculate_power_flow(*args):
     args: iterable (optional)
         egrid.builder.(
             Branch | Slacknode | Injection | Output |
-            PQValue | IValue | Vvalue | Branchtaps | Defk | Link) | str
+            PValue | QValue | IValue | Vvalue | Branchtaps | 
+            Defk | Link) | str
 
     Returns
     -------

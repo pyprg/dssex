@@ -623,8 +623,8 @@ def _power_into_measured_branches(
     Returns
     -------
     pandas.DataFrame (id_of_batch)
-        * .P, casadi.SX, acive power
-        * .Q, casadi.SX, reacive power"""
+        * .P, casadi.SX, active power
+        * .Q, casadi.SX, reactive power"""
     return (
         branchoutputs.merge(
             right=branch_terminal_data,
@@ -718,54 +718,31 @@ def _current_into_measured_injection(injectionoutputs, injection_data):
             injection_data, on='index_of_injection', how='inner')
         [['id_of_batch', 'Ire', 'Iim']])
 
-def _measured_power_per_batch(pqvalues):
+def _measured_values_per_batch(id_of_batch, values, x__):
     """Sums up active and reactive power values per measurement point.
 
     Parameters
     ----------
-    pqvalues: pandas.DataFrame
+    id_of_batch: str
+        identifier of collection of measurements
+    values: pandas.DataFrame
         * .id_of_batch
-        * .P
-        * .Q
-        * .direction
-          (-1: 'from device into node' or 1: 'from node into device')
+        * .values
 
     Returns
     -------
     pandas.DataFrame (id_of_batch)
         * P
         * Q"""
-    direction = pqvalues.direction
     return (
-        pd.DataFrame(
-            {'id_of_batch': pqvalues.id_of_batch,
-             'P': pqvalues.P * direction,
-             'Q': pqvalues.Q * direction})
+        pd.DataFrame({'id_of_batch': id_of_batch, x__: values})
         .groupby('id_of_batch')
         .sum())
 
-def _measured_current_per_batch(ivalues):
-    """Sums up electric current values per measurement point.
-
-    Parameters
-    ----------
-    pqvalues: pandas.DataFrame
-        * .id_of_batch
-        * .I
-
-    Returns
-    -------
-    pandas.DataFrame (id_of_batch)
-        * I"""
-    return (
-        pd.DataFrame({'id_of_batch': ivalues.id_of_batch, 'I': ivalues.I})
-        .groupby('id_of_batch')
-        .sum())
-
-def _get_measured_and_calculated_power(
+def _get_measured_and_calculated_value(
         branchoutputs, branch_terminal_data,
         injectionoutputs, injection_data,
-        pqvalues):
+        values, x__='P'):
     """Arranges calculated (or expression of casadi.SX for calculation)
     and measured power per id_of_batch.
 
@@ -779,31 +756,36 @@ def _get_measured_and_calculated_power(
 
     injection_data: pandas.DataFrame
 
-    pqvalues: pandas.DataFrame
+    values: pandas.DataFrame
+    
+    x__: 'P'|'Q'
 
     Returns
     -------
     pandas.DataFrame
-        * .P_measured
-        * .P_calcualted
-        * .Q_measured
-        * .Q_calculated"""
-    point_ids = pqvalues.id_of_batch.unique()
-    pq_indexer = branchoutputs.id_of_batch.isin(point_ids)
-    PQcalculated_br = _power_into_measured_branches(
-        branchoutputs.loc[pq_indexer, :], branch_terminal_data)
-    PQcalculated_inj = _power_into_measured_injection(
-        injectionoutputs, injection_data)
-    PQcalculated = (
-        pd.concat([PQcalculated_br, PQcalculated_inj])
+        * .('P'|'Q')_measured
+        * .('P'|'Q')_calculated"""     
+    point_ids = values.id_of_batch.unique()
+    indexer = branchoutputs.id_of_batch.isin(point_ids)
+    calculated_br = (
+        _power_into_measured_branches(
+            branchoutputs.loc[indexer, :], branch_terminal_data)
+        [['id_of_batch', x__]])
+    calculated_inj = (
+        _power_into_measured_injection(
+            injectionoutputs, injection_data)
+        [['id_of_batch', x__]])
+    calculated = (
+        pd.concat([calculated_br, calculated_inj])
         .groupby('id_of_batch')
         .sum())
-    PQgiven = _measured_power_per_batch(pqvalues)
-    result = PQgiven.join(
-        PQcalculated, lsuffix='_measured', rsuffix='_calculated', how='inner')
+    given = _measured_values_per_batch(
+        values.id_of_batch, values[x__] * values.direction, x__)
+    result = given.join(
+        calculated, lsuffix='_measured', rsuffix='_calculated', how='inner')
     return result if len(result) else pd.DataFrame(
         _EMPTY_TUPLE,
-        columns=['P_measured', 'P_calculated', 'Q_measured', 'Q_calculated'])
+        columns=[f'{x__}_measured', f'{x__}_calculated'])
 
 def _get_measured_and_calculated_current(
         branchoutputs, branch_terminal_data,
@@ -829,9 +811,9 @@ def _get_measured_and_calculated_current(
         * .I_measured
         * .I_calculated"""
     point_ids = ivalues.id_of_batch.unique()
-    i_indexer = branchoutputs.id_of_batch.isin(point_ids)
+    indexer = branchoutputs.id_of_batch.isin(point_ids)
     Icalculated_br = _current_into_measured_branches(
-        branchoutputs.loc[i_indexer, :], branch_terminal_data)
+        branchoutputs.loc[indexer, :], branch_terminal_data)
     Icalculated_inj = _current_into_measured_injection(
         injectionoutputs, injection_data)
     Icalculated_ri = (
@@ -845,7 +827,7 @@ def _get_measured_and_calculated_current(
     except:
         return pd.DataFrame(
             _EMPTY_TUPLE, columns=['I_measured', 'I_calculated'])
-    Igiven = _measured_current_per_batch(ivalues)
+    Igiven = _measured_values_per_batch(ivalues.id_of_batch, ivalues.I, 'I')
     return Igiven.join(
         Icalculated, lsuffix='_measured', rsuffix="_calculated", how='inner')
 
@@ -1195,7 +1177,7 @@ Estimation_data = namedtuple(
     'slacks slack_indexer Vsymbols Vsymbols_var '
     'branch_terminal_data branch_taps '
     'kvars kconsts '
-    'injection_data V PQ I Inode')
+    'injection_data V P Q I Inode')
 Estimation_data.__doc__ = """Data for estimating the state of an electric
 network.
 
@@ -1273,16 +1255,17 @@ injection_data: pandas.DataFrame
     * .Iim, casadi.SX
     * .P, casadi.SX
     * .Q, casadi.SX
-PQ: pandas.DataFrame
+P: pandas.DataFrame
     * .P_measured, float
-    * .Q_measured, float
     * .P_calculated, casadi.SX
+Q: pandas.DataFrame
+    * .Q_measured, float
     * .Q_calculated, casadi.SX
 I: pandas.DataFrame
-    * .I_measured, casadi.SX
+    * .I_measured, float
     * .I_calculated, casadi.SX
 V: pandas.DataFrame
-    * .V_measured, casadi.SX
+    * .V_measured, float
     * .V_calculated, casadi.SX
 Inode: casadi.SX
     expressions for calculation of node current without slack nodes"""
@@ -1463,12 +1446,20 @@ def get_estimation_data(model, count_of_steps):
                 index=pd.Index([], name='index_of_injection'))
         injection_data = _get_injection_data(model.injections, Vsymbols, kpq)
         V = _get_measured_and_calculated_voltage(model.vvalues, Vsymbols)
-        PQ = _get_measured_and_calculated_power(
+        P = _get_measured_and_calculated_value(
             model.branchoutputs,
             branch_terminal_data,
             model.injectionoutputs,
             injection_data,
-            model.pqvalues)
+            model.pvalues,
+            'P')
+        Q = _get_measured_and_calculated_value(
+            model.branchoutputs,
+            branch_terminal_data,
+            model.injectionoutputs,
+            injection_data,
+            model.qvalues,
+            'Q')
         I = _get_measured_and_calculated_current(
             model.branchoutputs,
             branch_terminal_data,
@@ -1489,7 +1480,8 @@ def get_estimation_data(model, count_of_steps):
             kconsts=kconsts,
             injection_data=injection_data,
             V=V, # constant, not step specific
-            PQ=PQ,
+            P=P,
+            Q=Q,
             I=I,
             Inode=Inode)
     return of_step
@@ -1769,10 +1761,10 @@ def get_calculated(target_frames):
          for target_frame, _ in target_frames])
 
 target_value_getter = {
-    'P':lambda ed:(ed.PQ.loc[:, ['P_measured', 'P_calculated']], 'P'),
-    'Q':lambda ed:(ed.PQ.loc[:, ['Q_measured', 'Q_calculated']], 'Q'),
-    'I':lambda ed:(ed.I.loc[:, ['I_measured', 'I_calculated']], ''),
-    'V':lambda ed:(ed.V.loc[:, ['V_measured', 'V_calculated']], '')}
+    'P':lambda ed:(ed.P.loc[:, ['P_measured', 'P_calculated']]),
+    'Q':lambda ed:(ed.Q.loc[:, ['Q_measured', 'Q_calculated']]),
+    'I':lambda ed:(ed.I.loc[:, ['I_measured', 'I_calculated']]),
+    'V':lambda ed:(ed.V.loc[:, ['V_measured', 'V_calculated']])}
 
 @singledispatch
 def get_objective_array(key, estimation_data):
@@ -1785,7 +1777,7 @@ def get_objective_array(key, estimation_data):
 def _(key, estimation_data):
     try:
         return casadi.vertcat(
-            target_value_getter.get(key)(estimation_data)[0].to_numpy())
+            target_value_getter.get(key)(estimation_data).to_numpy())
     except:
         msg = ("Error, something went wrong, please check indicators of "
                "objective types, function get_objective_array received "
@@ -1873,7 +1865,7 @@ def _(include, estimation_data):
     return [get_objective_array(include, estimation_data)]
 
 def get_target_values(include, estimation_data):
-    return (target_value_getter.get(key)(estimation_data)
+    return ((target_value_getter.get(key)(estimation_data), key)
             for key in include)
 
 def get_target_calculated(estimation_data, include):

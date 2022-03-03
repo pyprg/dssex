@@ -25,7 +25,7 @@ from collections import namedtuple
 from operator import attrgetter, methodcaller
 
 _EMPTY_TUPLE = ()
-_GET_IPQV = attrgetter('I', 'PQ', 'V')
+_GET_IPQV = attrgetter('I', 'P', 'Q', 'V')
 
 #
 # results related to network elements
@@ -273,13 +273,15 @@ def get_branch_data(estimation_data, evaluate_expression):
     terminal_vals = evaluate_expression([terminal_formulas])
     return _create_branch_value_frame(
         estimation_data.branch_terminal_data, np.array(terminal_vals))
+
 #
 # presentation of results at points of measurements/set-points
 #
 
 Measurement_Result_factory = namedtuple(
     'Measurement_Result_factory',
-    'Vmeasured_calculated PQmeasured_calculated Imeasured_calculated')
+    'Vmeasured_calculated Pmeasured_calculated '
+    'Qmeasured_calculated Imeasured_calculated')
 Measurement_Result_factory.__doc__ = """Collection of functions returning
 arranged results for measured data.
 
@@ -287,7 +289,9 @@ Parameters
 ----------
 Vmeasured_calculated: function
     ()->(pandas.DataFrame)
-PQmeasured_calculated: function
+Pmeasured_calculated: function
+    ()->(pandas.DataFrame)
+Qmeasured_calculated: function
     ()->(pandas.DataFrame)
 Imeasured_calculated: function
     ()->(pandas.DataFrame)"""
@@ -330,27 +334,32 @@ def create_measurement_result_factory(estimation_data, evaluate_expression):
     -------
     Measurement_Result_factory
         * .Vmeasured_calculated, function, () -> (pandas.DataFrame)
-        * .PQmeasured_calculated, function, () -> (pandas.DataFrame)
+        * .Pmeasured_calculated, function, () -> (pandas.DataFrame)
+        * .Qmeasured_calculated, function, () -> (pandas.DataFrame)
         * .Imeasured_calculated, function, () -> (pandas.DataFrame)"""
-    Idata, PQdata, Vdata = _GET_IPQV(estimation_data)
+    Idata, Pdata, Qdata, Vdata = _GET_IPQV(estimation_data)
     # retrieve values from estimation result
-    Imeasured_calc, PQmeasured_calc, Vmeasured_calc = evaluate_expression(
+    Icalc, Pcalc, Qcalc, Vcalc = evaluate_expression(
         [Idata.I_calculated.to_numpy(),
-         PQdata[['P_calculated', 'Q_calculated']].to_numpy(),
+         Pdata[['P_calculated']].to_numpy(),
+         Qdata[['Q_calculated']].to_numpy(),
          Vdata.V_calculated.to_numpy()])
     return Measurement_Result_factory(
         Vmeasured_calculated=lambda:_add_values(
             Vdata[['V_measured']].copy(),
-            Vmeasured_calc,
+            Vcalc,
             ['V_calculated']),
-        PQmeasured_calculated=lambda:_add_values(
-                PQdata[['P_measured', 'Q_measured']].copy(),
-                PQmeasured_calc,
-                ['P_calculated', 'Q_calculated'])
-            [['P_measured', 'P_calculated', 'Q_measured', 'Q_calculated']],
+        Pmeasured_calculated=lambda:_add_values(
+                Pdata[['P_measured']].copy(),
+                Pcalc,
+                ['P_calculated']),
+        Qmeasured_calculated=lambda:_add_values(
+                Qdata[['Q_measured']].copy(),
+                Qcalc,
+                ['Q_calculated']),
         Imeasured_calculated=lambda:_add_values(
             Idata[['I_measured']].copy(),
-            Imeasured_calc,
+            Icalc,
             ['I_calculated']))
 
 #
@@ -456,17 +465,11 @@ def print_estim_results(estim_results):
     for res in estim_results:
         print_estim_result(res)
 
-_CALLER_NAME = {
-    'P': 'PQmeasured_calculated',
-    'Q': 'PQmeasured_calculated',
-    'I': 'Imeasured_calculated',
-    'V': 'Vmeasured_calculated'}
-
 def _arrange_measurement_results(step_resultfn, quantity):
     measured_quantity = f"{quantity}_measured"
     calculated_quantity = f"{quantity}_calculated"
     level_names=['quantity', 'step']
-    get_results = methodcaller(_CALLER_NAME[quantity])
+    get_results = methodcaller(f'{quantity}measured_calculated')
     first_step, results_first_step = step_resultfn[0]
     measured_calculated = get_results(results_first_step)
     df = measured_calculated[[measured_quantity, calculated_quantity]]
