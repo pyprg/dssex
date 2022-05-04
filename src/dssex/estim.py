@@ -22,13 +22,20 @@ Created on Sun Aug  8 08:36:10 2021
 import casadi
 import numpy as np
 import pandas as pd
-from functools import partial, singledispatch
-from collections import namedtuple
+from numpy.linalg import solve
+from functools import partial, singledispatch, lru_cache
 from operator import itemgetter
+from collections import namedtuple
 from egrid.builder import DEFAULT_FACTOR_ID, defk, Loadfactor
 from egrid.model import get_pfc_nodes
 # helper
 
+# square of voltage magnitude, minimum value for load curve, 
+#   if value is below _VMINSQR the load curves for P and Q converge
+#   towards a linear load curve which is 0 when V=0; P(V=0)=0, Q(V=0)=0
+_VMINSQR = 0.8
+# value of zero check, used for load curve calculation    
+_EPSILON = 1e-12
 _EMPTY_TUPLE = ()
 
 def _create_symbols(prefix, names):
@@ -302,8 +309,12 @@ def _power_into_branch(
     Q = -b_tot * V_abs_sqr + (b_mn * A - g_mn * B)
     return P, Q
 
-def _injected_power2(P_10, Q_10, exp_p_half, exp_q_half, V_abs_sqr):
-    """Calculates real and imaginary part of injected power.
+_power_props = itemgetter(
+    'kp', 'kq', 'P10', 'Q10', 'V_abs_sqr', 'Exp_v_p', 'Exp_v_q',
+    'c3p', 'c2p', 'c1p', 'c3q', 'c2q', 'c1q')
+
+def _injected_power(injections, vminsqr):
+    """Calculates power flowing through injections.
     Injected power is calculated this way
     (P = |V|**Exvp * P10, Q = |V|**Exvq * Q10; with |V| - magnitude of V):
     ::
@@ -315,29 +326,6 @@ def _injected_power2(P_10, Q_10, exp_p_half, exp_q_half, V_abs_sqr):
 
     Parameters
     ----------
-    P_10: float
-        injected active power when voltage magnitude is 1.0 pu
-    Q_10: float
-        injected reactive power when voltage magnitude is 1.0 pu
-    exp_p_half: float
-        value for half of voltage exponent of active power
-    exp_q_half: float
-        value for half of voltage exponent of reactive power
-    V_abs_sqr: float
-        V_real ** 2 + V_imag ** 2
-
-    Returns
-    -------
-    tuple
-        * active power P
-        * reactive power Q"""
-    return (V_abs_sqr ** exp_p_half) * P_10, (V_abs_sqr ** exp_q_half) * Q_10
-
-def _injected_power(injections):
-    """Calculates power flowing through injections.
-
-    Parameters
-    ----------
     injections: pandas.DataFrame
         * .kp
         * .P10
@@ -346,6 +334,10 @@ def _injected_power(injections):
         * .Exp_v_p
         * .Exp_v_q
         * .V_abs_sqr
+        * .c3p, .c2p, .c1p, polynomial coefficients for active power P
+        * .c3q, .c2q, .c1q, polynomial coefficients for reactive power Q 
+    vminsqr: float
+        upper limit of interpolation, interpolates if |V|² < vminsqr
 
     Returns
     -------
@@ -353,16 +345,31 @@ def _injected_power(injections):
         * active power P
         * reactive power Q"""
     if injections.size:
-        return _injected_power2(
-            injections.kp * injections.P10, injections.kq * injections.Q10,
-            injections.Exp_v_p / 2, injections.Exp_v_q / 2,
-            injections.V_abs_sqr)
-    return 0., 0.
+        (kp, kq, P10, Q10, V_abs_sqr, Exp_v_p, Exp_v_q,
+         c3p, c2p, c1p, c3q, c2q, c1q)= map(
+            casadi.vcat, _power_props(injections))
+        # interpolated
+        V_abs = casadi.power(V_abs_sqr, .5)
+        V_abs_cub = V_abs_sqr * V_abs
+        fp_interpol = c3p*V_abs_cub + c2p*V_abs_sqr + c1p*V_abs
+        fq_interpol = c3q*V_abs_cub + c2q*V_abs_sqr + c1q*V_abs
+        # original
+        fp_original = casadi.power(V_abs_sqr, Exp_v_p/2) 
+        fq_original = casadi.power(V_abs_sqr, Exp_v_q/2)
+        return (
+            casadi.if_else(
+                V_abs_sqr < vminsqr, fp_interpol, fp_original) * kp * P10, 
+            casadi.if_else(
+                V_abs_sqr < vminsqr, fq_interpol, fq_original) * kq * Q10)
+    return casadi.DM(0.), casadi.DM(0.)
 
-def _injected_current2(
-        P_10, Q_10, exp_p_half, exp_q_half, V_abs_sqr, Vre, Vim):
-    """Calculates real and imaginary part of injected current according
-    to scheduled, not scaled power.
+_current_props = itemgetter(
+    'kp', 'kq', 'P10', 'Q10', 'Vre', 'Vim', 'V_abs_sqr', 'Exp_v_p', 'Exp_v_q',
+    'c3p', 'c2p', 'c1p', 'c3q', 'c2q', 'c1q')
+
+def _injected_current(injections, vminsqr):
+    """Calculates current flowing into an injection. Returns separate
+    real and imaginary parts.
     Injected power is calculated this way
     (P = |V|**Exvp * P10, Q = |V|**Exvq * Q10; with |V| - magnitude of V):
     ::
@@ -408,58 +415,20 @@ def _injected_current2(
 
     Parameters
     ----------
-    P_10: float
-        injected active power when voltage magnitude is 1.0 pu
-    Q_10: float
-        injected reactive power when voltage magnitude is 1.0 pu
-    exp_p_half: float
-        value for half of voltage exponent of active power
-    exp_q_half: float
-        value for half of voltage exponent of reactive power
-    V_abs_sqr: float
-        V_real ** 2 + V_imag ** 2
-    Vre: float
-        voltage at terminal of injection, real part
-    Vim: float
-        voltage at terminal of injection, imaginary part
-
-    Returns
-    -------
-    tuple
-        * current I, real part
-        * current I, imaginary part"""
-    p_expr = V_abs_sqr ** (exp_p_half - 1) * P_10
-    q_expr = V_abs_sqr ** (exp_q_half - 1) * Q_10
-    Ire =  p_expr * Vre + q_expr * Vim
-    Iim = -q_expr * Vre + p_expr * Vim
-    return Ire, Iim
-
-def _injected_current(injections):
-    """Calculates current flowing into an injection. Returns separate
-    real and imaginary parts.
-
-    Parameters
-    ----------
     injections: pandas.DataFrame
-        with columns
-            V_abs_sqr: float
-                Vre**2 + Vim**2
-            Vre: float
-                node voltage, real part
-            Vim: float
-                node voltage, imaginary part
-            Exp_v_p: float
-                voltage exponent, active power
-            Exp_v_q, float
-                voltage exponent, active power
-            P10: float
-                active power at voltage 1 per unit
-            Q10: float
-                reactive power at voltage 1 per unit
-            kp: float
-                scaling factor for active power
-            kq: float
-                scaling factor for reactive power
+        * .V_abs_sqr, float, Vre**2 + Vim**2
+        * .Vre, float, node voltage, real part
+        * .Vim:, float, node voltage, imaginary part
+        * .Exp_v_p, float, voltage exponent, active power
+        * .Exp_v_q, float, voltage exponent, active power
+        * .P10, float, active power at voltage 1 per unit
+        * .Q10, float, reactive power at voltage 1 per unit
+        * .kp, float, scaling factor for active power
+        * .kq, float, scaling factor for reactive power
+        * .c3p, .c2p, .c1p 
+        * .c3q, .c2q, .c1q 
+    vminsqr: float
+        upper limit of interpolation, interpolates if |V|² < vminsqr
 
     Returns
     -------
@@ -467,11 +436,32 @@ def _injected_current(injections):
         * Ire, real part of injected current
         * Iim, imaginary part of injected current"""
     if injections.size:
-        return _injected_current2(
-            injections.kp * injections.P10, injections.kq * injections.Q10,
-            injections.Exp_v_p / 2, injections.Exp_v_q / 2,
-            injections.V_abs_sqr, injections.Vre, injections.Vim)
-    return 0., 0.
+        (kp, kq, P10, Q10, Vre, Vim, V_abs_sqr, Exp_v_p, Exp_v_q, 
+         c3p, c2p, c1p, c3q, c2q, c1q) = map(
+             casadi.vcat, _current_props(injections))
+        # interpolated function
+        V_abs = casadi.power(V_abs_sqr, .5)
+        V_abs_cub = V_abs_sqr * V_abs
+        p_expr = (c3p*V_abs_cub + c2p*V_abs_sqr + c1p*V_abs) * kp * P10
+        q_expr = (c3q*V_abs_cub + c2q*V_abs_sqr + c1q*V_abs) * kq * Q10
+        Ire_ip = casadi.if_else(
+            _EPSILON < V_abs_sqr,  
+            (p_expr * Vre + q_expr * Vim) / V_abs_sqr, 
+            0.0)
+        Iim_ip = casadi.if_else(
+            _EPSILON < V_abs_sqr, 
+            (-q_expr * Vre + p_expr * Vim) / V_abs_sqr, 
+            0.0)
+        # original function
+        y_p = casadi.power(V_abs_sqr, Exp_v_p/2 -1) * kp * P10 
+        y_q = casadi.power(V_abs_sqr, Exp_v_q/2 -1) * kq * Q10
+        Ire =  y_p * Vre + y_q * Vim
+        Iim = -y_q * Vre + y_p * Vim
+        # compose load functions from original and interpolated
+        return (
+            casadi.if_else(V_abs_sqr < vminsqr, Ire_ip, Ire), 
+            casadi.if_else(V_abs_sqr < vminsqr, Iim_ip, Iim))
+    return casadi.DM(0.), casadi.DM(0.)
 
 #
 # decision variables
@@ -511,6 +501,100 @@ def _add_vk_to_injections(injections, Vnode, k, default_value):
     return tmp.join(
         Vnode.loc[:, Vnode.columns != 'id_of_node'], on='index_of_node')
 
+@lru_cache(maxsize=200)
+def get_coefficients(x, y, dydx_0, dydx):
+    """Calculates the coefficients A, B, C of the polynomial
+    ::
+        f(x) = Ax³ + Bx² + Cx
+        with
+            f(0) = 0, 
+            df(0)/dx = dydx_0,
+            f(x) = y
+            df(x)/dx = dydx
+            
+    Parameters
+    ----------
+    x: float
+        x of point
+    y: float
+        value at x
+    dydx_0: float 
+        dy / dx at 0
+    dydx: float 
+        dy / dx at x
+
+    Returns
+    -------
+    numpy.ndarray (shape=(3,))
+        float, float, float (A, B, C)"""
+    x_sqr = x * x
+    x_cub = x * x_sqr
+    cm = np.array([
+        [   x_cub, x_sqr,  x],
+        [      0.,    0., 1.],
+        [3.*x_sqr,  2.*x, 1.]])
+    return solve(cm, np.array([y, dydx_0, dydx]))
+
+def calc_dpower_dvsqr(v_sqr, _2p):
+    """Calculates the derivative of exponential power function at v_sqr.
+    
+    Parameters
+    ----------
+    v_sqr: float
+        square of voltage magnitude
+    _2p: float
+        double of voltage exponent
+    
+    Returns
+    -------
+    float"""
+    p = _2p/2
+    return p * np.power(v_sqr, p-1)
+
+def get_polynomial_coefficients(ul, exp):
+    """Calculates coefficients of polynomials for interpolation.
+    
+    Parameters
+    ----------
+    ul: float
+        upper limit of interpolation range
+    exp: numpy.array
+        float, exponents of function 'load over voltage'
+    
+    Returns
+    -------
+    numpy.array
+        float, shape(n,3)"""
+    return np.vstack([
+        get_coefficients(ul, 1., 1., dp)
+        for dp in calc_dpower_dvsqr(ul, exp)])
+
+def _add_interpol_coeff_to_injections(injections, vminsqr):
+    """Adds polynomial coefficients to injections for linear interpolation
+    of power around |V|² ~ 0.
+    
+    Parameters
+    ----------
+    injections: pandas.DataFrame
+        * .Exp_v_p
+        * .Exp_v_q
+    vminsqr: float
+        upper limit of interpolation
+        
+    Returns
+    -------
+    pandas.DataFrame
+        modified injections"""
+    p_coeffs = get_polynomial_coefficients(vminsqr, injections.Exp_v_p)
+    injections['c3p'] = p_coeffs[:, 0]
+    injections['c2p'] = p_coeffs[:, 1]
+    injections['c1p'] = p_coeffs[:, 2]
+    q_coeffs = get_polynomial_coefficients(vminsqr, injections.Exp_v_q)
+    injections['c3q'] = q_coeffs[:, 0]
+    injections['c2q'] = q_coeffs[:, 1]
+    injections['c1q'] = q_coeffs[:, 2]
+    return injections
+    
 def _add_v_to_branch_terminals(branch_terminals, Vnode):
     """Adds node voltages to branch terminal data.
 
@@ -1125,7 +1209,7 @@ def _get_branch_terminal_data(branchterminals, branchtapfactors, Vnode):
     term_data['Q'] = Q
     return term_data
 
-def _get_injection_data(injections, Vnode, k):
+def _get_injection_data(injections, Vnode, k, vminsqr):
     """Arranges data of injections in a DataFrame. Adds voltages of nodes
     and current to data given by injections.
 
@@ -1137,6 +1221,8 @@ def _get_injection_data(injections, Vnode, k):
         node voltages
     k: pandas.Series, casadi.SX
         scaling factors
+    vminsqr: float
+        upper limit of interpolated load curves
 
     Returns
     -------
@@ -1164,12 +1250,13 @@ def _get_injection_data(injections, Vnode, k):
         * .P, casadi.SX
         * .Q, casadi.SX"""
     injection_data = _add_vk_to_injections(injections, Vnode, k, 1.0)
-    Ire, Iim = _injected_current(injection_data)
-    injection_data['Ire'] = Ire
-    injection_data['Iim'] = Iim
-    P, Q = _injected_power(injection_data)
-    injection_data['P'] = P
-    injection_data['Q'] = Q
+    injection_data = _add_interpol_coeff_to_injections(injection_data, vminsqr)
+    Ire, Iim = _injected_current(injection_data, vminsqr)
+    injection_data['Ire'] = Ire.elements()
+    injection_data['Iim'] = Iim.elements()
+    P, Q = _injected_power(injection_data, vminsqr)
+    injection_data['P'] = P.elements()
+    injection_data['Q'] = Q.elements()
     return injection_data
 
 Estimation_data = namedtuple(
@@ -1374,7 +1461,7 @@ def _query_load_scaling_factors_of_type(type_, load_scaling_factors_step):
     except:
         return _EMPTY_LOAD_SCALING_FACTORS.copy();
 
-def get_estimation_data(model, count_of_steps):
+def get_estimation_data(model, count_of_steps, vminsqr=_VMINSQR):
     """Prepares data for estimation.
     Vsymbols and expressions of V are reused in all steps.
     ksymbols are specific for each step, hence, expressions of PQ, I and Inode
@@ -1389,6 +1476,8 @@ def get_estimation_data(model, count_of_steps):
 
     count_of_steps: int
         number of optimization steps
+    vminsqr: float
+        upper limit of interpolated load curves (default _VMINSQR)
 
     Returns
     -------
@@ -1444,7 +1533,8 @@ def get_estimation_data(model, count_of_steps):
                 (),
                 columns=['kp', 'kq'],
                 index=pd.Index([], name='index_of_injection'))
-        injection_data = _get_injection_data(model.injections, Vsymbols, kpq)
+        injection_data = _get_injection_data(
+            model.injections, Vsymbols, kpq, vminsqr)
         V = _get_measured_and_calculated_voltage(model.vvalues, Vsymbols)
         P = _get_measured_and_calculated_value(
             model.branchoutputs,
@@ -2110,7 +2200,8 @@ def estimate(vslack_tappos, estimation_data, previous_data, mynlp,
         solver.stats()['success'],
         create_evaluating_function(mynlp.nlp, values_of_params, r['x']))
 
-def calculate(model, parameters_of_steps=(), tap_positions=()):
+def calculate(
+        model=None, parameters_of_steps=(), tap_positions=(), vminsqr=_VMINSQR):
     """Estimates grid status stepwise.
 
     Parameters
@@ -2137,6 +2228,8 @@ def calculate(model, parameters_of_steps=(), tap_positions=()):
                 of voltages at the location of given values
     tap_positions: array_like
         tuple str, int - (ID of Branchtap, position)
+    vminsqr: float (default _VMINSQR)
+        minimum
 
     Yields
     ------
