@@ -65,30 +65,17 @@ pr.print_measurements(results)
 #%% scale load in order to meet values for active power P
 model_PQ_measurements = [
      # measured P/Q pair
-     PValue(
-        id_of_batch='pq_line_0',
-        P=30.),
-     QValue(
-        id_of_batch='pq_line_0',
-        Q=8.),
+     PValue(id_of_batch='pq_line_0', P=30.),
+     QValue(id_of_batch='pq_line_0', Q=8.),
      # assign pq_line_0 to terminal
-     Output(
-        id_of_batch='pq_line_0',
-        id_of_node='n_0',
-        id_of_device='line_0')]
+     Output(id_of_batch='pq_line_0', id_of_node='n_0', id_of_device='line_0')]
 model_scale_p = [
      # define a scaling factor
      Defk(step=0, id='kp'),
      # link the factor to an injection
      Link(step=0, objid='consumer_0', part='p', id='kp')]
-model01 = make_model(
-    model_devices,
-    model_PQ_measurements,
-    model_scale_p)
-results01 = [
-    *calculate(
-        model01,
-        parameters_of_steps=[{'objectives': 'P'}])]
+model01 = make_model(model_devices, model_PQ_measurements, model_scale_p)
+results01 = [*calculate(model01, parameters_of_steps=[{'objectives': 'P'}])]
 # print the result
 pr.print_estim_results(results01)
 pr.print_measurements(results01)
@@ -102,10 +89,7 @@ model02 = make_model(
     model_devices,
     model_PQ_measurements,
     model_scale_q)
-results02 = [
-   *calculate(
-        model02,
-        parameters_of_steps=[{'objectives': 'Q'}])]
+results02 = [*calculate(model02, parameters_of_steps=[{'objectives': 'Q'}])]
 # print the result
 pr.print_estim_results(results02)
 pr.print_measurements(results02)
@@ -115,10 +99,7 @@ model03 = make_model(
     model_PQ_measurements,
     model_scale_p,
     model_scale_q)
-results03 = [
-   *calculate(
-        model03,
-        parameters_of_steps=[{'objectives': 'PQ'}])]
+results03 = [*calculate(model03, parameters_of_steps=[{'objectives': 'PQ'}])]
 # print the result
 pr.print_estim_results(results03)
 pr.print_measurements(results03)
@@ -166,10 +147,7 @@ model05 = make_model(
     model04_devices,
     model05_V_setpoint,
     model05_scale_q)
-results05 = [
-    *calculate(
-        model05,
-        parameters_of_steps=[{'objectives': 'V'}])]
+results05 = [*calculate(model05, parameters_of_steps=[{'objectives': 'V'}])]
 # print the result
 pr.print_estim_results(results05)
 pr.print_measurements(results05)
@@ -215,10 +193,7 @@ model06 = make_model(
     Defk(step=0, id='kq'),
     # link the factor to the generator
     Link(step=0, objid='Gen_7', part='q', id='kq'))
-result06 = [
-    *calculate(
-        model06,
-        parameters_of_steps=[{'objectives': 'V'}])]
+result06 = [*calculate(model06, parameters_of_steps=[{'objectives': 'V'}])]
 # print the result
 pr.print_estim_results(result06)
 pr.print_measurements(result06)
@@ -252,7 +227,8 @@ pr.print_measurements(result07)
 #%% power flow meshed configuration, consumers, capacitor, PV-generator,
 #   line6 has very hight admittance and is treated as a short circuit
 #
-# leading and trailing underscores are not part of the IDs
+# leading and trailing underscores are not part of the IDs, they avoid 
+#   the device or node being connected to the adjacent entity
 #
 schema08 = """
                                                                                                        Q10=-4 Exp_v_q=2
@@ -276,7 +252,7 @@ schema08 = """
                            |                                                                                           |
                            |                                                                                           |
                            |           y_mn=1e9-1e9j          y_mn=1e3-1e3j                       y_mn=1e3-1e3j        |
-                           |   I=10    y_mm_half=1e-6+1e-6j   y_mm_half=1e-6+1e-6j      V=.974    y_mm_half=1e-6+1e-6j |
+                           |   I=10    y_mm_half=1e-6+1e-6j   y_mm_half=1e-6+1e-6j      V=.97     y_mm_half=1e-6+1e-6j |
     n0--> load_0_          n1(------- line_6 ----)n6(------- line_7 -------------------)n7(----- line_8 --------------)n5
            P10=8                                  |                                     |
                                                   |                                     |
@@ -291,15 +267,12 @@ model08 = make_model(
     Defk(step=0, id='kq'),
     # link the factor to the generator
     Link(step=0, objid='Gen_7', part='q', id='kq'))
-result08 = [
-    *calculate(
-        model08,
-        parameters_of_steps=[{'objectives': 'V'}])]
+result08 = [*calculate(model08, parameters_of_steps=[{'objectives': 'V'}])]
 # print the result
 pr.print_estim_results(result08)
 pr.print_measurements(result08)
 #%% power flow meshed configuration, consumers, capacitor, PV-generator,
-#   line6 has very hight admittance and is treated as a short circuit
+#   line6 has very high admittance and is treated as a short circuit
 #
 # leading and trailing underscores are not part of the IDs
 #
@@ -344,10 +317,7 @@ model09 = make_model(
         objid=('load_1', 'load_2', 'load_3', 'load_4', 'load_51'), 
         part='p', 
         id='kp'))
-result09 = [
-    *calculate(
-        model09,
-        parameters_of_steps=[{'objectives': 'P'}])]
+result09 = [*calculate(model09, parameters_of_steps=[{'objectives': 'P'}])]
 pr.print_estim_results(result09)
 pr.print_measurements(result09)
 
