@@ -378,8 +378,10 @@ def get_injected_current(count_of_nodes, V, injections, loadfactor=1.):
         shape (2*count_of_nodes, 1)"""
     P10 = loadfactor * injections.P10 / 3 # for one phase only
     Q10 = loadfactor * injections.Q10 / 3 # for one phase only
-    exp_v_p = injections.Exp_v_p
-    exp_v_q = injections.Exp_v_q
+    exp_v_p = injections.Exp_v_p.copy()
+    exp_v_q = injections.Exp_v_q.copy()
+    # exp_v_p.loc[:] = 0.
+    # exp_v_q.loc[:] = 0.
     Mnodeinj = casadi.SX(get_node_inj_matrix(count_of_nodes, injections))
     Vinj_sqr = casadi.transpose(Mnodeinj) @ V.node_sqr # V**2 per injection
     Ire_ip, Iim_ip = get_injected_interpolated_current(
@@ -392,20 +394,13 @@ def get_injected_current(count_of_nodes, V, injections, loadfactor=1.):
     Inode_im = casadi.if_else(interpolate, Iim_ip, Iim)
     return Inode_re, Inode_im
 
-def calculate_power_flow(
-        model, tappositions, Vslack, Vinit=None, loadfactor=1.):
-    """Calculates power flow by root finding.
+def build_residual_fn(model, loadfactor=1.):
+    """Creates function for calculating the residual node current.
     
     Parameters
     ----------
     model: egrid.model.Model
     
-    tappositions: numpy.array, int
-        positions of taps
-    Vslack: array_like, complex
-        vector of slack voltages
-    Vinit: array_like, complex
-        initial voltages, vector
     loadfactor: float
     
     Returns
@@ -433,15 +428,40 @@ def calculate_power_flow(
     # parameters
     param = casadi.vertcat(vslack_var[:, 0], vslack_var[:, 1], branchdata.pos)
     # solve root-finding equation
-    fn_Iresidual = casadi.Function(
-        'fn_Iresidual', [V.reim, param], [Ires])
-    rf = casadi.rootfinder('rf', 'nlpsol', fn_Iresidual, {'nlpsol':'ipopt'})
+    return casadi.Function('fn_Iresidual', [V.reim, param], [Ires])
+    
+def find_root(
+        fn_Iresidual, tappositions, Vslack, count_of_nodes=0, Vinit=None):
+    """Finds root of fn_Iresidual.
+    
+    Parameters
+    ----------
+    fn_Iresidual: casadi.Function
+        function to find a root for
+    tappositions: numpy.array, int
+        positions of taps
+    Vslack: array_like, shape (n, 1) of complex
+        values for slack voltages (parameter), n: number of slacks
+    count_of_nodes: int
+        number of nodes, defaults to 0
+    Vinit: array_like, shape (n, 1) of complex
+        vector of initial complex node voltages
+        n: number of nodes, defaults to None
+    
+    Returns
+    -------
+    tuple
+        * success?, bool
+        * casadi.DM, voltage vector of floats, shape (2n,1), 
+          n real parts followed by n imaginary parts"""
     if not Vinit is None:
         Vstart = np.vstack([np.real(Vinit), np.imag(Vinit)])
     else:
         Vstart = [1.] * count_of_nodes + [0.] * count_of_nodes
     parameter_values = np.vstack(
         [np.real(Vslack), np.imag(Vslack), tappositions])
+    rf = casadi.rootfinder('rf', 'nlpsol', fn_Iresidual, {'nlpsol':'ipopt'})
+    #rf = casadi.rootfinder('rf', 'newton', fn_Iresidual)
     try:
         return True, rf(Vstart, parameter_values)
     except:
@@ -449,16 +469,19 @@ def calculate_power_flow(
 
 # model
 path = r"C:\Users\live\OneDrive\Dokumente\py_projects\data\eus1_loop.db"
-path = r"C:\UserData\deb00ap2\OneDrive - Siemens AG\Documents\defects\SP7-219086\eus1_loop\eus1_loop.db"
+#path = r"C:\UserData\deb00ap2\OneDrive - Siemens AG\Documents\defects\SP7-219086\eus1_loop\eus1_loop.db"
 frames = egrid_frames(path)
 model = model_from_frames(frames)
 
 tappositions = model.branchtaps.position.copy()
-tappositions.loc[:] = -16
+tappositions.loc[:] = -5
 
-success, voltages = calculate_power_flow(
-    model, tappositions, model.slacks.V, loadfactor=.7)
+fn_Iresidual = build_residual_fn(model, loadfactor=1.)
+success, voltages = find_root(
+        fn_Iresidual, tappositions, model.slacks.V * 1., 
+        count_of_nodes=model.shape_of_Y[0])
 
+print("\nSUCCESS" if success else "\n- F A I L E D -")
 if success:
     Vcalc = np.array(
         casadi.hcat(
@@ -469,34 +492,5 @@ if success:
     print('V: ', Vcomp)
     
     
-    
-    tappositions.loc[:] = -15
-    
-    
-    success2, voltages2 = calculate_power_flow(
-        model, tappositions, model.slacks.V, Vinit=Vcomp, loadfactor=1.)
-    if success2:
-        Vcalc2 = np.array(
-            casadi.hcat(
-                casadi.vertsplit(
-                    voltages, [0, voltages2.size1()//2, voltages2.size1()])))
-        Vcomp2 = Vcalc2.view(dtype=np.complex128)
-        print()
-        print('V: ', Vcomp)
-        print('V: ', Vcomp2)
-    
-        
-        tappositions.loc[:] = -16
-    
-        success3, voltages3 = calculate_power_flow(
-            model, tappositions, model.slacks.V, Vinit=Vcomp2, loadfactor=1.)
-        if success3:
-            Vcalc3 = np.array(
-                casadi.hcat(
-                    casadi.vertsplit(
-                        voltages, [0, voltages3.size1()//2, voltages3.size1()])))
-            Vcomp3 = Vcalc2.view(dtype=np.complex128)
-            print()
-            print('V: ', Vcomp)
-            print('V: ', Vcomp2)
-            print('V: ', Vcomp3)
+    params = np.vstack([[1.], [0.], tappositions])
+    Ires = fn_Iresidual(voltages, params)
