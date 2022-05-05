@@ -334,15 +334,15 @@ def get_injected_current(count_of_nodes, V, injections):
     count_of_nodes: int
         number of pfc-nodes
     V: Vvar
-        * .re
-        * .im
-        * .reim
-        * node_sqr
+        * .re, casadi.SX, vector, real part of node voltage
+        * .im, casadi.SX, vector, imaginary part of node voltage
+        * .reim (not used)
+        * .node_sqr, casadi.SX, vector, .re**2  + .im**2
     injections: pandas.DataFrame
-        * .P10
-        * .Q10
-        * .Exp_v_p
-        * .Exp_v_q
+        * .P10, float, active power at |V| = 1.0 pu, sum of all 3 phases
+        * .Q10, float, reactive power at |V| = 1.0 pu, sum of all 3 phases
+        * .Exp_v_p, float, voltage exponent of active power
+        * .Exp_v_q, float, voltage exponent of reactive power
     Returns
     -------
     casadi.SX
