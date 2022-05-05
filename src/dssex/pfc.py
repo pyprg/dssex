@@ -26,7 +26,26 @@ Vvar = namedtuple(
 
 Branchdata = namedtuple(
     'Branchdata',
-    'pos branchterminals g_tot b_tot g_mn b_mn count_of_nodes GB')
+    'pos branchterminals g_tot b_tot g_mn b_mn count_of_nodes gb')
+Branchdata.__doc__ = """
+Branch-conductance/susceptance-matrix, Conductance/Susceptance per terminals,
+variables of tappositions.
+
+Paramters
+---------
+pos: casadi.SX, vector
+    variables of tap positions
+g_tot: array_like, float
+    conductance of branch-PI-model g_mm_half + g_mn per branch-terminal
+b_tot: array_like, float
+    susceptance of branch-PI-model b_mm_half + b_mn per branch-terminal
+g_mn: array_like, float
+    conductance between nodes m and n of branch-PI-model per branch-terminal
+b_mn: array_like, float
+    susceptance between nodes m and n of branch-PI-model per branch-terminal
+count_of_nodes: int
+    dimension of matrix, number of power flow calculation nodes
+gb: casadi.SX, shape (count_of_nodes, count_of_nodes)"""
 
 @lru_cache(maxsize=200)
 def get_coefficients(x, y, dydx_0, dydx):
@@ -98,7 +117,16 @@ def get_polynomial_coefficients(ul, exp):
 
 def create_branch_gb_matrix(model):
     """Generates a conductance-susceptance matrix of branches equivalent to
-    branch-admittance matrix."""
+    branch-admittance matrix. M[n,n] of slack nodes is set to 1, other
+    values of slack nodes are zero.
+    
+    Parameters
+    ----------
+    model: egrid.model.Model
+    
+    Returns
+    -------
+    Branchdata"""
     branchtaps = model.branchtaps
     pos = casadi.SX.sym('pos', len(branchtaps), 1)
     # factor longitudinal
@@ -145,7 +173,7 @@ def create_branch_gb_matrix(model):
             G[index_of_node, index_of_other_node] -= g_mn[data_idx]
             B[index_of_node, index_of_node] += b_tot[data_idx]
             B[index_of_node, index_of_other_node] -= b_mn[data_idx]
-    GB = casadi.blockcat([[G, -B], [B,  G]])
+    gb = casadi.blockcat([[G, -B], [B,  G]])
     # remove rows/columns with GB.remove, 
     #   e.g. remove first row GB.remove([0],[])
     return Branchdata(
@@ -156,7 +184,7 @@ def create_branch_gb_matrix(model):
         g_mn=g_mn,
         b_mn=b_mn,
         count_of_nodes=count_of_nodes,
-        GB=GB)
+        gb=gb)
 
 def v_var(count_of_nodes):
     """Creates casadi.SX for voltages.
@@ -326,7 +354,7 @@ def get_injected_original_current(
     Iim = -Bexpr_node * V.re + Gexpr_node * V.im
     return Ire, Iim
 
-def get_injected_current(count_of_nodes, V, injections):
+def get_injected_current(count_of_nodes, V, injections, loadfactor=1.):
     """Creates a vector of injected node current.
     
     Parameters
@@ -348,8 +376,8 @@ def get_injected_current(count_of_nodes, V, injections):
     casadi.SX
         vector, injected current per node (real parts, imaginary parts),
         shape (2*count_of_nodes, 1)"""
-    P10 = injections.P10 / 3 # for one phase only
-    Q10 = injections.Q10 / 3 # for one phase only
+    P10 = loadfactor * injections.P10 / 3 # for one phase only
+    Q10 = loadfactor * injections.Q10 / 3 # for one phase only
     exp_v_p = injections.Exp_v_p
     exp_v_q = injections.Exp_v_q
     Mnodeinj = casadi.SX(get_node_inj_matrix(count_of_nodes, injections))
@@ -360,45 +388,76 @@ def get_injected_current(count_of_nodes, V, injections):
         V, Vinj_sqr, Mnodeinj, exp_v_p, P10, exp_v_q, Q10)
     # compose functions from original and interpolated
     interpolate = V.node_sqr < _VMINSQR
-    Iinj_re = casadi.if_else(interpolate, Ire_ip, Ire)
-    Iinj_im = casadi.if_else(interpolate, Iim_ip, Iim)
-    # slacks
-    slacks = model.slacks
-    Vslack_re = np.real(slacks.V)
-    Vslack_im = np.imag(slacks.V)
-    index_of_slack = slacks.index_of_node
-    Iinj_re[index_of_slack] = -Vslack_re
-    Iinj_im[index_of_slack] = -Vslack_im
-    return casadi.vertcat(Iinj_re, Iinj_im)
+    Inode_re = casadi.if_else(interpolate, Ire_ip, Ire)
+    Inode_im = casadi.if_else(interpolate, Iim_ip, Iim)
+    return Inode_re, Inode_im
 
-def calculate_power_flow(model):
-    """Calculates power flow by root finding."""
-    # branch gb-matrix
-    gb = create_branch_gb_matrix(model).GB
+def calculate_power_flow(
+        model, tappositions, Vslack, Vinit=None, loadfactor=1.):
+    """Calculates power flow by root finding.
+    
+    Parameters
+    ----------
+    model: egrid.model.Model
+    
+    tappositions: numpy.array, int
+        positions of taps
+    Vslack: array_like, complex
+        vector of slack voltages
+    Vinit: array_like, complex
+        initial voltages, vector
+    loadfactor: float
+    
+    Returns
+    -------
+    tuple
+        * success?, bool
+        * casadi.DM, voltage vector of floats, shape (2n,1), 
+          n real parts followed by n imaginary parts"""
+    # branch gb-matrix, g:conductance, b:susceptance
+    branchdata = create_branch_gb_matrix(model)
     # variables of voltages
-    count_of_nodes = model.shape_of_Y[0]
+    count_of_nodes = branchdata.count_of_nodes
     V = v_var(count_of_nodes)
     # injected current
     injections = model.injections
-    Inode = get_injected_current(
-        count_of_nodes, V, injections[~injections.is_slack])
+    Inode_re, Inode_im = get_injected_current(
+        count_of_nodes, V, injections[~injections.is_slack], loadfactor)
+    vslack_var = casadi.SX.sym('Vslack', len(model.slacks), 2)# 0:real, 1:imag
+    # modify Inode of slacks
+    index_of_slack = model.slacks.index_of_node
+    Inode_re[index_of_slack] = -vslack_var[:, 0]
+    Inode_im[index_of_slack] = -vslack_var[:, 1]
     # equation for root finding
-    Ires = (gb @ V.reim) + Inode
+    Ires = (branchdata.gb @ V.reim) + casadi.vertcat(Inode_re, Inode_im)
+    # parameters
+    param = casadi.vertcat(vslack_var[:, 0], vslack_var[:, 1], branchdata.pos)
     # solve root-finding equation
-    fn_Iresidual = casadi.Function('fn_Iresidual', [V.reim], [Ires])
+    fn_Iresidual = casadi.Function(
+        'fn_Iresidual', [V.reim, param], [Ires])
     rf = casadi.rootfinder('rf', 'nlpsol', fn_Iresidual, {'nlpsol':'ipopt'})
-    start = [1.0] * count_of_nodes + [0.] * count_of_nodes
+    if not Vinit is None:
+        Vstart = np.vstack([np.real(Vinit), np.imag(Vinit)])
+    else:
+        Vstart = [1.] * count_of_nodes + [0.] * count_of_nodes
+    parameter_values = np.vstack(
+        [np.real(Vslack), np.imag(Vslack), tappositions])
     try:
-        return True, rf(start)
+        return True, rf(Vstart, parameter_values)
     except:
-        return False, casadi.DM(start)
+        return False, casadi.DM(Vstart)
 
 # model
 path = r"C:\Users\live\OneDrive\Dokumente\py_projects\data\eus1_loop.db"
+path = r"C:\UserData\deb00ap2\OneDrive - Siemens AG\Documents\defects\SP7-219086\eus1_loop\eus1_loop.db"
 frames = egrid_frames(path)
 model = model_from_frames(frames)
 
-success, voltages = calculate_power_flow(model)
+tappositions = model.branchtaps.position.copy()
+tappositions.loc[:] = -16
+
+success, voltages = calculate_power_flow(
+    model, tappositions, model.slacks.V, loadfactor=.7)
 
 if success:
     Vcalc = np.array(
@@ -408,3 +467,36 @@ if success:
     Vcomp = Vcalc.view(dtype=np.complex128)
     print()
     print('V: ', Vcomp)
+    
+    
+    
+    tappositions.loc[:] = -15
+    
+    
+    success2, voltages2 = calculate_power_flow(
+        model, tappositions, model.slacks.V, Vinit=Vcomp, loadfactor=1.)
+    if success2:
+        Vcalc2 = np.array(
+            casadi.hcat(
+                casadi.vertsplit(
+                    voltages, [0, voltages2.size1()//2, voltages2.size1()])))
+        Vcomp2 = Vcalc2.view(dtype=np.complex128)
+        print()
+        print('V: ', Vcomp)
+        print('V: ', Vcomp2)
+    
+        
+        tappositions.loc[:] = -16
+    
+        success3, voltages3 = calculate_power_flow(
+            model, tappositions, model.slacks.V, Vinit=Vcomp2, loadfactor=1.)
+        if success3:
+            Vcalc3 = np.array(
+                casadi.hcat(
+                    casadi.vertsplit(
+                        voltages, [0, voltages3.size1()//2, voltages3.size1()])))
+            Vcomp3 = Vcalc2.view(dtype=np.complex128)
+            print()
+            print('V: ', Vcomp)
+            print('V: ', Vcomp2)
+            print('V: ', Vcomp3)
