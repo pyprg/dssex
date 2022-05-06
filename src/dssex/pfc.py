@@ -6,12 +6,10 @@ Created on Sat Mar 26 11:49:05 2022
 """
 import casadi
 import numpy as np
-from numpy.linalg import solve
 from collections import namedtuple
-from functools import lru_cache
-from scipy.sparse import coo_matrix
 from dnadb import egrid_frames
 from egrid import model_from_frames
+from injections import get_polynomial_coefficients, get_node_inj_matrix
 
 # square of voltage magnitude, minimum value for load curve, 
 #   if value is below _VMINSQR the load curves for P and Q converge
@@ -46,74 +44,6 @@ b_mn: array_like, float
 count_of_nodes: int
     dimension of matrix, number of power flow calculation nodes
 gb: casadi.SX, shape (count_of_nodes, count_of_nodes)"""
-
-@lru_cache(maxsize=200)
-def get_coefficients(x, y, dydx_0, dydx):
-    """Calculates the coefficients A, B, C of the polynomial
-    ::
-        f(x) = Ax³ + Bx² + Cx
-        with
-            f(0) = 0, 
-            df(0)/dx = dydx_0,
-            f(x) = y
-            df(x)/dx = dydx
-            
-    Parameters
-    ----------
-    x: float
-        x of point
-    y: float
-        value at x
-    dydx_0: float 
-        dy / dx at 0
-    dydx: float 
-        dy / dx at x
-
-    Returns
-    -------
-    numpy.ndarray (shape=(3,))
-        float, float, float (A, B, C)"""
-    x_sqr = x * x
-    x_cub = x * x_sqr
-    cm = np.array([
-        [   x_cub, x_sqr,  x],
-        [      0.,    0., 1.],
-        [3.*x_sqr,  2.*x, 1.]])
-    return solve(cm, np.array([y, dydx_0, dydx]))
-
-def calc_dpower_dvsqr(v_sqr, _2p):
-    """Calculates the derivative of exponential power function at v_sqr.
-    
-    Parameters
-    ----------
-    v_sqr: float
-        square of voltage magnitude
-    _2p: float
-        double of voltage exponent
-    
-    Returns
-    -------
-    float"""
-    p = _2p/2
-    return p * np.power(v_sqr, p-1)
-
-def get_polynomial_coefficients(ul, exp):
-    """Calculates coefficients of polynomials for interpolation.
-    
-    Parameters
-    ----------
-    ul: float
-        upper limit of interpolation range
-    exp: numpy.array
-        float, exponents of function 'load over voltage'
-    
-    Returns
-    -------
-    numpy.array
-        float, shape(n,3)"""
-    return np.vstack([
-        get_coefficients(ul, 1., 1., dp)
-        for dp in calc_dpower_dvsqr(ul, exp)])
 
 def create_branch_gb_matrix(model):
     """Generates a conductance-susceptance matrix of branches equivalent to
@@ -210,30 +140,6 @@ def v_var(count_of_nodes):
         im=Vim,
         reim=Vreim,
         node_sqr=Vnode_sqr)
-
-def get_node_inj_matrix(count_of_nodes, injections):
-    """Creates a sparse matrix which will convert a vector which is ordered
-    according to injections to a vector ordered according to power flow 
-    calculation nodes (adding entries of injections for each node) by
-    calculating 'M @ vector'. Transposed M is usable for mapping e.g.
-    the vector of node voltage to the vector of injection voltages.
-    
-    Parameters
-    ----------
-    count_of_nodes: int
-        number of power flow calculation nodes
-    injections: pandas.DataFrame (index of injection)
-        * .index_of_node, int
-    
-    Returns
-    -------
-    scipy.sparse.csc_matrix"""
-    count_of_injections = len(injections)
-    return coo_matrix(
-        ([1] * count_of_injections, 
-         (injections.index_of_node, injections.index)),
-        shape=(count_of_nodes, count_of_injections),
-        dtype=np.int8).tocsc()
 
 def get_injected_interpolated_current(
         V, Vinj_sqr, Mnodeinj, exp_v_p, P10, exp_v_q, Q10):
@@ -468,13 +374,13 @@ def find_root(
         return False, casadi.DM(Vstart)
 
 # model
-path = r"C:\Users\live\OneDrive\Dokumente\py_projects\data\eus1_loop.db"
-#path = r"C:\UserData\deb00ap2\OneDrive - Siemens AG\Documents\defects\SP7-219086\eus1_loop\eus1_loop.db"
+#path = r"C:\Users\live\OneDrive\Dokumente\py_projects\data\eus1_loop.db"
+path = r"C:\UserData\deb00ap2\OneDrive - Siemens AG\Documents\defects\SP7-219086\eus1_loop\eus1_loop.db"
 frames = egrid_frames(path)
 model = model_from_frames(frames)
 
 tappositions = model.branchtaps.position.copy()
-tappositions.loc[:] = -5
+tappositions.loc[:] = -4
 
 fn_Iresidual = build_residual_fn(model, loadfactor=1.)
 success, voltages = find_root(
