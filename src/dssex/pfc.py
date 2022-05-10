@@ -20,7 +20,7 @@ _EPSILON = 1e-12
 
 Vvar = namedtuple(
     'Vvar',
-    're im reim node_sqr')
+    're im reim node_sqr decvars slack')
 
 def get_tap_factors(branchtaps, pos):
     """Creates vars for tap positions, expressions for longitudinal and
@@ -159,7 +159,9 @@ def create_branch_gb_matrix2(model, pos):
         G[count_of_slacks:, :count_of_slacks],
         B[count_of_slacks:, :count_of_slacks])
 
-def create_Vvars(count_of_nodes):
+_no_slacks = casadi.DM(0,2)
+
+def create_Vvars(count_of_nodes, slacks=_no_slacks):
     """Creates casadi.SX for voltages.
     
     Parameters
@@ -174,15 +176,23 @@ def create_Vvars(count_of_nodes):
         * .im
         * .reim
         * .node_sqr"""
-    Vre = casadi.SX.sym('Vre', count_of_nodes)
-    Vim = casadi.SX.sym('Vim', count_of_nodes)
+    count_of_slacks = slacks.size1()
+    count = count_of_nodes - count_of_slacks
+    Vre_dec = casadi.SX.sym('Vre', count)
+    Vim_dec = casadi.SX.sym('Vim', count)
+    Vre_slack = slacks[:, 0]
+    Vim_slack = slacks[:, 1]
+    Vre = casadi.vertcat(Vre_slack, Vre_dec)
+    Vim = casadi.vertcat(Vim_slack, Vim_dec)
     Vreim = casadi.vertcat(Vre, Vim)
     Vnode_sqr = casadi.power(Vre, 2) + casadi.power(Vim, 2)
     return Vvar(
         re=Vre,
         im=Vim,
         reim=Vreim,
-        node_sqr=Vnode_sqr)
+        node_sqr=Vnode_sqr,
+        decvars=casadi.vertcat(Vre_dec, Vim_dec),
+        slack=casadi.vertcat(Vre_slack, Vim_slack))
 
 def get_injected_interpolated_current(
         V, Vinj_sqr, Mnodeinj, exp_v_p, P10, exp_v_q, Q10):
@@ -380,19 +390,19 @@ def build_residual_fn(model, loadfactor=1.):
     # create node current function
     return casadi.Function('fn_Iresidual', [V.reim, param], [Ires])
 
-def build_objective(model, branchdata, V, vslack_var, loadfactor=1.):
+def build_objective(model, gb_matrix, V, count_of_slacks, loadfactor=1.):
     """Creates expression for solving the power flow problem by minimization.
     
     Parameters
     ----------
     model: egrid.model.Model
-    branchdata: Branchdata
-        gb-matrix, g:conductance, b:susceptance
+    gb_matrix: casadi.SX
+        sparse branch-matrix, g:conductance, b:susceptance
     V: Vvar
         decision variables, voltage vectors for real and imaginary parts of
         node voltages
-    vslack_var: casadi.SX, shape (n,2)
-        voltage vectors of slacks, separated real and imaginary part
+    count_of_slacks: int
+        number of slack-nodes
     loadfactor: float
     
     Returns
@@ -402,12 +412,9 @@ def build_objective(model, branchdata, V, vslack_var, loadfactor=1.):
     injections = model.injections
     Inode_re, Inode_im = get_injected_current(
         model.shape_of_Y[0], V, injections[~injections.is_slack], loadfactor)
-    # modify Inode of slacks
-    index_of_slack = model.slacks.index_of_node
-    Inode_re[index_of_slack] = -vslack_var[:, 0]
-    Inode_im[index_of_slack] = -vslack_var[:, 1]
     # equation for root finding
-    Ires = (branchdata.gb @ V.reim) + casadi.vertcat(Inode_re, Inode_im)
+    I = casadi.vertcat(Inode_re, Inode_im)[count_of_slacks:, :]
+    Ires = ((gb_matrix[count_of_slacks:, :] @ V.reim) + I)
     return casadi.norm_2(Ires)
     
 def find_root(
@@ -472,21 +479,19 @@ if success:
     params = np.vstack([[1.], [0.], tappositions])
     Ires = fn_Iresidual(voltages, params)
 #%%
-gb = create_branch_gb(model)
-
-
-
-#%%
 count_of_nodes = model.shape_of_Y[0]
-branchdata = create_branch_gb_matrix(model)
-V = v_var(count_of_nodes)
-vslack_var = casadi.SX.sym('Vslack', len(model.slacks), 2)# 0:real, 1:imag
-objective = build_objective(model, branchdata, V, vslack_var, loadfactor=1.0)    
-param = casadi.vertcat(vslack_var[:, 0], vslack_var[:, 1], branchdata.pos)
-nlp={'x': V.reim, 'f': objective, 'p': param}
+pos = casadi.SX.sym('pos', len(model.branchtaps), 1)
+gb_matrix = create_branch_gb_matrix(model, pos)
+count_of_slacks = len(model.slacks)
+vslack_var = casadi.SX.sym('Vslack', count_of_slacks, 2) # 0:real, 1:imag
+V = create_Vvars(count_of_nodes, vslack_var)
+objective = build_objective(
+    model, gb_matrix, V, count_of_slacks, loadfactor=1.0)    
+param = casadi.vertcat(V.slack, pos)
+nlp={'x': V.decvars, 'f': objective, 'p': param}
 solver = casadi.nlpsol('solver', 'ipopt', nlp)
-
-initial_values = [1.] * count_of_nodes + [0.] * count_of_nodes
+count_of_decvars = count_of_nodes - count_of_slacks
+initial_values = [1.] * count_of_decvars + [0.] * count_of_decvars
 Vslack = model.slacks.V
 values_of_params = np.vstack([np.real(Vslack), np.imag(Vslack), tappositions])
 r = solver(
@@ -500,7 +505,7 @@ if success:
     Vcalc = np.array(
         casadi.hcat(
             casadi.vertsplit(
-                voltages, [0, voltages.size1()//2, voltages.size1()])))
+                voltages, [0, count_of_decvars, 2 * count_of_decvars])))
     Vcomp = Vcalc.view(dtype=np.complex128)
     print()
     print('V: ', Vcomp)
