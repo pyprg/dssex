@@ -47,14 +47,14 @@ def get_tap_factors(branchtaps, pos):
         flo = casadi.SX(0, 1)
     return flo, casadi.constpow(flo, 2)
 
-def create_branch_gb(terms, count_of_nodes, flo, ftr):
+def create_gb(terms, count_of_nodes, flo, ftr):
     """Generates a conductance-susceptance matrix of branches equivalent to
     branch-admittance matrix. M[n,n] of slack nodes is set to 1, other
     values of slack nodes are zero.
     
     Parameters
     ----------
-    branchterminals: pandas.DataFrame
+    terms: pandas.DataFrame
     
     count_of_nodes: int
         number of power flow calculation nodes
@@ -85,7 +85,6 @@ def create_branch_gb(terms, count_of_nodes, flo, ftr):
     g_mn[terms_with_other_taps.index] *= flo[idx_of_other_tap]
     b_mn[terms_with_other_taps.index] *= flo[idx_of_other_tap]
     # Y
-    count_of_nodes = model.shape_of_Y[0]
     G = casadi.SX(count_of_nodes, count_of_nodes)
     B = casadi.SX(count_of_nodes, count_of_nodes)
     for data_idx, idxs in \
@@ -98,7 +97,7 @@ def create_branch_gb(terms, count_of_nodes, flo, ftr):
         B[index_of_node, index_of_other_node] -= b_mn[data_idx]
     return G, B
 
-def create_branch_gb_matrix(model, pos):
+def create_gb_matrix(model, pos):
     """Generates a conductance-susceptance matrix of branches equivalent to
     branch-admittance matrix. M[n,n] of slack nodes is set to 1, other
     values of slack nodes are zero. Hence, the returned 
@@ -118,7 +117,7 @@ def create_branch_gb_matrix(model, pos):
     count_of_nodes = model.shape_of_Y[0]
     terms = (
         model.branchterminals[~model.branchterminals.is_bridge].reset_index())
-    G, B = create_branch_gb(terms, count_of_nodes, flo, ftr)
+    G, B = create_gb(terms, count_of_nodes, flo, ftr)
     count_of_slacks = model.count_of_slacks
     diag = casadi.Sparsity.diag(count_of_slacks, count_of_nodes)
     G_ = casadi.vertcat(
@@ -150,7 +149,7 @@ def create_branch_gb_matrix2(model, pos):
     flo, ftr = get_tap_factors(model.branchtaps, pos)
     terms = (
         model.branchterminals[~model.branchterminals.is_bridge].reset_index())
-    G, B = create_branch_gb(terms, model.shape_of_Y[0], flo, ftr)
+    G, B = create_gb(model, terms, model.shape_of_Y[0], flo, ftr)
     count_of_slacks = model.count_of_slacks
     G_ = G[count_of_slacks:, count_of_slacks:]
     B_ = B[count_of_slacks:, count_of_slacks:]
@@ -370,7 +369,7 @@ def build_residual_fn(model, loadfactor=1.):
           n real parts followed by n imaginary parts"""
     pos = casadi.SX.sym('pos', len(model.branchtaps), 1)
     # branch gb-matrix, g:conductance, b:susceptance
-    gb = create_branch_gb_matrix(model, pos)
+    gb = create_gb_matrix(model, pos)
     # variables of voltages
     count_of_nodes = gb.size1() // 2
     V = create_Vvars(count_of_nodes)
@@ -460,7 +459,7 @@ path = r"C:\Users\live\OneDrive\Dokumente\py_projects\data\eus1_loop.db"
 frames = egrid_frames(path)
 model = model_from_frames(frames)
 tappositions = model.branchtaps.position.copy()
-tappositions.loc[:] = 0
+tappositions.loc[:] = -5
 fn_Iresidual = build_residual_fn(model, loadfactor=1.)
 success, voltages = find_root(
         fn_Iresidual, tappositions, model.slacks.V * 1., 
@@ -481,7 +480,7 @@ if success:
 #%%
 count_of_nodes = model.shape_of_Y[0]
 pos = casadi.SX.sym('pos', len(model.branchtaps), 1)
-gb_matrix = create_branch_gb_matrix(model, pos)
+gb_matrix = create_gb_matrix(model, pos)
 count_of_slacks = len(model.slacks)
 vslack_var = casadi.SX.sym('Vslack', count_of_slacks, 2) # 0:real, 1:imag
 V = create_Vvars(count_of_nodes, vslack_var)

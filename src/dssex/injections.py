@@ -120,7 +120,7 @@ def add_interpol_coeff_to_injections(injections, vminsqr):
     return injections
 
 def get_node_inj_matrix(count_of_nodes, injections):
-    """Creates a sparse matrix which will convert a vector which is ordered
+    """Creates a sparse matrix which converting a vector which is ordered
     according to injections to a vector ordered according to power flow 
     calculation nodes (adding entries of injections for each node) by
     calculating 'M @ vector'. Transposed M is usable for mapping e.g.
