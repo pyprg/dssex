@@ -179,9 +179,9 @@ def _injected_power(vminsqr, injections):
         Qres = np.array(Q10)
         interpolate = (Vinj_abs_sqr2 < vminsqr)
         # original
-        Vorig = Vinj_abs_sqr2[~interpolate]
-        Pres[~interpolate] *= np.power(Vorig, Exp_v_p_half[~interpolate])
-        Qres[~interpolate] *= np.power(Vorig, Exp_v_q_half[~interpolate])
+        Vsqr_orig = Vinj_abs_sqr2[~interpolate]
+        Pres[~interpolate] *= np.power(Vsqr_orig, Exp_v_p_half[~interpolate])
+        Qres[~interpolate] *= np.power(Vsqr_orig, Exp_v_q_half[~interpolate])
         # polynomial interpolated
         Vsqr_inter = Vinj_abs_sqr2[interpolate]
         cinterpolate = coeffs[interpolate]
