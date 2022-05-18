@@ -21,9 +21,12 @@ Created on Fri May  6 20:44:05 2022
 """
 
 import numpy as np
+from numpy.linalg import norm
+from functools import partial
 from operator import itemgetter
 from scipy.sparse import \
-    csc_array, coo_matrix, bmat, diags, csc_matrix, vstack, hstack
+    csc_array, coo_matrix, bmat, diags, csc_matrix, vstack#, hstack
+from scipy.sparse.linalg import splu
 from injections import get_polynomial_coefficients, get_node_inj_matrix
 
 # square of voltage magnitude, minimum value for load curve, 
@@ -157,8 +160,10 @@ def _injected_power(vminsqr, injections):
     p_coeffs = get_polynomial_coefficients(vminsqr, injections.Exp_v_p)
     q_coeffs = get_polynomial_coefficients(vminsqr, injections.Exp_v_q)
     coeffs = np.hstack([p_coeffs, q_coeffs])
-    Exp_v_p_half = Exp_v_p.to_numpy() / 2.
-    Exp_v_q_half = Exp_v_q.to_numpy() / 2.
+    Exp_v_p_half = Exp_v_p / 2.
+    Exp_v_q_half = Exp_v_q / 2.
+    # Exp_v_p_half = Exp_v_p.to_numpy() / 2.
+    # Exp_v_q_half = Exp_v_q.to_numpy() / 2.
     #        
     def calc_injected_power(Vinj_abs_sqr):
         """Calculates injected power per injection.
@@ -174,10 +179,10 @@ def _injected_power(vminsqr, injections):
         tuple
             * active power P
             * reactive power Q"""
-        Vinj_abs_sqr2 = Vinj_abs_sqr.reshape(-1)
+        Vinj_abs_sqr2 = np.array(Vinj_abs_sqr).reshape(-1)
         Pres = np.array(P10)
         Qres = np.array(Q10)
-        interpolate = (Vinj_abs_sqr2 < vminsqr)
+        interpolate = np.array(Vinj_abs_sqr2 < vminsqr).reshape(-1)
         # original
         Vsqr_orig = Vinj_abs_sqr2[~interpolate]
         Pres[~interpolate] *= np.power(Vsqr_orig, Exp_v_p_half[~interpolate])
@@ -193,6 +198,119 @@ def _injected_power(vminsqr, injections):
         Qres[interpolate] *= np.sum(V321 * cinterpolate[:, 3:], axis=1)
         return Pres, Qres
     return calc_injected_power
+
+def calculate_injected_node_current(
+        mnodeinj, mnodeinjT, calc_injected_power, idx_slack, Vslack, Vnode_ri):
+    Vnode_ri2 = np.hstack(np.vsplit(Vnode_ri, 2))
+    Vnode_ri2_sqr = np.power(Vnode_ri2, 2)
+    Vnode_abs_sqr = (Vnode_ri2_sqr[:, 0] + Vnode_ri2_sqr[:, 1]).reshape(-1, 1)
+    Vinj_abs_sqr = mnodeinjT @ Vnode_abs_sqr
+    Pinj, Qinj = calc_injected_power(Vinj_abs_sqr)
+    Sinj = (
+        np
+        .hstack([Pinj.reshape(-1, 1), Qinj.reshape(-1, 1)])
+        .view(dtype=np.complex128))
+    Sinj_node = mnodeinj @ csc_array(Sinj)
+    Vnode = Vnode_ri2.view(dtype=np.complex128)
+    Iinj_node = -Sinj_node / Vnode #current is negative for positive power
+    Iinj_node[idx_slack] = Vslack
+    return np.vstack([np.real(Iinj_node), np.imag(Iinj_node)])
+
+def next_voltage(
+        mnodeinj, mnodeinjT, calc_injected_power, gb_lu, 
+        idx_slack, Vslack, Vnode_ri):
+    """Solves linear equation.
+    
+    Parameters
+    ----------
+    mnodeinj: scipy.sparse.matrix
+        
+    mnodeinjT: scipy.sparse.matrix
+    calc_injected_power: function
+    
+    gb_lu: scipy.linalg.SolveLU
+        LU-decomposition of gb-matrix (conductance, susceptance)
+    idx_slack: array_like, int
+        indices of slack nodes
+    Vslack: array_like, float
+        voltages at slack nodes
+    Vnode_ri: array_like
+        voltge of previous iteration
+    
+    Yields
+    ------
+    tuple
+        * array_like, float, node voltages
+        * array_like, float, injected node currents"""
+    while True:
+        Iinj_node_ri = calculate_injected_node_current(
+            mnodeinj, mnodeinjT, calc_injected_power, 
+            idx_slack, Vslack, Vnode_ri)
+        yield Vnode_ri, Iinj_node_ri
+        Vnode_ri = gb_lu.solve(Iinj_node_ri)
+
+def solved(precision, gb, Vnode_ri, Iinj_node_ri):
+    """Success function. Evaluates solution Vnode_ri, Iinj_node_ri.
+    
+    Parameters
+    ----------
+    precision: float
+        tolerance of node current to be reached
+    gb: scipy.sparse.matrix
+        conductance, susceptance matrix
+    Vnode_ri: numpy.array
+        vector of node voltages, real parts then imaginary parts
+    Iinj_node_ri: numpy.array
+        vector of injected node currents, real parts then imaginary parts
+    
+    Returns
+    -------
+    bool"""
+    Ires = gb.dot(Vnode_ri) - Iinj_node_ri
+    Ires_max = norm(Ires, np.inf)
+    return Ires_max < precision
+
+def calculate_power_flow(precision, max_iter, model, Vnode_ri):
+    """Power flow calculating function.
+    
+    Parameters
+    ----------
+    precision: float
+        tolerance for node current
+    max_iter: int
+        limit of iteration count
+    model:
+        
+    Vnode_ri: array_like, float
+        start value of iteration, node voltage vector, 
+        real parts then imaginary parts
+    
+    Returns
+    -------
+    tuple
+        * bool, success?
+        * array_like, float, node voltages, real parts then imaginary parts
+        * array_like, float, injected node currents, 
+          real parts then imaginary parts"""
+    gb = create_gb_matrix(model, model.branchtaps.position)
+    mnodeinj = get_node_inj_matrix(model.shape_of_Y[0], model.injections)
+    _next_voltage = partial(
+        next_voltage, 
+        mnodeinj,
+        mnodeinj.T,
+        _injected_power(_VMINSQR, model.injections), 
+        splu(gb),
+        model.slacks.index_of_node,
+        model.slacks.V) 
+    _solved = partial(solved, precision, gb)    
+    iter_counter = 0
+    for V, I  in _next_voltage(Vnode_ri):
+        if _solved(V, I):
+            return True, V, I
+        if max_iter <= iter_counter:
+            break
+        ++iter_counter;
+    return False, V, I
 
 from egrid import make_model
 from egrid.builder import (
@@ -215,61 +333,43 @@ model_devices = [
         id_of_node_A='n_0',
         id_of_node_B='n_1',
         y_mn=1e3-1e3j,
-        y_mm_half=1e-6+1e-6j),
+        y_mm_half=1e-6+1e-6j
+        ),
     Branch(
         id='line_1',
         id_of_node_A='n_1',
         id_of_node_B='n_2',
         y_mn=1e3-1e3j,
-        y_mm_half=1e-6+1e-6j),
+        y_mm_half=1e-6+1e-6j
+        ),
     Injection(
         id='consumer_0',
         id_of_node='n_2',
         P10=30.0,
         Q10=10.0,
-        Exp_v_p=2.0,
-        Exp_v_q=2.0)]
+        Exp_v_p=1.0,
+        Exp_v_q=2.0
+        )]
 model = make_model(model_devices)
-
-
-#%% calculate power flow
-count_of_nodes = model.shape_of_Y[0]
-tappositions = model.branchtaps.position.copy()
-tappositions.loc[:] = -5
-gb_matrix = create_gb_matrix(model, tappositions)
-count_of_slacks = len(model.slacks)
-#%%
 
 from dnadb import egrid_frames
 from egrid import model_from_frames
+    
 
 path = r"C:\UserData\deb00ap2\OneDrive - Siemens AG\Documents\defects\SP7-219086\eus1_loop\eus1_loop.db"
-path = r"C:\Users\live\OneDrive\Dokumente\py_projects\data\eus1_loop.db"
+#path = r"C:\Users\live\OneDrive\Dokumente\py_projects\data\eus1_loop.db"
 frames = egrid_frames(path)
 model = model_from_frames(frames)
-gb = create_gb_matrix(model, model.branchtaps.position)
-Vslack = model.slacks.V
-idx_slack = model.slacks.index_of_node
-mnodeinj = get_node_inj_matrix(model.shape_of_Y[0], model.injections)
-mnodeinjT = mnodeinj.T
-calc_injected_power = _injected_power(_VMINSQR, model.injections)
 
+Vnode_initial = (
+    np.array([1.+0j]*model.shape_of_Y[0], dtype=np.complex128)
+    .reshape(-1,1))
+Vnode_ri = np.vstack([np.real(Vnode_initial), np.imag(Vnode_initial)])
 
-#%%
-
-# Vnode = np.array(
-#     [1.+0j] * model.shape_of_Y[0], 
-#     dtype=np.complex128).reshape(-1,1)
-# Vnode_abs_sqr = np.power(abs(Vnode), 2)
-
-
-
-# Vinj_abs_sqr = mnodeinjT @ Vnode_abs_sqr
-# Pinj, Qinj = calc_injected_power(Vinj_abs_sqr.T)
-# Sinj = np.hstack([Pinj.reshape(-1, 1), Qinj.reshape(-1, 1)]).view(dtype=np.complex128)
-# Sinj_node = mnodeinj @ csc_array(Sinj)
-
-# Inode = Sinj_node / Vnode
-# Inode[idx_slack] = Vslack
-
+success, Vnode, Inode = calculate_power_flow(1e-10, 20, model, Vnode_ri)
+print('SUCCESS' if success else '_F_A_I_L_E_D_')
+# print('Ires_max: ', Ires_max)    
+# print('iter_count: ', iter_count)    
+V = np.hstack(np.vsplit(Vnode, 2)).view(dtype=np.complex128)
+print('V: ', V)
 
