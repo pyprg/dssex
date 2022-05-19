@@ -21,7 +21,6 @@ Created on Fri May  6 20:49:20 2022
 """
 
 import numpy as np
-from scipy.sparse import coo_matrix
 from functools import lru_cache
 from numpy.linalg import solve
 
@@ -118,27 +117,3 @@ def add_interpol_coeff_to_injections(injections, vminsqr):
     injections['c2q'] = q_coeffs[:, 1]
     injections['c1q'] = q_coeffs[:, 2]
     return injections
-
-def get_node_inj_matrix(count_of_nodes, injections):
-    """Creates a sparse matrix which converting a vector which is ordered
-    according to injections to a vector ordered according to power flow 
-    calculation nodes (adding entries of injections for each node) by
-    calculating 'M @ vector'. Transposed M is usable for mapping e.g.
-    the vector of node voltage to the vector of injection voltages.
-    
-    Parameters
-    ----------
-    count_of_nodes: int
-        number of power flow calculation nodes
-    injections: pandas.DataFrame (index of injection)
-        * .index_of_node, int
-    
-    Returns
-    -------
-    scipy.sparse.csc_matrix"""
-    count_of_injections = len(injections)
-    return coo_matrix(
-        ([1] * count_of_injections, 
-         (injections.index_of_node, injections.index)),
-        shape=(count_of_nodes, count_of_injections),
-        dtype=np.int8).tocsc()

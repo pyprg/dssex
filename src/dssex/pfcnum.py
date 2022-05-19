@@ -27,7 +27,7 @@ from operator import itemgetter
 from scipy.sparse import \
     csc_array, coo_matrix, bmat, diags, csc_matrix, vstack#, hstack
 from scipy.sparse.linalg import splu
-from injections import get_polynomial_coefficients, get_node_inj_matrix
+from injections import get_polynomial_coefficients
 
 # square of voltage magnitude, minimum value for load curve, 
 #   if value is below _VMINSQR the load curves for P and Q converge
@@ -293,7 +293,7 @@ def calculate_power_flow(precision, max_iter, model, Vnode_ri):
         * array_like, float, injected node currents, 
           real parts then imaginary parts"""
     gb = create_gb_matrix(model, model.branchtaps.position)
-    mnodeinj = get_node_inj_matrix(model.shape_of_Y[0], model.injections)
+    mnodeinj = model.mnodeinj
     _next_voltage = partial(
         next_voltage, 
         mnodeinj,
@@ -354,9 +354,9 @@ model = make_model(model_devices)
 
 from dnadb import egrid_frames
 from egrid import model_from_frames
-    
 
-path = r"C:\UserData\deb00ap2\OneDrive - Siemens AG\Documents\defects\SP7-219086\eus1_loop\eus1_loop.db"
+#path = r"C:\UserData\deb00ap2\OneDrive - Siemens AG\Documents\defects\SP7-219086\eus1_loop\eus1_loop.db"
+path = r"C:\UserData\deb00ap2\OneDrive - Siemens AG\Documents\defects\SP7-219086\eus1_loop"
 #path = r"C:\Users\live\OneDrive\Dokumente\py_projects\data\eus1_loop.db"
 frames = egrid_frames(path)
 model = model_from_frames(frames)
