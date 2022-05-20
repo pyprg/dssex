@@ -21,6 +21,7 @@ Created on Fri May  6 20:44:05 2022
 """
 
 import numpy as np
+import pandas as pd
 from numpy.linalg import norm
 from functools import partial
 from operator import itemgetter
@@ -59,6 +60,57 @@ def get_tap_factors(branchtaps, pos):
         pos - branchtaps.positionneutral.to_numpy()))
     return flo, np.power(flo, 2)
 
+def get_gb_terms(terms, flo, ftr):
+    """Multiplies conductance/susceptance of branches with factors retrieved
+    from tap positions.
+    
+    Parameters
+    ----------
+    terms: pandas.DataFrame
+    
+    flo: pandas.Series, float
+        factor for longitudinal admittance
+    ftr: pandas.Series, float
+        factor transversal admittance"""
+    terms_with_taps = terms[terms.index_of_taps.notna()]
+    idx_of_tap = terms_with_taps.index_of_taps
+    g_mm = terms.g_mm_half.to_numpy()
+    b_mm = terms.b_mm_half.to_numpy()
+    g_mm[terms_with_taps.index] *= ftr[idx_of_tap]   
+    b_mm[terms_with_taps.index] *= ftr[idx_of_tap]    
+    g_mn = terms.g_mn.to_numpy()
+    b_mn = terms.b_mn.to_numpy()
+    g_mn[terms_with_taps.index] *= flo[idx_of_tap]
+    b_mn[terms_with_taps.index] *= flo[idx_of_tap]
+    terms_with_other_taps = terms[terms.index_of_other_taps.notna()]
+    idx_of_other_tap = terms_with_other_taps.index_of_other_taps
+    g_mn[terms_with_other_taps.index] *= flo[idx_of_other_tap]
+    b_mn[terms_with_other_taps.index] *= flo[idx_of_other_tap]
+    return g_mm, g_mn, b_mm, b_mn
+
+def get_y_terms(terms, flo, ftr):
+    """Multiplies admittances of branches with factors retrieved
+    from tap positions.
+    
+    Parameters
+    ----------
+    terms: pandas.DataFrame
+    
+    flo: pandas.Series, float
+        factor for longitudinal admittance
+    ftr: pandas.Series, float
+        factor transversal admittance"""
+    terms_with_taps = terms[terms.index_of_taps.notna()]
+    idx_of_tap = terms_with_taps.index_of_taps
+    y_mm = terms.y_mm_half.to_numpy()
+    y_mm[terms_with_taps.index] *= ftr[idx_of_tap]   
+    y_mn = terms.g_mn.to_numpy()
+    y_mn[terms_with_taps.index] *= flo[idx_of_tap]
+    terms_with_other_taps = terms[terms.index_of_other_taps.notna()]
+    idx_of_other_tap = terms_with_other_taps.index_of_other_taps
+    y_mn[terms_with_other_taps.index] *= flo[idx_of_other_tap]
+    return y_mm, y_mn
+
 def create_gb(terms, count_of_nodes, flo, ftr):
     """Generates a conductance-susceptance matrix of branches equivalent to
     branch-admittance matrix. M[n,n] of slack nodes is set to 1, other
@@ -85,8 +137,9 @@ def create_gb(terms, count_of_nodes, flo, ftr):
     row = np.concatenate([index_of_node, index_of_node])
     col = np.concatenate([index_of_node, index_of_other_node])
     rowcol = row, col
-    gvals = np.concatenate([terms.g_tot, -terms.g_mn])
-    bvals = np.concatenate([terms.b_tot, -terms.b_mn])
+    g_mm, g_mn, b_mm, b_mn = get_gb_terms(terms, flo, ftr)
+    gvals = np.concatenate([(g_mm + g_mn), -g_mn])
+    bvals = np.concatenate([(b_mm + b_mn), -b_mn])
     shape = count_of_nodes, count_of_nodes
     g = coo_matrix((gvals, rowcol), shape=shape, dtype=float)
     b = coo_matrix((bvals, rowcol), shape=shape, dtype=float)
@@ -137,6 +190,8 @@ def _injected_power(vminsqr, injections):
 
     Parameters
     ----------
+    vminsqr: float
+        upper limit of interpolation, interpolates if |V|² < vminsqr
     injections: pandas.DataFrame
         * .kp
         * .P10
@@ -147,8 +202,6 @@ def _injected_power(vminsqr, injections):
         * .V_abs_sqr
         * .c3p, .c2p, .c1p, polynomial coefficients for active power P
         * .c3q, .c2q, .c1q, polynomial coefficients for reactive power Q 
-    vminsqr: float
-        upper limit of interpolation, interpolates if |V|² < vminsqr
 
     Returns
     -------
@@ -157,6 +210,8 @@ def _injected_power(vminsqr, injections):
             * active power P
             * reactive power Q"""
     P10, Q10, Exp_v_p, Exp_v_q = _power_props(injections)
+    P10 = P10.copy() / 3 # calculate per phase
+    Q10 = Q10.copy() / 3 # calculate per phase
     p_coeffs = get_polynomial_coefficients(vminsqr, injections.Exp_v_p)
     q_coeffs = get_polynomial_coefficients(vminsqr, injections.Exp_v_q)
     coeffs = np.hstack([p_coeffs, q_coeffs])
@@ -198,6 +253,43 @@ def _injected_power(vminsqr, injections):
         Qres[interpolate] *= np.sum(V321 * cinterpolate[:, 3:], axis=1)
         return Pres, Qres
     return calc_injected_power
+
+def calculate_injected_power(vminsqr, injections, Vinj_abs_sqr):
+    """Calculates injected power per injection.
+    Injected power is calculated this way
+    (P = |V|**Exvp * P10, Q = |V|**Exvq * Q10; with |V| - magnitude of V):
+    ::
+        +- -+   +-                                           -+
+        | P |   | (V_r ** 2 + V_i ** 2) ** (Expvp / 2) * P_10 |
+        |   | = |                                             |
+        | Q |   | (V_r ** 2 + V_i ** 2) ** (Expvq / 2) * Q_10 |
+        +- -+   +-                                           -+
+
+    Parameters
+    ----------
+    vminsqr: float
+        upper limit of interpolation, interpolates if |V|² < vminsqr
+    injections: pandas.DataFrame
+        * .kp
+        * .P10
+        * .kq
+        * .Q10
+        * .Exp_v_p
+        * .Exp_v_q
+        * .V_abs_sqr
+        * .c3p, .c2p, .c1p, polynomial coefficients for active power P
+        * .c3q, .c2q, .c1q, polynomial coefficients for reactive power Q 
+    Vinj_abs_sqr: numpy.array, float, shape (n,1)
+        vector of squared voltage-magnitudes at injections, 
+        n: number of injections
+
+    Returns
+    -------
+    tuple
+        * active power P
+        * reactive power Q"""
+    return _injected_power(vminsqr, injections)(Vinj_abs_sqr)
+
 
 def calculate_injected_node_current(
         mnodeinj, mnodeinjT, calc_injected_power, idx_slack, Vslack, Vnode_ri):
@@ -312,6 +404,30 @@ def calculate_power_flow(precision, max_iter, model, Vnode_ri):
         ++iter_counter;
     return False, V, I
 
+def get_injection_results(model, V):
+    """Returns active and reactive power in pu for given node voltages.
+    
+    Parameters
+    ----------
+    model: egrid.model.Model
+        data of the electric power network
+    V: array_like, complex
+        vector of node voltages
+        
+    Returns
+    -------    
+    pandas.DataFrame"""
+    Vinj = model.mnodeinj.T @ V
+    Vinj_abs_sqr = np.power(np.real(Vinj), 2) + np.power(np.imag(Vinj), 2)
+    df = model.injections.loc[
+        :, ['id', 'Exp_v_p', 'Exp_v_q', 'P10', 'Q10', 'devicetype']]
+    df['P_pu'], df['Q_pu'] = calculate_injected_power(
+        _VMINSQR, model.injections, Vinj_abs_sqr)
+    df['V_pu'] = np.abs(Vinj)
+    df['P_pu'] *= 3
+    df['Q_pu'] *= 3
+    return df
+
 from egrid import make_model
 from egrid.builder import (
     Slacknode, Branch, Injection, PValue, QValue, Output, Vvalue, Defk, Link)
@@ -350,14 +466,16 @@ model_devices = [
         Exp_v_p=1.0,
         Exp_v_q=2.0
         )]
-model = make_model(model_devices)
+#model = make_model(model_devices)
 
 from dnadb import egrid_frames
+from dnadb.ifegrid import decorate_injection_results
 from egrid import model_from_frames
 
 #path = r"C:\UserData\deb00ap2\OneDrive - Siemens AG\Documents\defects\SP7-219086\eus1_loop\eus1_loop.db"
 path = r"C:\UserData\deb00ap2\OneDrive - Siemens AG\Documents\defects\SP7-219086\eus1_loop"
 #path = r"C:\Users\live\OneDrive\Dokumente\py_projects\data\eus1_loop.db"
+#path = r"K:\Siemens\Power\Temp\DSSE\Subsystem_142423"
 frames = egrid_frames(path)
 model = model_from_frames(frames)
 
@@ -365,11 +483,50 @@ Vnode_initial = (
     np.array([1.+0j]*model.shape_of_Y[0], dtype=np.complex128)
     .reshape(-1,1))
 Vnode_ri = np.vstack([np.real(Vnode_initial), np.imag(Vnode_initial)])
-
 success, Vnode, Inode = calculate_power_flow(1e-10, 20, model, Vnode_ri)
 print('SUCCESS' if success else '_F_A_I_L_E_D_')
-# print('Ires_max: ', Ires_max)    
-# print('iter_count: ', iter_count)    
 V = np.hstack(np.vsplit(Vnode, 2)).view(dtype=np.complex128)
+injections = get_injection_results(model, V)
 print('V: ', V)
+
+result_inj = decorate_injection_results(frames['Names'], injections)
+print(result_inj)
+#%%
+from scipy.sparse import coo_matrix
+terms = model.branchterminals[(~model.branchterminals.is_bridge) & (model.branchterminals.side == 'A')].reset_index()
+count_of_terms = len(terms)
+#%%
+mtermnode = coo_matrix(
+    ([1] * count_of_terms, 
+     (terms.index, terms.index_of_node)),
+    shape=(count_of_terms, model.shape_of_Y[0]),
+    dtype=np.int8).tocsc()
+#other
+mtermothernode = coo_matrix(
+    ([1] * count_of_terms, 
+     (terms.index, terms.index_of_other_node)),
+    shape=(count_of_terms, model.shape_of_Y[0]),
+    dtype=np.int8).tocsc()
+Vterm = np.asarray(mtermnode @ V)
+Votherterm = np.asarray(mtermothernode @ V)
+
+Vdiff = Vterm - Votherterm
+
+Imn = np.multiply(terms.y_mn.to_numpy().reshape(-1), Vdiff.reshape(-1))
+Imm = np.multiply(terms.y_mm_half.to_numpy().reshape(-1), Vterm.reshape(-1))
+Im = Imm + Imn
+Sm = 3 * np.multiply(Vterm.reshape(-1), np.conj(Im)) # 3 phases
+Smother = Sm[terms.index_of_other_node]
+Imother = Im[terms.index_of_other_node]
+#%%
+res = terms.copy()
+res['Sa_pu'] = Sm.reshape(-1, 1)
+res['Ia_pu'] = Im.reshape(-1, 1)
+
+branches = res.loc[(res.side == 'A'), :].copy()
+Sloss = 1e2 * res.groupby('index_of_branch').Sa_pu.sum()
+
+branches['Sloss'] = Sloss
+branches['Ploss'] = np.real(Sloss)
+branches['Qloss'] = np.imag(Sloss)
 

@@ -71,10 +71,10 @@ def create_gb(terms, count_of_nodes, flo, ftr):
     terms_with_taps = terms[terms.index_of_taps.notna()]
     idx_of_tap = terms_with_taps.index_of_taps
     # y_tot
-    g_tot = casadi.SX(terms.g_tot)
-    b_tot = casadi.SX(terms.b_tot)
-    g_tot[terms_with_taps.index] *= ftr[idx_of_tap]
-    b_tot[terms_with_taps.index] *= ftr[idx_of_tap]
+    g_mm = casadi.SX(terms.g_mm_half)
+    b_mm = casadi.SX(terms.b_mm_half)
+    g_mm[terms_with_taps.index] *= ftr[idx_of_tap]
+    b_mm[terms_with_taps.index] *= ftr[idx_of_tap]
     # y_mn
     g_mn = casadi.SX(terms.g_mn)
     b_mn = casadi.SX(terms.b_mn)
@@ -91,9 +91,9 @@ def create_gb(terms, count_of_nodes, flo, ftr):
         terms.loc[:, ['index_of_node', 'index_of_other_node']].iterrows():
         index_of_node = idxs.index_of_node
         index_of_other_node = idxs.index_of_other_node
-        G[index_of_node, index_of_node] += g_tot[data_idx]
+        G[index_of_node, index_of_node] += (g_mn[data_idx] + g_mm[data_idx])
         G[index_of_node, index_of_other_node] -= g_mn[data_idx]
-        B[index_of_node, index_of_node] += b_tot[data_idx]
+        B[index_of_node, index_of_node] += (b_mn[data_idx] + b_mm[data_idx])
         B[index_of_node, index_of_other_node] -= b_mn[data_idx]
     return G, B
 
