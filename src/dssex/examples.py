@@ -41,14 +41,14 @@ model_devices = [
         id='line_0',
         id_of_node_A='n_0',
         id_of_node_B='n_1',
-        y_mn=1e3-1e3j,
-        y_mm_half=1e-6+1e-6j),
+        y_lo=1e3-1e3j,
+        y_tr=1e-6+1e-6j),
     Branch(
         id='line_1',
         id_of_node_A='n_1',
         id_of_node_B='n_2',
-        y_mn=1e3-1e3j,
-        y_mm_half=1e-6+1e-6j),
+        y_lo=1e3-1e3j,
+        y_tr=1e-6+1e-6j),
     Injection(
         id='consumer_0',
         id_of_node='n_2',
@@ -117,14 +117,14 @@ model04_devices = [
         id='line_0',
         id_of_node_A='n_0',
         id_of_node_B='n_1',
-        y_mn=1e3-1e3j,
-        y_mm_half=1e-6+1e-6j),
+        y_lo=1e3-1e3j,
+        y_tr=1e-6+1e-6j),
     Branch(
         id='line_1',
         id_of_node_A='n_1',
         id_of_node_B='n_2',
-        y_mn=1e3-1e3j,
-        y_mm_half=1e-6+1e-6j),
+        y_lo=1e3-1e3j,
+        y_tr=1e-6+1e-6j),
     Injection(
         id='Gen',
         id_of_node='n_2',
@@ -154,7 +154,6 @@ pr.print_measurements(results05)
 #%% power flow meshed configuration, consumers, capacitor, PV-generator
 #
 # leading and trailing underscores are not part of the IDs
-# P and Q are accepted in pairs only
 #
 schema06 = """
                                                                                                        Q10=-4 Exp_v_q=2
@@ -171,14 +170,14 @@ schema06 = """
         I=31               |                      |                      |                      |                      |                      
         P=30 Q=10          |                      |                      |                      |                      |           
     n0(--------line_1-----)n1(--------line_2-----)n2(--------line_3-----)n3(--------line_4-----)n4(--------line_5-----)n5-------> load_52_
-    slack=True  y_mn=1e3-1e3j          y_mn=1k-1kj            y_mn=0.9k-0.95kj       y_mn=1k-1kj            y_mn=1k-1kj            P10=4 Q10=2
-    V=1.00      y_mm_half=1e-6+1e-6j   y_mm_half=1µ+1µj       y_mm_half=1.3µ+1.5µj   y_mm_half=1e-6+1e-6j   y_mm_half=1e-6+1e-6j   
+    slack=True  y_lo=1e3-1e3j          y_lo=1k-1kj            y_lo=0.9k-0.95kj       y_lo=1k-1kj            y_lo=1k-1kj            P10=4 Q10=2
+    V=1.00      y_tr=1e-6+1e-6j        y_tr=1µ+1µj            y_tr=1.3µ+1.5µj        y_tr=1e-6+1e-6j        y_tr=1e-6+1e-6j   
                            |                                                                                           |
                            |                                                                                           |
                            |                                                                                           |
                            |                                                                                           |
-                           |           y_mn=1e3-1e3j          y_mn=1e3-1e3j                       y_mn=1e3-1e3j        |
-                           |   I=10    y_mm_half=1e-6+1e-6j   y_mm_half=1e-6+1e-6j      V=.974    y_mm_half=1e-6+1e-6j |
+                           |           y_lo=1e3-1e3j          y_lo=1e3-1e3j                       y_lo=1e3-1e3j        |
+                           |   I=10    y_tr=1e-6+1e-6j        y_tr=1e-6+1e-6j           V=.974    y_tr=1e-6+1e-6j      |
                            n1(--------line_6-----)n6(--------line_7--------------------)n7(------line_8---------------)n5
                                                   |                                     |
                                                   |                                     |
@@ -245,14 +244,14 @@ schema08 = """
         I=31               |                      |                      |                      |                      |                      
         P=30 Q=10          |                      |                      |                      |                      |           
     n0(------- line_1 ----)n1(------- line_2 ----)n2(------- line_3 ----)n3(------- line_4 ----)n4(------- line_5 ----)n5-------> load_52_
-    slack=True  y_mn=1e3-1e3j          y_mn=1k-1kj            y_mn=0.9k-0.95kj       y_mn=1k-1kj            y_mn=1k-1kj            P10=4 Q10=2
-    V=1.00      y_mm_half=1e-6+1e-6j   y_mm_half=1µ+1µj       y_mm_half=1.3µ+1.5µj   y_mm_half=1e-6+1e-6j   y_mm_half=1e-6+1e-6j   
+    slack=True  y_lo=1e3-1e3j          y_lo=1k-1kj            y_lo=0.9k-0.95kj       y_lo=1k-1kj            y_lo=1k-1kj            P10=4 Q10=2
+    V=1.00      y_tr=1e-6+1e-6j        y_tr=1µ+1µj            y_tr=1.3µ+1.5µj        y_tr=1e-6+1e-6j        y_tr=1e-6+1e-6j   
                            |                                                                                           |
                            |                                                                                           |
                            |                                                                                           |
                            |                                                                                           |
-                           |           y_mn=1e9-1e9j          y_mn=1e3-1e3j                       y_mn=1e3-1e3j        |
-                           |   I=10    y_mm_half=1e-6+1e-6j   y_mm_half=1e-6+1e-6j      V=.97     y_mm_half=1e-6+1e-6j |
+                           |           y_lo=1e9-1e9j          y_lo=1e3-1e3j                       y_lo=1e3-1e3j        |
+                           |   I=10    y_tr=1e-6+1e-6j        y_tr=1e-6+1e-6j           V=.97     y_tr=1e-6+1e-6j      |
     n0--> load_0_          n1(------- line_6 ----)n6(------- line_7 -------------------)n7(----- line_8 --------------)n5
            P10=8                                  |                                     |
                                                   |                                     |
@@ -291,14 +290,14 @@ schema09 = """
         I=31               |                      |                      |                      |                      |                      
         P=30 Q=10          |                      |                      |                      |                      |           
     n0(------- line_1 ----)n1(------- line_2 ----)n2(------- line_3 ----)n3(------- line_4 ----)n4(------- line_5 ----)n5-------> load_52_
-    slack=True  y_mn=1e3-1e3j          y_mn=1k-1kj            y_mn=0.9k-0.95kj       y_mn=1k-1kj            y_mn=1k-1kj            P10=4 Q10=2
-    V=1.00      y_mm_half=1e-6+1e-6j   y_mm_half=1µ+1µj       y_mm_half=1.3µ+1.5µj   y_mm_half=1e-6+1e-6j   y_mm_half=1e-6+1e-6j   
+    slack=True  y_lo=1e3-1e3j          y_lo=1k-1kj            y_lo=0.9k-0.95kj       y_lo=1k-1kj            y_lo=1k-1kj            P10=4 Q10=2
+    V=1.00      y_tr=1e-6+1e-6j        y_tr=1µ+1µj            y_tr=1.3µ+1.5µj        y_tr=1e-6+1e-6j        y_tr=1e-6+1e-6j   
                            |                                                                                           |
                            |                                                                                           |
                            |                                                                                           |
                            |                                                                                           |
-                           |           y_mn=1e9-1e9j          y_mn=1e3-1e3j                       y_mn=1e3-1e3j        |
-                           |   I=10    y_mm_half=1e-6+1e-6j   y_mm_half=1e-6+1e-6j      V=.974    y_mm_half=1e-6+1e-6j |
+                           |           y_lo=1e9-1e9j          y_lo=1e3-1e3j                       y_lo=1e3-1e3j        |
+                           |   I=10    y_tr=1e-6+1e-6j        y_tr=1e-6+1e-6j           V=.974    y_tr=1e-6+1e-6j      |
     n0--> load_0_          n1(------- line_6 ----)n6(------- line_7 -------------------)n7(----- line_8 --------------)n5
            P10=8                                  |                                     |
                                                   |                                     |

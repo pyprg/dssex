@@ -74,12 +74,12 @@ def get_gb_terms(terms, flo, ftr):
         factor transversal admittance"""
     terms_with_taps = terms[terms.index_of_taps.notna()]
     idx_of_tap = terms_with_taps.index_of_taps
-    g_mm = terms.g_mm_half.to_numpy()
-    b_mm = terms.b_mm_half.to_numpy()
+    g_mm = terms.g_tr_half.to_numpy()
+    b_mm = terms.b_tr_half.to_numpy()
     g_mm[terms_with_taps.index] *= ftr[idx_of_tap]   
     b_mm[terms_with_taps.index] *= ftr[idx_of_tap]    
-    g_mn = terms.g_mn.to_numpy()
-    b_mn = terms.b_mn.to_numpy()
+    g_mn = terms.g_lo.to_numpy()
+    b_mn = terms.b_lo.to_numpy()
     g_mn[terms_with_taps.index] *= flo[idx_of_tap]
     b_mn[terms_with_taps.index] *= flo[idx_of_tap]
     terms_with_other_taps = terms[terms.index_of_other_taps.notna()]
@@ -448,15 +448,15 @@ model_devices = [
         id='line_0',
         id_of_node_A='n_0',
         id_of_node_B='n_1',
-        y_mn=1e3-1e3j,
-        y_mm_half=1e-6+1e-6j
+        y_lo=1e3-1e63j,
+        y_tr=1e-6+1e-6j
         ),
     Branch(
         id='line_1',
         id_of_node_A='n_1',
         id_of_node_B='n_2',
-        y_mn=1e3-1e3j,
-        y_mm_half=1e-6+1e-6j
+        y_lo=1e3-1e3j,
+        y_tr=1e-6+1e-6j
         ),
     Injection(
         id='consumer_0',
@@ -473,27 +473,32 @@ from dnadb.ifegrid import decorate_injection_results
 from egrid import model_from_frames
 
 #path = r"C:\UserData\deb00ap2\OneDrive - Siemens AG\Documents\defects\SP7-219086\eus1_loop\eus1_loop.db"
-path = r"C:\UserData\deb00ap2\OneDrive - Siemens AG\Documents\defects\SP7-219086\eus1_loop"
-#path = r"C:\Users\live\OneDrive\Dokumente\py_projects\data\eus1_loop.db"
+#path = r"C:\UserData\deb00ap2\OneDrive - Siemens AG\Documents\defects\SP7-219086\eus1_loop"
+path = r"C:\Users\live\OneDrive\Dokumente\py_projects\data\eus1_loop.db"
 #path = r"K:\Siemens\Power\Temp\DSSE\Subsystem_142423"
 frames = egrid_frames(path)
 model = model_from_frames(frames)
 
-Vnode_initial = (
-    np.array([1.+0j]*model.shape_of_Y[0], dtype=np.complex128)
-    .reshape(-1,1))
-Vnode_ri = np.vstack([np.real(Vnode_initial), np.imag(Vnode_initial)])
-success, Vnode, Inode = calculate_power_flow(1e-10, 20, model, Vnode_ri)
-print('SUCCESS' if success else '_F_A_I_L_E_D_')
-V = np.hstack(np.vsplit(Vnode, 2)).view(dtype=np.complex128)
-injections = get_injection_results(model, V)
-print('V: ', V)
+if len(model.errormessages):
+    print(model.errormessages)
+else:
+    Vnode_initial = (
+        np.array([1.+0j]*model.shape_of_Y[0], dtype=np.complex128)
+        .reshape(-1,1))
+    Vnode_ri = np.vstack([np.real(Vnode_initial), np.imag(Vnode_initial)])
+    success, Vnode, Inode = calculate_power_flow(1e-10, 20, model, Vnode_ri)
+    print('SUCCESS' if success else '_F_A_I_L_E_D_')
+    # print('Ires_max: ', Ires_max)    
+    # print('iter_count: ', iter_count)    
+    V = np.hstack(np.vsplit(Vnode, 2)).view(dtype=np.complex128)
+    print('V: ', V)
+    injections = get_injection_results(model, V)
+    result_inj = decorate_injection_results(frames['Names'], injections)
+    print(result_inj)
 
-result_inj = decorate_injection_results(frames['Names'], injections)
-print(result_inj)
 #%%
 from scipy.sparse import coo_matrix
-terms = model.branchterminals[(~model.branchterminals.is_bridge) & (model.branchterminals.side == 'A')].reset_index()
+terms = model.branchterminals[(~model.branchterminals.is_bridge)].reset_index()
 count_of_terms = len(terms)
 #%%
 mtermnode = coo_matrix(
@@ -511,20 +516,22 @@ Vterm = np.asarray(mtermnode @ V)
 Votherterm = np.asarray(mtermothernode @ V)
 
 Vdiff = Vterm - Votherterm
-
-Imn = np.multiply(terms.y_mn.to_numpy().reshape(-1), Vdiff.reshape(-1))
-Imm = np.multiply(terms.y_mm_half.to_numpy().reshape(-1), Vterm.reshape(-1))
+#%%
+Imn = np.multiply(terms.y_lo.to_numpy().reshape(-1), Vdiff.reshape(-1))
+Imm = np.multiply(terms.y_tr_half.to_numpy().reshape(-1), Vterm.reshape(-1))
 Im = Imm + Imn
 Sm = 3 * np.multiply(Vterm.reshape(-1), np.conj(Im)) # 3 phases
 Smother = Sm[terms.index_of_other_node]
 Imother = Im[terms.index_of_other_node]
 #%%
 res = terms.copy()
-res['Sa_pu'] = Sm.reshape(-1, 1)
-res['Ia_pu'] = Im.reshape(-1, 1)
+res['S_0_pu'] = Sm.reshape(-1, 1)
+res['I_0_pu'] = Im.reshape(-1, 1)
+res['S_1_pu'] = Smother.reshape(-1, 1)
+res['I_1_pu'] = Imother.reshape(-1, 1)
 
 branches = res.loc[(res.side == 'A'), :].copy()
-Sloss = 1e2 * res.groupby('index_of_branch').Sa_pu.sum()
+Sloss = 1e2 * res.groupby('index_of_branch').S_0_pu.sum()
 
 branches['Sloss'] = Sloss
 branches['Ploss'] = np.real(Sloss)
