@@ -1096,10 +1096,10 @@ def _get_branch_terminal_data(branchterminals, branchtapfactors, Vnode):
         term_data.flo.notna() | term_data.flo_other.notna())
     term_data.fillna(1.0, inplace=True)
     terms = term_data[branch_with_taps]
-    g_tot = (terms.g_mm_half + terms.g_mn) * terms.ftr
-    b_tot = (terms.b_mm_half + terms.b_mn) * terms.ftr
-    g_mn = terms.g_mn * terms.flo * terms.flo_other
-    b_mn = terms.b_mn * terms.flo * terms.flo_other
+    g_tot = (terms.g_tr_half + terms.g_lo) * terms.ftr
+    b_tot = (terms.b_tr_half + terms.b_lo) * terms.ftr
+    g_mn = terms.g_lo * terms.flo * terms.flo_other
+    b_mn = terms.b_lo * terms.flo * terms.flo_other
     term_data.loc[branch_with_taps, ['g_mn']] = g_mn.to_numpy()
     term_data.loc[branch_with_taps, ['b_mn']] = b_mn.to_numpy()
     term_data.loc[branch_with_taps, ['g_tot']] = g_tot.to_numpy()
