@@ -323,7 +323,9 @@ def solved(precision, gb, Vnode_ri, Iinj_node_ri):
     return Ires_max < precision
 
 def calculate_power_flow(precision, max_iter, model, Vnode_ri):
-    """Power flow calculating function.
+    """Power flow calculating function. The function solves the non-linear
+    power flow problem by solving the linear equations Y * U_n+1 = I(U_n) 
+    iteratively. U_n+1 is computed from Y and I(U_n) - n: index of iteration.
     
     Parameters
     ----------
@@ -331,7 +333,7 @@ def calculate_power_flow(precision, max_iter, model, Vnode_ri):
         tolerance for node current
     max_iter: int
         limit of iteration count
-    model:
+    model: egrid.model.Model
         
     Vnode_ri: array_like, float
         start value of iteration, node voltage vector, 

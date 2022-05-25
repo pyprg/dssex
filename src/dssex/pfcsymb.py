@@ -9,7 +9,7 @@ import numpy as np
 from collections import namedtuple
 from dnadb import egrid_frames
 from egrid import model_from_frames
-from injections import get_polynomial_coefficients, get_node_inj_matrix
+from injections import get_polynomial_coefficients
 
 # square of voltage magnitude, minimum value for load curve, 
 #   if value is below _VMINSQR the load curves for P and Q converge
@@ -71,13 +71,13 @@ def create_gb(terms, count_of_nodes, flo, ftr):
     terms_with_taps = terms[terms.index_of_taps.notna()]
     idx_of_tap = terms_with_taps.index_of_taps
     # y_tot
-    g_mm = casadi.SX(terms.g_mm_half)
-    b_mm = casadi.SX(terms.b_mm_half)
+    g_mm = casadi.SX(terms.g_tr_half)
+    b_mm = casadi.SX(terms.b_tr_half)
     g_mm[terms_with_taps.index] *= ftr[idx_of_tap]
     b_mm[terms_with_taps.index] *= ftr[idx_of_tap]
     # y_mn
-    g_mn = casadi.SX(terms.g_mn)
-    b_mn = casadi.SX(terms.b_mn)
+    g_mn = casadi.SX(terms.g_lo)
+    b_mn = casadi.SX(terms.b_lo)
     g_mn[terms_with_taps.index] *= flo[idx_of_tap]
     b_mn[terms_with_taps.index] *= flo[idx_of_tap]
     terms_with_other_taps = terms[terms.index_of_other_taps.notna()]
@@ -312,13 +312,13 @@ def get_injected_original_current(
     Iim = -Bexpr_node * V.re + Gexpr_node * V.im
     return Ire, Iim
 
-def get_injected_current(count_of_nodes, V, injections, loadfactor=1.):
+def get_injected_current(matrix_nodeinj, V, injections, loadfactor=1.):
     """Creates a vector of injected node current.
     
     Parameters
     ----------
-    count_of_nodes: int
-        number of pfc-nodes
+    Mnodeinj: matrix
+        
     V: Vvar
         * .re, casadi.SX, vector, real part of node voltage
         * .im, casadi.SX, vector, imaginary part of node voltage
@@ -340,7 +340,7 @@ def get_injected_current(count_of_nodes, V, injections, loadfactor=1.):
     exp_v_q = injections.Exp_v_q.copy()
     # exp_v_p.loc[:] = 0.
     # exp_v_q.loc[:] = 0.
-    Mnodeinj = casadi.SX(get_node_inj_matrix(count_of_nodes, injections))
+    Mnodeinj = casadi.SX(matrix_nodeinj)
     Vinj_sqr = casadi.transpose(Mnodeinj) @ V.node_sqr # V**2 per injection
     Ire_ip, Iim_ip = get_injected_interpolated_current(
         V, Vinj_sqr, Mnodeinj, exp_v_p, P10, exp_v_q, Q10)
@@ -376,7 +376,7 @@ def build_residual_fn(model, loadfactor=1.):
     # injected current
     injections = model.injections
     Inode_re, Inode_im = get_injected_current(
-        count_of_nodes, V, injections[~injections.is_slack], loadfactor)
+        model.mnodeinj, V, injections[~injections.is_slack], loadfactor)
     vslack_var = casadi.SX.sym('Vslack', len(model.slacks), 2)# 0:real, 1:imag
     # modify Inode of slacks
     index_of_slack = model.slacks.index_of_node
@@ -410,7 +410,7 @@ def build_objective(model, gb_matrix, V, count_of_slacks, loadfactor=1.):
     # injected current
     injections = model.injections
     Inode_re, Inode_im = get_injected_current(
-        model.shape_of_Y[0], V, injections[~injections.is_slack], loadfactor)
+        model.mnodeinj, V, injections[~injections.is_slack], loadfactor)
     # equation for root finding
     I = casadi.vertcat(Inode_re, Inode_im)[count_of_slacks:, :]
     Ires = ((gb_matrix[count_of_slacks:, :] @ V.reim) + I)
@@ -459,7 +459,7 @@ path = r"C:\Users\live\OneDrive\Dokumente\py_projects\data\eus1_loop.db"
 frames = egrid_frames(path)
 model = model_from_frames(frames)
 tappositions = model.branchtaps.position.copy()
-tappositions.loc[:] = -5
+tappositions.loc[:] = 0
 fn_Iresidual = build_residual_fn(model, loadfactor=1.)
 success, voltages = find_root(
         fn_Iresidual, tappositions, model.slacks.V * 1., 
