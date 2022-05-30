@@ -322,7 +322,9 @@ def solved(precision, gb, Vnode_ri, Iinj_node_ri):
     Ires_max = norm(Ires, np.inf)
     return Ires_max < precision
 
-def calculate_power_flow(precision, max_iter, model, Vnode_ri):
+def calculate_power_flow(
+        precision, max_iter, model, 
+        Vslack=None, tappositions=None, Vinit=None):
     """Power flow calculating function. The function solves the non-linear
     power flow problem by solving the linear equations Y * U_n+1 = I(U_n) 
     iteratively. U_n+1 is computed from Y and I(U_n) - n: index of iteration.
@@ -335,9 +337,12 @@ def calculate_power_flow(precision, max_iter, model, Vnode_ri):
         limit of iteration count
     model: egrid.model.Model
         
-    Vnode_ri: array_like, float
-        start value of iteration, node voltage vector, 
-        real parts then imaginary parts
+    Vslack: array_like, complex
+        vector of voltages at slacks, default model.slacks.V
+    tappositions: array_like, int
+        vector of tap positions, default model.branchtaps.position
+    Vinit: array_like, complex
+        start value of iteration, node voltage vector
     
     Returns
     -------
@@ -346,7 +351,15 @@ def calculate_power_flow(precision, max_iter, model, Vnode_ri):
         * array_like, float, node voltages, real parts then imaginary parts
         * array_like, float, injected node currents, 
           real parts then imaginary parts"""
-    gb = create_gb_matrix(model, model.branchtaps.position)
+    count_of_nodes = model.shape_of_Y[0]
+    Vinit_ = (np.array([1.0]*count_of_nodes + [0.0]*count_of_nodes)
+              .reshape(-1, 1)
+              if Vinit is None else
+              np.vstack([np.real(Vinit), np.imag(Vinit)]))
+    Vslack_ = model.slacks.V if Vslack is None else Vslack
+    tappositions_ = model.branchtaps.position.copy() \
+        if tappositions is None else tappositions
+    gb = create_gb_matrix(model, tappositions_)
     mnodeinj = model.mnodeinj
     _next_voltage = partial(
         next_voltage, 
@@ -355,13 +368,13 @@ def calculate_power_flow(precision, max_iter, model, Vnode_ri):
         _injected_power(_VMINSQR, model.injections), 
         splu(gb),
         model.slacks.index_of_node,
-        model.slacks.V) 
+        Vslack_) 
     _solved = partial(solved, precision, gb)    
     iter_counter = 0
-    for V, I in _next_voltage(Vnode_ri):
+    for V, I in _next_voltage(Vinit_):
         if _solved(V, I):
-            return True, V, I
+            return True, np.hstack(np.vsplit(V, 2)).view(dtype=np.complex128)
         if max_iter <= iter_counter:
             break
         ++iter_counter;
-    return False, V, I
+    return False, np.hstack(np.vsplit(V, 2)).view(dtype=np.complex128)

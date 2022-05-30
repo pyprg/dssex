@@ -5,10 +5,13 @@ Created on Wed May  4 14:16:30 2022
 @author: pyprg
 """
 import numpy as np
+import pandas as pd
 from egrid import make_model
 from egrid.builder import (
     Slacknode, Branch, Injection, PValue, QValue, Output, Vvalue, Defk, Link)
-from pfcnum import calculate_power_flow, get_injected_power
+from pfcsymb import calculate_power_flow as cpfsymb
+from pfcnum import calculate_power_flow as cpfnum
+from pfcnum import get_injected_power
 from src.dssex.util import get_results
 
 # Always use a decimal point for floats. Now and then processing ints
@@ -50,29 +53,24 @@ model = make_model(model_devices)
 if len(model.errormessages):
     print(model.errormessages)
 else:
-    Vnode_initial = (
-        np.array([1.+0j]*model.shape_of_Y[0], dtype=np.complex128)
-        .reshape(-1,1))
-    Vnode_ri = np.vstack([np.real(Vnode_initial), np.imag(Vnode_initial)])
-    success, Vnode, Inode = calculate_power_flow(1e-10, 20, model, Vnode_ri)
+    success, V = cpfsymb (1e-10, 20, model)
     print('SUCCESS' if success else '_F_A_I_L_E_D_')
-    V = np.hstack(np.vsplit(Vnode, 2)).view(dtype=np.complex128)
-    print('V: ', V)
+    print('V: ', pd.DataFrame(V, columns=['V']))
     res = get_results(model, get_injected_power, model.branchtaps.position, V)  
     print(res['injections'])
     print(res['branches'])
-    
   
 #%%
 from dnadb import egrid_frames
 from dnadb.ifegrid import decorate_injection_results, decorate_branch_results
 from egrid import model_from_frames
+from egrid.model import _Y_LO_ABS_MAX
 
 #path = r"C:\UserData\deb00ap2\OneDrive - Siemens AG\Documents\defects\SP7-219086\eus1_loop\eus1_loop.db"
 #path = r"C:\UserData\deb00ap2\OneDrive - Siemens AG\Documents\defects\SP7-219086\eus1_loop"
 path = r"C:\Users\live\OneDrive\Dokumente\py_projects\data\eus1_loop.db"
 #path = r"K:\Siemens\Power\Temp\DSSE\Subsystem_142423"
-frames = egrid_frames(path)
+frames = egrid_frames(_Y_LO_ABS_MAX, path)
 model = model_from_frames(frames)
 
 if len(model.errormessages):
@@ -81,10 +79,9 @@ else:
     Vnode_initial = (
         np.array([1.+0j]*model.shape_of_Y[0], dtype=np.complex128)
         .reshape(-1,1))
-    Vnode_ri = np.vstack([np.real(Vnode_initial), np.imag(Vnode_initial)])
-    success, Vnode, Inode = calculate_power_flow(1e-10, 20, model, Vnode_ri)
+    success, V = cpfnum(
+        1e-10, 20, model, Vinit=Vnode_initial)
     print('SUCCESS' if success else '_F_A_I_L_E_D_')
-    V = np.hstack(np.vsplit(Vnode, 2)).view(dtype=np.complex128)
     names = frames['Names']
     print('V: ', V)
     res = get_results(model, get_injected_power, model.branchtaps.position, V)  

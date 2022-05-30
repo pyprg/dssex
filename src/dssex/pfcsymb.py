@@ -9,6 +9,7 @@ import numpy as np
 from collections import namedtuple
 from dnadb import egrid_frames
 from egrid import model_from_frames
+from egrid.model import _Y_LO_ABS_MAX
 from injections import get_polynomial_coefficients
 
 # square of voltage magnitude, minimum value for load curve, 
@@ -367,7 +368,8 @@ def build_residual_fn(model, loadfactor=1.):
         * success?, bool
         * casadi.DM, voltage vector of floats, shape (2n,1), 
           n real parts followed by n imaginary parts"""
-    pos = casadi.SX.sym('pos', len(model.branchtaps), 1)
+    count_of_branch_taps = len(model.branchtaps)
+    pos = casadi.SX.sym('pos', count_of_branch_taps)
     # branch gb-matrix, g:conductance, b:susceptance
     gb = create_gb_matrix(model, pos)
     # variables of voltages
@@ -384,8 +386,10 @@ def build_residual_fn(model, loadfactor=1.):
     Inode_im[index_of_slack] = -vslack_var[:, 1]
     # equation of node current
     Ires = (gb @ V.reim) + casadi.vertcat(Inode_re, Inode_im)
-    # parameters
-    param = casadi.vertcat(vslack_var[:, 0], vslack_var[:, 1], pos)
+    # parameters, horzcat returns wrong shape for count_of_branch_taps==0
+    param = (casadi.horzcat(vslack_var[:, 0], vslack_var[:, 1], pos) 
+             if count_of_branch_taps else 
+             casadi.horzcat(vslack_var[:, 0], vslack_var[:, 1]))
     # create node current function
     return casadi.Function('fn_Iresidual', [V.reim, param], [Ires])
 
@@ -443,68 +447,115 @@ def find_root(
     if not Vinit is None:
         Vstart = np.vstack([np.real(Vinit), np.imag(Vinit)])
     else:
-        Vstart = [1.] * count_of_nodes + [0.] * count_of_nodes
-    values_of_params = np.vstack(
-        [np.real(Vslack), np.imag(Vslack), tappositions])
+        Vstart = (
+            np.array([1.]*count_of_nodes + [0.]*count_of_nodes)
+            .reshape(-1, 1))
+    values_of_params = casadi.horzcat(
+        np.real(Vslack), np.imag(Vslack), tappositions)
     rf = casadi.rootfinder('rf', 'nlpsol', fn_Iresidual, {'nlpsol':'ipopt'})
     #rf = casadi.rootfinder('rf', 'newton', fn_Iresidual)
     try:
         return True, rf(Vstart, values_of_params)
     except:
-        return False, casadi.DM(Vstart)
-
-# model
-path = r"C:\Users\live\OneDrive\Dokumente\py_projects\data\eus1_loop.db"
-#path = r"C:\UserData\deb00ap2\OneDrive - Siemens AG\Documents\defects\SP7-219086\eus1_loop\eus1_loop.db"
-frames = egrid_frames(path)
-model = model_from_frames(frames)
-tappositions = model.branchtaps.position.copy()
-tappositions.loc[:] = 0
-fn_Iresidual = build_residual_fn(model, loadfactor=1.)
-success, voltages = find_root(
-        fn_Iresidual, tappositions, model.slacks.V * 1., 
-        count_of_nodes=model.shape_of_Y[0])
-
-print("\nSUCCESS" if success else "\n- F A I L E D -")
-if success:
-    Vcalc = np.array(
-        casadi.hcat(
-            casadi.vertsplit(
-                voltages, [0, voltages.size1()//2, voltages.size1()])))
-    Vcomp = Vcalc.view(dtype=np.complex128)
-    print()
-    print('V: ', Vcomp)
+        return False, casadi.DB(Vstart)
     
-    params = np.vstack([[1.], [0.], tappositions])
-    Ires = fn_Iresidual(voltages, params)
-#%%
-count_of_nodes = model.shape_of_Y[0]
-pos = casadi.SX.sym('pos', len(model.branchtaps), 1)
-gb_matrix = create_gb_matrix(model, pos)
-count_of_slacks = len(model.slacks)
-vslack_var = casadi.SX.sym('Vslack', count_of_slacks, 2) # 0:real, 1:imag
-V = create_Vvars(count_of_nodes, vslack_var)
-objective = build_objective(
-    model, gb_matrix, V, count_of_slacks, loadfactor=1.0)    
-param = casadi.vertcat(V.slack, pos)
-nlp={'x': V.decvars, 'f': objective, 'p': param}
-solver = casadi.nlpsol('solver', 'ipopt', nlp)
-count_of_decvars = count_of_nodes - count_of_slacks
-initial_values = [1.] * count_of_decvars + [0.] * count_of_decvars
-Vslack = model.slacks.V
-values_of_params = np.vstack([np.real(Vslack), np.imag(Vslack), tappositions])
-r = solver(
-    x0=initial_values,
-    lbx=0.7, ubx=1.1,
-    p=values_of_params)
-success = solver.stats()['success']
-print("\nSUCCESS" if success else "\n- F A I L E D -")
-if success:
-    voltages = r['x']
-    Vcalc = np.array(
-        casadi.hcat(
-            casadi.vertsplit(
-                voltages, [0, count_of_decvars, 2 * count_of_decvars])))
-    Vcomp = Vcalc.view(dtype=np.complex128)
-    print()
-    print('V: ', Vcomp)
+def calculate_power_flow(
+        precision, max_iter, model, 
+        Vslack=None, tappositions=None, Vinit=None):
+    """Power flow calculating function.
+    
+    Parameters
+    ----------
+    precision: float (not used)
+        tolerance for node current
+    max_iter: int (not used)
+        limit of iteration count
+    model: egrid.model.Model
+    
+    Vslack: array_like, complex
+        vector of voltages at slacks, default model.slacks.V
+    tappositions: array_like, int
+        vector of tap positions, default model.branchtaps.position
+    Vinit: array_like, float
+        start value of iteration, node voltage vector, 
+        real parts then imaginary parts
+    
+    Returns
+    -------
+    tuple
+        * bool, success?
+        * array_like, float, node voltages, real parts then imaginary parts
+        * None"""
+    Vslack_ = model.slacks.V if Vslack is None else Vslack
+    tappositions_ = model.branchtaps.position.copy() \
+        if tappositions is None else tappositions
+    fn_Iresidual = build_residual_fn(model, loadfactor=1.)
+    success, voltages = find_root(
+            fn_Iresidual, tappositions_, Vslack_, 
+            count_of_nodes=model.shape_of_Y[0], Vinit=Vinit)
+    return success, np.hstack(np.vsplit(voltages, 2)).view(dtype=np.complex128)
+
+# # model
+# path = r"C:\Users\live\OneDrive\Dokumente\py_projects\data\eus1_loop.db"
+# #path = r"C:\UserData\deb00ap2\OneDrive - Siemens AG\Documents\defects\SP7-219086\eus1_loop\eus1_loop.db"
+# frames = egrid_frames(_Y_LO_ABS_MAX, path)
+# model = model_from_frames(frames)
+
+
+# success, Vnode, _ = calculate_power_flow(1e-10, 20, model)
+
+# print("\nSUCCESS" if success else "\n- F A I L E D -")
+# if success:
+#     Vcalc = np.array(
+#         casadi.hcat(
+#             casadi.vertsplit(
+#                 Vnode, [0, Vnode.size1()//2, Vnode.size1()])))
+#     Vcomp = Vcalc.view(dtype=np.complex128)
+#     print()
+#     print('V: ', Vcomp)
+    
+    
+#     from src.dssex.util import get_results
+#     from dnadb.ifegrid import \
+#         decorate_injection_results, decorate_branch_results    
+#     from pfcnum import get_injected_power    
+#     res = get_results(
+#         model, get_injected_power, model.branchtaps.position, Vcomp)
+#     names = frames['Names']
+#     result_inj = decorate_injection_results(names, res['injections'])
+#     print(result_inj)
+#     result_br = decorate_branch_results(names, res['branches'])
+#     print(result_br)
+   
+    
+# #%%
+# count_of_nodes = model.shape_of_Y[0]
+# pos = casadi.SX.sym('pos', len(model.branchtaps), 1)
+# gb_matrix = create_gb_matrix(model, pos)
+# count_of_slacks = len(model.slacks)
+# vslack_var = casadi.SX.sym('Vslack', count_of_slacks, 2) # 0:real, 1:imag
+# V = create_Vvars(count_of_nodes, vslack_var)
+# objective = build_objective(
+#     model, gb_matrix, V, count_of_slacks, loadfactor=1.0)    
+# param = casadi.vertcat(V.slack, pos)
+# nlp={'x': V.decvars, 'f': objective, 'p': param}
+# solver = casadi.nlpsol('solver', 'ipopt', nlp)
+# count_of_decvars = count_of_nodes - count_of_slacks
+# initial_values = [1.] * count_of_decvars + [0.] * count_of_decvars
+# Vslack = model.slacks.V
+# values_of_params = np.vstack([np.real(Vslack), np.imag(Vslack), model.branchtaps.position])
+# r = solver(
+#     x0=initial_values,
+#     lbx=0.7, ubx=1.1,
+#     p=values_of_params)
+# success = solver.stats()['success']
+# print("\nSUCCESS" if success else "\n- F A I L E D -")
+# if success:
+#     voltages = r['x']
+#     Vcalc = np.array(
+#         casadi.hcat(
+#             casadi.vertsplit(
+#                 voltages, [0, count_of_decvars, 2 * count_of_decvars])))
+#     Vcomp = Vcalc.view(dtype=np.complex128)
+#     print()
+#     print('V: ', Vcomp)
