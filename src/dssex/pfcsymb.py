@@ -452,8 +452,8 @@ def find_root(
             .reshape(-1, 1))
     values_of_params = casadi.horzcat(
         np.real(Vslack), np.imag(Vslack), tappositions)
-    rf = casadi.rootfinder('rf', 'nlpsol', fn_Iresidual, {'nlpsol':'ipopt'})
-    #rf = casadi.rootfinder('rf', 'newton', fn_Iresidual)
+    #rf = casadi.rootfinder('rf', 'nlpsol', fn_Iresidual, {'nlpsol':'ipopt'})
+    rf = casadi.rootfinder('rf', 'newton', fn_Iresidual)
     try:
         return True, rf(Vstart, values_of_params)
     except:

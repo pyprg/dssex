@@ -49,7 +49,15 @@ def get_gb_terms(terms, flo, ftr):
     flo: pandas.Series, float
         factor for longitudinal admittance
     ftr: pandas.Series, float
-        factor transversal admittance"""
+        factor transversal admittance
+    
+    Returns
+    -------
+    tuple
+        * numpy.array, float, g_lo
+        * numpy.array, float, g_tr
+        * numpy.array, float, b_lo
+        * numpy.array, float, b_tr"""
     terms_with_taps = terms[terms.index_of_taps.notna()]
     idx_of_tap = terms_with_taps.index_of_taps
     g_tr = terms.g_tr_half.to_numpy()
@@ -64,7 +72,7 @@ def get_gb_terms(terms, flo, ftr):
     idx_of_other_tap = terms_with_other_taps.index_of_other_taps
     g_lo[terms_with_other_taps.index] *= flo[idx_of_other_tap]
     b_lo[terms_with_other_taps.index] *= flo[idx_of_other_tap]
-    return g_tr, g_lo, b_tr, b_lo
+    return g_lo, g_tr, b_lo, b_tr
 
 def create_gb(terms, count_of_nodes, flo, ftr):
     """Generates a conductance-susceptance matrix of branches equivalent to
@@ -92,7 +100,7 @@ def create_gb(terms, count_of_nodes, flo, ftr):
     row = np.concatenate([index_of_node, index_of_node])
     col = np.concatenate([index_of_node, index_of_other_node])
     rowcol = row, col
-    g_tr, g_lo, b_tr, b_lo = get_gb_terms(terms, flo, ftr)
+    g_lo, g_tr, b_lo, b_tr = get_gb_terms(terms, flo, ftr)
     gvals = np.concatenate([(g_tr + g_lo), -g_lo])
     bvals = np.concatenate([(b_tr + b_lo), -b_lo])
     shape = count_of_nodes, count_of_nodes
@@ -132,7 +140,7 @@ def create_gb_matrix(model, pos):
         B.tocsc()[count_of_slacks:, :]])
     return bmat([[G_, -B_], [B_,  G_]])
 
-def _injected_power(vminsqr, injections):
+def get_injected_power_fn(vminsqr, injections):
     """Calculates power flowing through injections.
     Injected power is calculated this way
     (P = |V|**Exvp * P10, Q = |V|**Exvq * Q10; with |V| - magnitude of V):
@@ -172,9 +180,6 @@ def _injected_power(vminsqr, injections):
     coeffs = np.hstack([p_coeffs, q_coeffs])
     Exp_v_p_half = Exp_v_p / 2.
     Exp_v_q_half = Exp_v_q / 2.
-    # Exp_v_p_half = Exp_v_p.to_numpy() / 2.
-    # Exp_v_q_half = Exp_v_q.to_numpy() / 2.
-    #        
     def calc_injected_power(Vinj_abs_sqr):
         """Calculates injected power per injection.
         
@@ -243,12 +248,33 @@ def calculate_injected_power(vminsqr, injections, Vinj_abs_sqr):
     tuple
         * active power P
         * reactive power Q"""
-    return _injected_power(vminsqr, injections)(Vinj_abs_sqr)
+    return get_injected_power_fn(vminsqr, injections)(Vinj_abs_sqr)
 
 get_injected_power = partial(calculate_injected_power, _VMINSQR)
 
 def calculate_injected_node_current(
         mnodeinj, mnodeinjT, calc_injected_power, idx_slack, Vslack, Vnode_ri):
+    """Calculates injected current per injection.
+    
+    Parameters
+    ----------
+    mnodeinj: scipy.sparse.matrix
+        mnodeinjT @ values_per_injection -> values_per_node
+    mnodeinjT: scipy.sparse.matrix
+        mnodeinjT @ values_per_node -> values_per_injection
+    calc_injected_power: function
+    
+    idx_slack: array_like, int
+        indices of slack nodes
+    Vslack: array_like, float
+        voltages at slack nodes
+    Vnode_ri: pandas.Series
+        vector of node voltages (real and imaginary separated)
+    
+    Returns
+    -------
+    numpy.array
+        float, shape (2*number_of_nodes,)"""
     Vnode_ri2 = np.hstack(np.vsplit(Vnode_ri, 2))
     Vnode_ri2_sqr = np.power(Vnode_ri2, 2)
     Vnode_abs_sqr = (Vnode_ri2_sqr[:, 0] + Vnode_ri2_sqr[:, 1]).reshape(-1, 1)
@@ -260,7 +286,8 @@ def calculate_injected_node_current(
         .view(dtype=np.complex128))
     Sinj_node = mnodeinj @ csc_array(Sinj)
     Vnode = Vnode_ri2.view(dtype=np.complex128)
-    Iinj_node = -Sinj_node / Vnode #current is negative for positive power
+    #current is negative for positive power
+    Iinj_node = -np.conjugate(Sinj_node / Vnode) 
     Iinj_node[idx_slack] = Vslack
     return np.vstack([np.real(Iinj_node), np.imag(Iinj_node)])
 
@@ -272,9 +299,9 @@ def next_voltage(
     Parameters
     ----------
     mnodeinj: scipy.sparse.matrix
-        
+        mnodeinjT @ values_per_injection -> values_per_node
     mnodeinjT: scipy.sparse.matrix
-    
+        mnodeinjT @ values_per_node -> values_per_injection
     calc_injected_power: function 
         (numpy.array, float) -> 
             (numpy.array<float>, numpy.array<float>)
@@ -365,16 +392,18 @@ def calculate_power_flow(
         next_voltage, 
         mnodeinj,
         mnodeinj.T,
-        _injected_power(_VMINSQR, model.injections), 
+        get_injected_power_fn(_VMINSQR, model.injections), 
         splu(gb),
         model.slacks.index_of_node,
         Vslack_) 
-    _solved = partial(solved, precision, gb)    
+    _solved = partial(solved, precision, gb) # success predicate
     iter_counter = 0
+    vs = []
     for V, I in _next_voltage(Vinit_):
+        vs.append(np.hstack(np.split(V,2)).view(dtype=np.complex128))
         if _solved(V, I):
             return True, np.hstack(np.vsplit(V, 2)).view(dtype=np.complex128)
         if max_iter <= iter_counter:
             break
-        ++iter_counter;
+        iter_counter += 1;
     return False, np.hstack(np.vsplit(V, 2)).view(dtype=np.complex128)
