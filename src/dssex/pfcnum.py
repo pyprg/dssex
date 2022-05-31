@@ -140,7 +140,62 @@ def create_gb_matrix(model, pos):
         B.tocsc()[count_of_slacks:, :]])
     return bmat([[G_, -B_], [B_,  G_]])
 
-def get_calc_injected_power_fn(vminsqr, injections, pq_factors=None):
+def _get_squared_injected_power_fn(injections, pq_factors=None):
+    """Calculates power flowing through injections.
+    ::
+        +- -+   +-                            -+
+        | P |   | (V_r ** 2 + V_i ** 2) * P_10 |
+        |   | = |                              |
+        | Q |   | (V_r ** 2 + V_i ** 2) * Q_10 |
+        +- -+   +-                            -+
+
+    Parameters
+    ----------
+    injections: pandas.DataFrame
+        * .kp
+        * .P10
+        * .kq
+        * .Q10
+        * .Exp_v_p
+        * .Exp_v_q
+        * .V_abs_sqr
+        * .c3p, .c2p, .c1p, polynomial coefficients for active power P
+        * .c3q, .c2q, .c1q, polynomial coefficients for reactive power Q
+    pq_factors: numpy.array, float, (nx2)
+        factors for active and reactive power
+    loadcurve: 'original' | 'interpolated' | 'square'
+
+    Returns
+    -------
+    function: (numpy.array<float>) -> (numpy.array<float>, numpy.array<float>)
+        tuple
+            * active power P
+            * reactive power Q"""
+    P10, Q10, _, __ = _power_props(injections)
+    P10 = P10.copy() / 3 # calculate per phase
+    Q10 = Q10.copy() / 3 # calculate per phase
+    if not pq_factors is None:
+        P10 *= pq_factors[:,0]
+        Q10 *= pq_factors[:,1]
+    def calc_injected_power(Vinj_abs_sqr):
+        """Calculates injected power per injection.
+        
+        Parameters
+        ----------
+        Vinj_abs_sqr: numpy.array, float, shape (n,1)
+            vector of squared voltage-magnitudes at injections, 
+            n: number of injections
+
+        Returns
+        -------
+        tuple
+            * active power P
+            * reactive power Q"""
+        Vsqr = np.array(Vinj_abs_sqr).reshape(-1)
+        return np.array(P10) * Vsqr, np.array(Q10) * Vsqr
+    return calc_injected_power
+
+def _get_original_injected_power_fn(injections, pq_factors=None):
     """Calculates power flowing through injections.
     Injected power is calculated this way
     (P = |V|**Exvp * P10, Q = |V|**Exvq * Q10; with |V| - magnitude of V):
@@ -150,6 +205,57 @@ def get_calc_injected_power_fn(vminsqr, injections, pq_factors=None):
         |   | = |                                             |
         | Q |   | (V_r ** 2 + V_i ** 2) ** (Expvq / 2) * Q_10 |
         +- -+   +-                                           -+
+
+    Parameters
+    ----------
+    injections: pandas.DataFrame
+        * .kp
+        * .P10
+        * .kq
+        * .Q10
+        * .Exp_v_p
+        * .Exp_v_q
+        * .V_abs_sqr
+    pq_factors: numpy.array, float, (nx2)
+        factors for active and reactive power
+    loadcurve: 'original' | 'interpolated' | 'square'
+
+    Returns
+    -------
+    function: (numpy.array<float>) -> (numpy.array<float>, numpy.array<float>)
+        tuple
+            * active power P
+            * reactive power Q"""
+    P10, Q10, Exp_v_p, Exp_v_q = _power_props(injections)
+    P10 = P10.copy() / 3 # calculate per phase
+    Q10 = Q10.copy() / 3 # calculate per phase
+    if not pq_factors is None:
+        P10 *= pq_factors[:,0]
+        Q10 *= pq_factors[:,1]
+    Exp_v_p_half = Exp_v_p.to_numpy() / 2.
+    Exp_v_q_half = Exp_v_q.to_numpy() / 2.
+    def calc_injected_power(Vinj_abs_sqr):
+        """Calculates injected power per injection.
+        
+        Parameters
+        ----------
+        Vinj_abs_sqr: numpy.array, float, shape (n,1)
+            vector of squared voltage-magnitudes at injections, 
+            n: number of injections
+
+        Returns
+        -------
+        tuple
+            * active power P
+            * reactive power Q"""
+        Vsqr = np.array(Vinj_abs_sqr).reshape(-1)
+        Pres = np.array(P10) * np.power(Vsqr, Exp_v_p_half)
+        Qres = np.array(Q10) * np.power(Vsqr, Exp_v_q_half)
+        return Pres, Qres
+    return calc_injected_power
+
+def _get_interpolated_injected_power_fn(vminsqr, injections, pq_factors=None):
+    """Calculates power flowing through injections.
 
     Parameters
     ----------
@@ -167,6 +273,7 @@ def get_calc_injected_power_fn(vminsqr, injections, pq_factors=None):
         * .c3q, .c2q, .c1q, polynomial coefficients for reactive power Q
     pq_factors: numpy.array, float, (nx2)
         factors for active and reactive power
+    loadcurve: 'original' | 'interpolated' | 'square'
 
     Returns
     -------
@@ -218,6 +325,41 @@ def get_calc_injected_power_fn(vminsqr, injections, pq_factors=None):
         Qres[interpolate] *= np.sum(V321 * cinterpolate[:, 3:], axis=1)
         return Pres, Qres
     return calc_injected_power
+
+def get_calc_injected_power_fn(
+        vminsqr, injections, pq_factors=None, loadcurve='original'):
+    """Returns a function calculating power flowing through injections.
+
+    Parameters
+    ----------
+    vminsqr: float
+        upper limit of interpolation, interpolates if |V|² < vminsqr
+    injections: pandas.DataFrame
+        * .kp
+        * .P10
+        * .kq
+        * .Q10
+        * .Exp_v_p
+        * .Exp_v_q
+        * .V_abs_sqr
+        * .c3p, .c2p, .c1p, polynomial coefficients for active power P
+        * .c3q, .c2q, .c1q, polynomial coefficients for reactive power Q
+    pq_factors: numpy.array, float, (nx2)
+        factors for active and reactive power
+    loadcurve: 'original' | 'interpolated' | 'square'
+
+    Returns
+    -------
+    function: (numpy.array<float>) -> (numpy.array<float>, numpy.array<float>)
+        tuple
+            * active power P
+            * reactive power Q"""
+    control_character = loadcurve[:1].lower()
+    if control_character == 's':
+        return _get_squared_injected_power_fn(injections, pq_factors)
+    if control_character == 'o':
+        return _get_original_injected_power_fn(injections, pq_factors)
+    return _get_interpolated_injected_power_fn(vminsqr, injections, pq_factors)
 
 get_injected_power_fn = partial(get_calc_injected_power_fn, _VMINSQR)
 
@@ -320,7 +462,8 @@ def solved(precision, gb, Vnode_ri, Iinj_node_ri):
 
 def calculate_power_flow(
         precision, max_iter, model, 
-        Vslack=None, tappositions=None, Vinit=None, pq_factors=None):
+        Vslack=None, tappositions=None, Vinit=None, 
+        pq_factors=None, loadcurve='original'):
     """Power flow calculating function. The function solves the non-linear
     power flow problem by solving the linear equations Y * U_n+1 = I(U_n) 
     iteratively. U_n+1 is computed from Y and I(U_n). n: index of iteration.
@@ -341,7 +484,9 @@ def calculate_power_flow(
         start value of iteration, node voltage vector
     pq_factors: numpy.array, float, (nx2)
         factors for active and reactive power of loads
-    
+    loadcurve: 'original' | 'interpolated' | 'square'
+        default is 'original', just first letter is used
+        
     Returns
     -------
     tuple
@@ -363,7 +508,8 @@ def calculate_power_flow(
         next_voltage, 
         mnodeinj,
         mnodeinj.T,
-        get_calc_injected_power_fn(_VMINSQR, model.injections, pq_factors), 
+        get_calc_injected_power_fn(
+            _VMINSQR, model.injections, pq_factors, loadcurve), 
         splu(gb),
         model.slacks.index_of_node,
         Vslack_) 

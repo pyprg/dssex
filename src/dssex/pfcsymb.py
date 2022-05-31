@@ -191,11 +191,53 @@ def create_Vvars(count_of_nodes, slacks=_no_slacks):
         decvars=casadi.vertcat(Vre_dec, Vim_dec),
         slack=casadi.vertcat(Vre_slack, Vim_slack))
 
-def get_injected_interpolated_current(
-        V, Vinj_sqr, Mnodeinj, exp_v_p, P10, exp_v_q, Q10):
-    """Interpolates injected current for V < _VMINSQR. Calculates values
-    per node.
-    
+
+def get_injected_squared_current(V, Vinj_sqr, Mnodeinj, P10, Q10):
+    """Calculates current flowing into injections. Returns separate
+    real and imaginary parts.
+    Injected power is calculated this way
+    (P = |V|**Exvp * P10, Q = |V|**Exvq * Q10; with |V| - magnitude of V):
+    ::
+        +- -+   +-                            -+
+        | P |   | (Vre ** 2 + Vim ** 2) * P_10 |
+        |   | = |                              |
+        | Q |   | (Vre ** 2 + Vim ** 2) * Q_10 |
+        +- -+   +-                            -+
+
+    How to calculate current from given complex power and from voltage:
+    ::
+                S_conjugate
+        I_inj = -----------
+                V_conjugate
+
+    How to calculate current with separated real and imaginary parts:
+    ::
+                              +-        -+ -1  +-    -+
+                S_conjugate   |  Vre Vim |     |  P Q |
+        I_inj = ----------- = |          |  *  |      |
+                V_conjugate   | -Vim Vre |     | -Q P |
+                              +-        -+     +-    -+
+
+                                  +-        -+   +-    -+
+                       1          | Vre -Vim |   |  P Q |
+              = --------------- * |          | * |      |
+                Vre**2 + Vim**2   | Vim  Vre |   | -Q P |
+                                  +-        -+   +-    -+
+
+                                   +-              -+
+                          1        |  P Vre + Q Vim |
+        I_inj_ri = --------------- |                |
+                   Vre**2 + Vim**2 | -Q Vre + P Vim |
+                                   +-              -+
+
+    How to calculate injected real and imaginary current from voltage:
+    ::
+        Ire =  (Vre ** 2 + Vim ** 2) * P_10 * Vre
+             + (Vre ** 2 + Vim ** 2) * Q_10 * Vim
+
+        Iim = -(Vre ** 2 + Vim ** 2) * Q_10 * Vre
+             + (Vre ** 2 + Vim ** 2) * P_10 * Vim
+
     Parameters
     ----------
     V: Vvar
@@ -216,24 +258,13 @@ def get_injected_interpolated_current(
     Returns
     -------
     tuple
-        * injected current per node, real part
-        * injected current per node, imaginary part"""
-    # per injection
-    Vinj = casadi.power(Vinj_sqr, 0.5)
-    Vinj_cub = Vinj_sqr * Vinj
-    pc = get_polynomial_coefficients(_VMINSQR, exp_v_p)
-    qc = get_polynomial_coefficients(_VMINSQR, exp_v_q)
-    fpinj = (pc[:,0]*Vinj_cub + pc[:,1]*Vinj_sqr + pc[:,2]*Vinj)
-    fqinj = (qc[:,0]*Vinj_cub + qc[:,1]*Vinj_sqr + qc[:,2]*Vinj) 
-    # per node
-    pnodeexpr = Mnodeinj @ (fpinj * P10)
-    qnodeexpr = Mnodeinj @ (fqinj * Q10)
-    gt_zero = _EPSILON < V.node_sqr
-    Ire_ip = casadi.if_else(
-        gt_zero, (pnodeexpr * V.re + qnodeexpr * V.im) / V.node_sqr, 0.0)
-    Iim_ip = casadi.if_else(
-        gt_zero, (-qnodeexpr * V.re + pnodeexpr * V.im) / V.node_sqr, 0.0)
-    return Ire_ip, Iim_ip
+        * vector of injected current per node, real part
+        * vector of injected current per node, imaginary part"""
+    Gexpr_node = Mnodeinj @ (Vinj_sqr * P10)
+    Bexpr_node = Mnodeinj @ (Vinj_sqr * Q10)
+    Ire =  Gexpr_node * V.re + Bexpr_node * V.im
+    Iim = -Bexpr_node * V.re + Gexpr_node * V.im
+    return Ire, Iim
 
 def get_injected_original_current(
         V, Vinj_sqr, Mnodeinj, exp_v_p, P10, exp_v_q, Q10):
@@ -310,7 +341,52 @@ def get_injected_original_current(
     Iim = -Bexpr_node * V.re + Gexpr_node * V.im
     return Ire, Iim
 
-def get_injected_current(matrix_nodeinj, V, injections, pq_factors=None):
+def get_injected_interpolated_current(
+        V, Vinj_sqr, Mnodeinj, exp_v_p, P10, exp_v_q, Q10):
+    """Interpolates injected current for V < _VMINSQR. Calculates values
+    per node.
+    
+    Parameters
+    ----------
+    V: Vvar
+        casadi.SX vectors for node voltages
+    Vinj_sqr: casadi.SX
+        vector, voltage at injection squared
+    Mnodeinj: casadi.SX
+        matrix
+    exp_v_p: numpy.array, float
+        voltage exponents of active power per injection
+    P10: numpy.array, float
+        active power per injection
+    exp_v_q: numpy.array, float
+        voltage exponents of reactive power per injection
+    Q10: numpy.array, float
+        active power per injection
+        
+    Returns
+    -------
+    tuple
+        * injected current per node, real part
+        * injected current per node, imaginary part"""
+    # per injection
+    Vinj = casadi.power(Vinj_sqr, 0.5)
+    Vinj_cub = Vinj_sqr * Vinj
+    pc = get_polynomial_coefficients(_VMINSQR, exp_v_p)
+    qc = get_polynomial_coefficients(_VMINSQR, exp_v_q)
+    fpinj = (pc[:,0]*Vinj_cub + pc[:,1]*Vinj_sqr + pc[:,2]*Vinj)
+    fqinj = (qc[:,0]*Vinj_cub + qc[:,1]*Vinj_sqr + qc[:,2]*Vinj) 
+    # per node
+    pnodeexpr = Mnodeinj @ (fpinj * P10)
+    qnodeexpr = Mnodeinj @ (fqinj * Q10)
+    gt_zero = _EPSILON < V.node_sqr
+    Ire_ip = casadi.if_else(
+        gt_zero, (pnodeexpr * V.re + qnodeexpr * V.im) / V.node_sqr, 0.0)
+    Iim_ip = casadi.if_else(
+        gt_zero, (-qnodeexpr * V.re + pnodeexpr * V.im) / V.node_sqr, 0.0)
+    return Ire_ip, Iim_ip
+
+def get_injected_current(matrix_nodeinj, V, injections, 
+                         pq_factors=None, loadcurve='original'):
     """Creates a vector of injected node current.
     
     Parameters
@@ -329,24 +405,32 @@ def get_injected_current(matrix_nodeinj, V, injections, pq_factors=None):
         * .Exp_v_q, float, voltage exponent of reactive power
     pq_factors: numpy.array, float, (nx2)
         factors for active and reactive power of loads
+    loadcurve: 'original' | 'interpolated' | 'square'
+        default is 'original', just first letter is used
 
     Returns
     -------
     casadi.SX
         vector, injected current per node (real parts, imaginary parts),
         shape (2*count_of_nodes, 1)"""
+    control_character = loadcurve[:1].lower()
     P10 = injections.P10 / 3 # for one phase only
     Q10 = injections.Q10 / 3 # for one phase only
+    Mnodeinj = casadi.SX(matrix_nodeinj)
+    Vinj_sqr = casadi.transpose(Mnodeinj) @ V.node_sqr # V**2 per injection
     if not pq_factors is None:
         P10 *= pq_factors[:,0]
         Q10 *= pq_factors[:,1]
+    control_character = loadcurve[:1].lower()
+    if control_character == 's':
+        return get_injected_squared_current(V, Vinj_sqr, Mnodeinj, P10, Q10)         
     exp_v_p = injections.Exp_v_p.copy()
     exp_v_q = injections.Exp_v_q.copy()
-    Mnodeinj = casadi.SX(matrix_nodeinj)
-    Vinj_sqr = casadi.transpose(Mnodeinj) @ V.node_sqr # V**2 per injection
-    Ire_ip, Iim_ip = get_injected_interpolated_current(
-        V, Vinj_sqr, Mnodeinj, exp_v_p, P10, exp_v_q, Q10)
     Ire, Iim = get_injected_original_current(
+        V, Vinj_sqr, Mnodeinj, exp_v_p, P10, exp_v_q, Q10)
+    if control_character == 'o':
+        return Ire, Iim
+    Ire_ip, Iim_ip = get_injected_interpolated_current(
         V, Vinj_sqr, Mnodeinj, exp_v_p, P10, exp_v_q, Q10)
     # compose functions from original and interpolated
     interpolate = V.node_sqr < _VMINSQR
@@ -354,7 +438,7 @@ def get_injected_current(matrix_nodeinj, V, injections, pq_factors=None):
     Inode_im = casadi.if_else(interpolate, Iim_ip, Iim)
     return Inode_re, Inode_im    
 
-def build_residual_fn(model, pq_factors=None):
+def build_residual_fn(model, pq_factors=None, loadcurve='original'):
     """Creates function for calculating the residual node current.
     
     Parameters
@@ -363,13 +447,12 @@ def build_residual_fn(model, pq_factors=None):
     
     pq_factors: numpy.array, float, (nx2)
         factors for active and reactive power of loads
+    loadcurve: 'original' | 'interpolated' | 'square'
+        default is 'original', just first letter is used
     
     Returns
     -------
-    tuple
-        * success?, bool
-        * casadi.DM, voltage vector of floats, shape (2n,1), 
-          n real parts followed by n imaginary parts"""
+    casadi.Function"""
     count_of_branch_taps = len(model.branchtaps)
     pos = casadi.SX.sym('pos', count_of_branch_taps)
     # branch gb-matrix, g:conductance, b:susceptance
@@ -380,7 +463,8 @@ def build_residual_fn(model, pq_factors=None):
     # injected current
     injections = model.injections
     Inode_re, Inode_im = get_injected_current(
-        model.mnodeinj, V, injections[~injections.is_slack], pq_factors)
+        model.mnodeinj, V, injections[~injections.is_slack], 
+        pq_factors, loadcurve)
     vslack_var = casadi.SX.sym('Vslack', len(model.slacks), 2)# 0:real, 1:imag
     # modify Inode of slacks
     index_of_slack = model.slacks.index_of_node
@@ -462,7 +546,8 @@ def find_root(
     
 def calculate_power_flow(
         precision, max_iter, model, 
-        Vslack=None, tappositions=None, Vinit=None, pq_factors=None):
+        Vslack=None, tappositions=None, Vinit=None, 
+        pq_factors=None, loadcurve='original'):
     """Power flow calculating function.
     
     Parameters
@@ -482,6 +567,8 @@ def calculate_power_flow(
         real parts then imaginary parts
     pq_factors: numpy.array, float, (nx2)
         factors for active and reactive power of loads
+    loadcurve: 'original' | 'interpolated' | 'square'
+        default is 'original', just first letter is used
     
     Returns
     -------
@@ -491,7 +578,7 @@ def calculate_power_flow(
     Vslack_ = model.slacks.V if Vslack is None else Vslack
     tappositions_ = model.branchtaps.position.copy() \
         if tappositions is None else tappositions
-    fn_Iresidual = build_residual_fn(model, pq_factors)
+    fn_Iresidual = build_residual_fn(model, pq_factors, loadcurve)
     success, voltages = find_root(
         fn_Iresidual, tappositions_, Vslack_, 
         count_of_nodes=model.shape_of_Y[0], Vinit=Vinit)

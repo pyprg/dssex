@@ -70,33 +70,59 @@ from dnadb.ifegrid import decorate_injection_results, decorate_branch_results
 from egrid import model_from_frames
 from egrid.model import _Y_LO_ABS_MAX
 
+from pfcsymb import build_residual_fn
+import casadi
+
 #path = r"C:\UserData\deb00ap2\OneDrive - Siemens AG\Documents\defects\SP7-219086\eus1_loop\eus1_loop.db"
 #path = r"C:\UserData\deb00ap2\OneDrive - Siemens AG\Documents\defects\SP7-219086\eus1_loop"
 #path = r"C:\Users\live\OneDrive\Dokumente\py_projects\data\eus1_loop.db"
 #path = r"K:\Siemens\Power\Temp\DSSE\Subsystem_142423"
 
+
+fv = .8 # voltage
+fl = 2 # loads
+loadcurve = 'sq' # 'original' | 'interpolated' | 'square'
+powerflowfn = cpfsymb # cpfnum | cpfsymb
+
 path = r"D:\eus1_loop"
 frames = egrid_frames(_Y_LO_ABS_MAX, path)
 model = model_from_frames(frames)
-get_injected_power = get_injected_power_fn(model.injections)
-pq_factors = 1. * np.ones((len(model.injections), 2))
+pq_factors = fl * np.ones((len(model.injections), 2))
+
+fn_Iresidual = build_residual_fn(model, pq_factors, loadcurve)
+Vslack = fv * model.slacks.V
+values_of_params = casadi.horzcat(
+    np.real(Vslack), np.imag(Vslack), model.branchtaps.position.copy())
+
+
+
 if len(model.errormessages):
     print(model.errormessages)
 else:
-    fv = 1.1
     Vnode_initial = fv * (
         np.array([1.+0j]*model.shape_of_Y[0], dtype=np.complex128)
         .reshape(-1, 1))
-    Vslack = fv * model.slacks.V
-    success, V = cpfnum(
+    success, V = powerflowfn(
         1e-10, 
         20, 
         model, 
         Vslack=Vslack, 
         Vinit=Vnode_initial, 
-        pq_factors=pq_factors)
+        pq_factors=pq_factors,
+        loadcurve=loadcurve)
     print()
     print('SUCCESS' if success else '_F_A_I_L_E_D_', '\n')
+    
+    Vri = np.concatenate([np.real(V), np.imag(V)]).reshape(-1)
+    res = fn_Iresidual(Vri, values_of_params)
+    Ires_symb = np.hstack(np.split(np.array(res), 2)).view(dtype=np.complex128)
+    print('Ires_symb:\n', Ires_symb, '\n')
+    Ires_symb_max = np.linalg.norm(
+        np.hstack([np.real(Ires_symb[1:]), np.imag(Ires_symb[1:])]).reshape(-1), 
+        np.inf)
+    print('Ires_symb_max: ', Ires_symb_max, '\n')
+    get_injected_power = get_injected_power_fn(
+        model.injections, pq_factors=pq_factors, loadcurve=loadcurve)
     Ires = get_residual_current_fn(
         model, 
         get_injected_power)(V).reshape(-1, 1)
@@ -105,13 +131,13 @@ else:
         np.hstack([np.real(Ires[1:]), np.imag(Ires[1:])]).reshape(-1), 
         np.inf)
     print('Ires_max: ', Ires_max, '\n')
-    names = frames['Names']
     print('V:\n', V, '\n')
-    res = get_results(model, get_injected_power, model.branchtaps.position, V)  
-    result_inj = decorate_injection_results(names, res['injections'])
-    print('Injections:\n', result_inj, '\n')
-    result_br = decorate_branch_results(names, res['branches'])
-    print('Branches:\n', result_br, '\n')
+    # res = get_results(model, get_injected_power, model.branchtaps.position, V)  
+    # names = frames['Names']
+    # result_inj = decorate_injection_results(names, res['injections'])
+    # print('Injections:\n', result_inj, '\n')
+    # result_br = decorate_branch_results(names, res['branches'])
+    # print('Branches:\n', result_br, '\n')
 #%%
 from scipy.optimize import root
 
