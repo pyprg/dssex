@@ -49,58 +49,6 @@ def get_tap_factors(branchtaps, pos):
         pos - branchtaps.positionneutral.to_numpy()))
     return flo, np.power(flo, 2)
 
-def _get_injected_power_per_injection(
-        calculate_injected_power, model, Vnode):
-    """
-    
-    Parameters
-    ----------
-    calculate_injected_power: function
-        (pandas.DataFrame, numpy.array<float>) -> 
-        (numpy.array<float>, numpy.array<float>)
-        (injections, square_of _absolute_node-voltage) ->
-        (active power P, reactive power Q)
-    model: egrid.model.Model
-        model of grid for calculation
-    Vnode: numpy.array
-        complex, voltage per node
-    
-    Returns
-    -------
-    tuple
-        * numpy.array, float, real power per injection
-        * numpy.array, float, imaginary power per injection
-        * numpy.array, float, voltage at per injection"""
-    Vinj = model.mnodeinj.T @ Vnode
-    Vinj_abs_sqr = np.power(np.real(Vinj), 2) + np.power(np.imag(Vinj), 2)
-    return *calculate_injected_power(model.injections, Vinj_abs_sqr), Vinj
-
-def get_injected_current_per_node(calculate_injected_power, model, Vnode):
-    """Calculates injected current per power flow calculation node.
-    
-    Parameters
-    ----------
-    calculate_injected_power: function
-        (pandas.DataFrame, numpy.array<float>) -> 
-        (numpy.array<float>, numpy.array<float>)
-        (injections, square_of _absolute_node-voltage) ->
-        (active power P, reactive power Q)
-    model: egrid.model.Model
-        model of grid for calculation
-    Vnode: numpy.array
-        complex, voltage per node
-    
-    Returns
-    -------
-    numpy.array, complex, injected current per node"""
-    Pinj, Qinj, _ = _get_injected_power_per_injection(
-        calculate_injected_power, model, Vnode)
-    Sinj = (
-        np.hstack([Pinj.reshape(-1, 1), Qinj.reshape(-1, 1)])
-        .view(dtype=np.complex128))
-    # injected current is negative for positve power
-    return -np.conjugate((model.mnodeinj @ Sinj) / Vnode)
-
 def get_y_terms(terms, flo, ftr):
     """Multiplies admittances of branches with factors retrieved
     from tap positions.
@@ -186,26 +134,55 @@ def create_y_matrix(model, pos):
         dtype=np.complex128)
     return vstack([diag.tocsc(), Y.tocsc()[count_of_slacks:, :]])
 
-def create_y_matrix2(model, pos):
-    """Generates admittance matrix of branches without rows for slacks. 
+def _get_injected_power_per_injection(
+        calculate_injected_power, mnodeinjT, Vnode):
+    """
     
     Parameters
     ----------
-    model: egrid.model.Model
-        model of grid for calculation
-    pos: numpy.array, int
-        vector of position, one variable for each terminal with taps
+    calculate_injected_power: function
+        (numpy.array<float>) -> (numpy.array<float>, numpy.array<float>)
+        (square_of_absolute_node-voltage) -> (active power P, reactive power Q)
+    mnodeinjT: scipy.sparse.Matrix
+        X_per_injection = mnodeinjT * X_per_node
+    Vnode: numpy.array
+        complex, voltage per node
     
     Returns
     -------
-    scipy.sparse.matrix"""
-    flo, ftr = get_tap_factors(model.branchtaps, pos)
-    count_of_nodes = model.shape_of_Y[0]
-    terms = (
-        model.branchterminals[~model.branchterminals.is_bridge].reset_index())
-    Y = create_y(terms, count_of_nodes, flo, ftr)
-    count_of_slacks = model.count_of_slacks
-    return Y.tocsc()[count_of_slacks:, :]
+    tuple
+        * numpy.array, float, real power per injection
+        * numpy.array, float, imaginary power per injection
+        * numpy.array, float, voltage at per injection"""
+    Vinj = mnodeinjT @ Vnode
+    Vinj_abs_sqr = np.power(np.real(Vinj), 2) + np.power(np.imag(Vinj), 2)
+    return *calculate_injected_power(Vinj_abs_sqr), Vinj
+
+def get_injected_current_per_node(calculate_injected_power, model, Vnode):
+    """Calculates injected current per power flow calculation node.
+    
+    Parameters
+    ----------
+    calculate_injected_power: function
+        (numpy.array<float>) -> 
+        (numpy.array<float>, numpy.array<float>)
+        (square_of _absolute_node-voltage) ->
+        (active power P, reactive power Q)
+    model: egrid.model.Model
+        model of grid for calculation
+    Vnode: numpy.array
+        complex, voltage per node
+    
+    Returns
+    -------
+    numpy.array, complex, injected current per node"""
+    Pinj, Qinj, _ = _get_injected_power_per_injection(
+        calculate_injected_power, model.mnodeinj.T, Vnode)
+    Sinj = (
+        np.hstack([Pinj.reshape(-1, 1), Qinj.reshape(-1, 1)])
+        .view(dtype=np.complex128))
+    # injected current is negative for positve power
+    return -np.conjugate((model.mnodeinj @ Sinj) / Vnode)
 
 def get_injection_results(calculate_injected_power, model, Vnode):
     """Returns active and reactive power in pu for given node voltages.
@@ -226,7 +203,7 @@ def get_injection_results(calculate_injected_power, model, Vnode):
     df = model.injections.loc[
         :, ['id', 'Exp_v_p', 'Exp_v_q', 'P10', 'Q10']]
     df['P_pu'], df['Q_pu'], Vinj = _get_injected_power_per_injection(
-        calculate_injected_power, model, Vnode)
+        calculate_injected_power, model.mnodeinj.T, Vnode)
     df['V_pu'] = np.abs(Vinj)
     df['P_pu'] *= 3
     df['Q_pu'] *= 3
@@ -400,6 +377,10 @@ def get_results(model, get_injected_power, tappositions, Vnode):
     branches = get_branch_results(model, Vnode, tappositions)
     return {'injections': injections, 'branches': branches}
 
+#
+# root finding with slack data in the admittance matrix
+#
+
 def get_residual_current(model, get_injected_power, Y, Vnode):
     """Calculates the complex residual current per node.
     
@@ -408,10 +389,8 @@ def get_residual_current(model, get_injected_power, Y, Vnode):
     model: egrid.model.Model
         model of grid for calculation
     get_injected_power: function 
-        (pandas.DataFrame, numpy.array<float>) -> 
-        (numpy.array<float>, numpy.array<float>)
-        (injections, square_of _absolute_node-voltage) ->
-        (active power P, reactive power Q)
+        (numpy.array<float>) -> (numpy.array<float>, numpy.array<float>)
+        (square_of_absolute_node-voltage) -> (active power P, reactive power Q)
     tappositions: array_like, int
         positions of taps
     Vnode: array_like, complex
@@ -434,10 +413,8 @@ def get_residual_current_fn(model, get_injected_power, tappositions=None):
     model: egrid.model.Model
         model of grid for calculation
     get_injected_power: function 
-        (pandas.DataFrame, numpy.array<float>) -> 
-        (numpy.array<float>, numpy.array<float>)
-        (injections, square_of _absolute_node-voltage) ->
-        (active power P, reactive power Q)
+        (numpy.array<float>) -> (numpy.array<float>, numpy.array<float>)
+        (square_of_absolute_node-voltage) -> (active power P, reactive power Q)
     tappositions: array_like, int
         positions of taps
     
@@ -451,6 +428,32 @@ def get_residual_current_fn(model, get_injected_power, tappositions=None):
     Y = create_y_matrix(model, tappositions_).tocsc()
     return partial(get_residual_current, model, get_injected_power, Y)
 
+#
+# root finding without slack data in the admittance matrix
+#
+
+def create_y_matrix2(model, pos):
+    """Generates admittance matrix of branches without rows for slacks. 
+    Should return a symmetric matrix.
+    
+    Parameters
+    ----------
+    model: egrid.model.Model
+        model of grid for calculation
+    pos: numpy.array, int
+        vector of position, one variable for each terminal with taps
+    
+    Returns
+    -------
+    scipy.sparse.matrix"""
+    flo, ftr = get_tap_factors(model.branchtaps, pos)
+    count_of_nodes = model.shape_of_Y[0]
+    terms = (
+        model.branchterminals[~model.branchterminals.is_bridge].reset_index())
+    Y = create_y(terms, count_of_nodes, flo, ftr)
+    count_of_slacks = model.count_of_slacks
+    return Y.tocsc()[count_of_slacks:, :]
+
 def get_residual_current2(model, get_injected_power, Vslack, Y, Vnode):
     """Calculates the complex residual current per node without slack nodes.
     
@@ -459,10 +462,8 @@ def get_residual_current2(model, get_injected_power, Vslack, Y, Vnode):
     model: egrid.model.Model
         model of grid for calculation
     get_injected_power: function 
-        (pandas.DataFrame, numpy.array<float>) -> 
-        (numpy.array<float>, numpy.array<float>)
-        (injections, square_of _absolute_node-voltage) ->
-        (active power P, reactive power Q)
+        (numpy.array<float>) -> (numpy.array<float>, numpy.array<float>)
+        (square_of_absolute_node-voltage) -> (active power P, reactive power Q)
     Vslack: numpy.array
         complex, voltages at slack nodes
     tappositions: array_like, int
@@ -491,10 +492,8 @@ def get_residual_current_fn2(
     model: egrid.model.Model
         model of grid for calculation
     get_injected_power: function 
-        (pandas.DataFrame, numpy.array<float>) -> 
-        (numpy.array<float>, numpy.array<float>)
-        (injections, square_of _absolute_node-voltage) ->
-        (active power P, reactive power Q)
+        (numpy.array<float>) -> (numpy.array<float>, numpy.array<float>)
+        (square_of_absolute_node-voltage) -> (active power P, reactive power Q)
     Vslack: array_like
         complex, voltages at slack nodes
     tappositions: array_like, int

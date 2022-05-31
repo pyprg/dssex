@@ -7,9 +7,6 @@ Created on Sat Mar 26 11:49:05 2022
 import casadi
 import numpy as np
 from collections import namedtuple
-from dnadb import egrid_frames
-from egrid import model_from_frames
-from egrid.model import _Y_LO_ABS_MAX
 from injections import get_polynomial_coefficients
 
 # square of voltage magnitude, minimum value for load curve, 
@@ -313,7 +310,7 @@ def get_injected_original_current(
     Iim = -Bexpr_node * V.re + Gexpr_node * V.im
     return Ire, Iim
 
-def get_injected_current(matrix_nodeinj, V, injections, loadfactor=1.):
+def get_injected_current(matrix_nodeinj, V, injections, pq_factors=None):
     """Creates a vector of injected node current.
     
     Parameters
@@ -330,17 +327,21 @@ def get_injected_current(matrix_nodeinj, V, injections, loadfactor=1.):
         * .Q10, float, reactive power at |V| = 1.0 pu, sum of all 3 phases
         * .Exp_v_p, float, voltage exponent of active power
         * .Exp_v_q, float, voltage exponent of reactive power
+    pq_factors: numpy.array, float, (nx2)
+        factors for active and reactive power of loads
+
     Returns
     -------
     casadi.SX
         vector, injected current per node (real parts, imaginary parts),
         shape (2*count_of_nodes, 1)"""
-    P10 = loadfactor * injections.P10 / 3 # for one phase only
-    Q10 = loadfactor * injections.Q10 / 3 # for one phase only
+    P10 = injections.P10 / 3 # for one phase only
+    Q10 = injections.Q10 / 3 # for one phase only
+    if not pq_factors is None:
+        P10 *= pq_factors[:,0]
+        Q10 *= pq_factors[:,1]
     exp_v_p = injections.Exp_v_p.copy()
     exp_v_q = injections.Exp_v_q.copy()
-    # exp_v_p.loc[:] = 0.
-    # exp_v_q.loc[:] = 0.
     Mnodeinj = casadi.SX(matrix_nodeinj)
     Vinj_sqr = casadi.transpose(Mnodeinj) @ V.node_sqr # V**2 per injection
     Ire_ip, Iim_ip = get_injected_interpolated_current(
@@ -353,14 +354,15 @@ def get_injected_current(matrix_nodeinj, V, injections, loadfactor=1.):
     Inode_im = casadi.if_else(interpolate, Iim_ip, Iim)
     return Inode_re, Inode_im    
 
-def build_residual_fn(model, loadfactor=1.):
+def build_residual_fn(model, pq_factors=None):
     """Creates function for calculating the residual node current.
     
     Parameters
     ----------
     model: egrid.model.Model
     
-    loadfactor: float
+    pq_factors: numpy.array, float, (nx2)
+        factors for active and reactive power of loads
     
     Returns
     -------
@@ -378,7 +380,7 @@ def build_residual_fn(model, loadfactor=1.):
     # injected current
     injections = model.injections
     Inode_re, Inode_im = get_injected_current(
-        model.mnodeinj, V, injections[~injections.is_slack], loadfactor)
+        model.mnodeinj, V, injections[~injections.is_slack], pq_factors)
     vslack_var = casadi.SX.sym('Vslack', len(model.slacks), 2)# 0:real, 1:imag
     # modify Inode of slacks
     index_of_slack = model.slacks.index_of_node
@@ -393,7 +395,7 @@ def build_residual_fn(model, loadfactor=1.):
     # create node current function
     return casadi.Function('fn_Iresidual', [V.reim, param], [Ires])
 
-def build_objective(model, gb_matrix, V, count_of_slacks, loadfactor=1.):
+def build_objective(model, gb_matrix, V, count_of_slacks, pq_factors=None):
     """Creates expression for solving the power flow problem by minimization.
     
     Parameters
@@ -406,7 +408,8 @@ def build_objective(model, gb_matrix, V, count_of_slacks, loadfactor=1.):
         node voltages
     count_of_slacks: int
         number of slack-nodes
-    loadfactor: float
+    pq_factors: numpy.array, float, (nx2)
+        factors for active and reactive power of loads
     
     Returns
     -------
@@ -414,7 +417,7 @@ def build_objective(model, gb_matrix, V, count_of_slacks, loadfactor=1.):
     # injected current
     injections = model.injections
     Inode_re, Inode_im = get_injected_current(
-        model.mnodeinj, V, injections[~injections.is_slack], loadfactor)
+        model.mnodeinj, V, injections[~injections.is_slack], pq_factors)
     # equation for root finding
     I = casadi.vertcat(Inode_re, Inode_im)[count_of_slacks:, :]
     Ires = ((gb_matrix[count_of_slacks:, :] @ V.reim) + I)
@@ -444,24 +447,22 @@ def find_root(
         * success?, bool
         * casadi.DM, voltage vector of floats, shape (2n,1), 
           n real parts followed by n imaginary parts"""
-    if not Vinit is None:
-        Vstart = np.vstack([np.real(Vinit), np.imag(Vinit)])
-    else:
-        Vstart = (
-            np.array([1.]*count_of_nodes + [0.]*count_of_nodes)
-            .reshape(-1, 1))
+    Vinit_ = (
+        np.vstack([np.real(Vinit), np.imag(Vinit)]) 
+        if not Vinit is None else
+        np.array([1.]*count_of_nodes + [0.]*count_of_nodes).reshape(-1, 1))
     values_of_params = casadi.horzcat(
         np.real(Vslack), np.imag(Vslack), tappositions)
     #rf = casadi.rootfinder('rf', 'nlpsol', fn_Iresidual, {'nlpsol':'ipopt'})
     rf = casadi.rootfinder('rf', 'newton', fn_Iresidual)
     try:
-        return True, rf(Vstart, values_of_params)
+        return True, rf(Vinit_, values_of_params)
     except:
-        return False, casadi.DB(Vstart)
+        return False, casadi.DB(Vinit_)
     
 def calculate_power_flow(
         precision, max_iter, model, 
-        Vslack=None, tappositions=None, Vinit=None):
+        Vslack=None, tappositions=None, Vinit=None, pq_factors=None):
     """Power flow calculating function.
     
     Parameters
@@ -479,83 +480,19 @@ def calculate_power_flow(
     Vinit: array_like, float
         start value of iteration, node voltage vector, 
         real parts then imaginary parts
+    pq_factors: numpy.array, float, (nx2)
+        factors for active and reactive power of loads
     
     Returns
     -------
     tuple
         * bool, success?
-        * array_like, float, node voltages, real parts then imaginary parts
-        * None"""
+        * array_like, float, node voltages, real parts then imaginary parts"""
     Vslack_ = model.slacks.V if Vslack is None else Vslack
     tappositions_ = model.branchtaps.position.copy() \
         if tappositions is None else tappositions
-    fn_Iresidual = build_residual_fn(model, loadfactor=1.)
+    fn_Iresidual = build_residual_fn(model, pq_factors)
     success, voltages = find_root(
-            fn_Iresidual, tappositions_, Vslack_, 
-            count_of_nodes=model.shape_of_Y[0], Vinit=Vinit)
+        fn_Iresidual, tappositions_, Vslack_, 
+        count_of_nodes=model.shape_of_Y[0], Vinit=Vinit)
     return success, np.hstack(np.vsplit(voltages, 2)).view(dtype=np.complex128)
-
-# # model
-# path = r"C:\Users\live\OneDrive\Dokumente\py_projects\data\eus1_loop.db"
-# #path = r"C:\UserData\deb00ap2\OneDrive - Siemens AG\Documents\defects\SP7-219086\eus1_loop\eus1_loop.db"
-# frames = egrid_frames(_Y_LO_ABS_MAX, path)
-# model = model_from_frames(frames)
-
-
-# success, Vnode, _ = calculate_power_flow(1e-10, 20, model)
-
-# print("\nSUCCESS" if success else "\n- F A I L E D -")
-# if success:
-#     Vcalc = np.array(
-#         casadi.hcat(
-#             casadi.vertsplit(
-#                 Vnode, [0, Vnode.size1()//2, Vnode.size1()])))
-#     Vcomp = Vcalc.view(dtype=np.complex128)
-#     print()
-#     print('V: ', Vcomp)
-    
-    
-#     from src.dssex.util import get_results
-#     from dnadb.ifegrid import \
-#         decorate_injection_results, decorate_branch_results    
-#     from pfcnum import get_injected_power    
-#     res = get_results(
-#         model, get_injected_power, model.branchtaps.position, Vcomp)
-#     names = frames['Names']
-#     result_inj = decorate_injection_results(names, res['injections'])
-#     print(result_inj)
-#     result_br = decorate_branch_results(names, res['branches'])
-#     print(result_br)
-   
-    
-# #%%
-# count_of_nodes = model.shape_of_Y[0]
-# pos = casadi.SX.sym('pos', len(model.branchtaps), 1)
-# gb_matrix = create_gb_matrix(model, pos)
-# count_of_slacks = len(model.slacks)
-# vslack_var = casadi.SX.sym('Vslack', count_of_slacks, 2) # 0:real, 1:imag
-# V = create_Vvars(count_of_nodes, vslack_var)
-# objective = build_objective(
-#     model, gb_matrix, V, count_of_slacks, loadfactor=1.0)    
-# param = casadi.vertcat(V.slack, pos)
-# nlp={'x': V.decvars, 'f': objective, 'p': param}
-# solver = casadi.nlpsol('solver', 'ipopt', nlp)
-# count_of_decvars = count_of_nodes - count_of_slacks
-# initial_values = [1.] * count_of_decvars + [0.] * count_of_decvars
-# Vslack = model.slacks.V
-# values_of_params = np.vstack([np.real(Vslack), np.imag(Vslack), model.branchtaps.position])
-# r = solver(
-#     x0=initial_values,
-#     lbx=0.7, ubx=1.1,
-#     p=values_of_params)
-# success = solver.stats()['success']
-# print("\nSUCCESS" if success else "\n- F A I L E D -")
-# if success:
-#     voltages = r['x']
-#     Vcalc = np.array(
-#         casadi.hcat(
-#             casadi.vertsplit(
-#                 voltages, [0, count_of_decvars, 2 * count_of_decvars])))
-#     Vcomp = Vcalc.view(dtype=np.complex128)
-#     print()
-#     print('V: ', Vcomp)
