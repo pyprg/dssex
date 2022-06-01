@@ -423,6 +423,43 @@ def get_residual_current_fn(model, get_injected_power, tappositions=None):
     Y = create_y_matrix(model, tappositions_).tocsc()
     return partial(get_residual_current, model, get_injected_power, Y)
 
+def eval_residual_current(
+        model, get_injected_power, tappositions=None, V=None):
+    """Convenience function for evaluation of a power flow calculation result.
+    Calls function get_residual_current_fn and get_residual_current
+    
+    Parameters
+    ----------
+    model: egrid.model.Model
+        model of grid for calculation
+    get_injected_power: function 
+        (numpy.array<float>) -> (numpy.array<float>, numpy.array<float>)
+        (square_of_absolute_node-voltage) -> (active power P, reactive power Q)
+    tappositions: array_like, int
+        positions of taps
+    Vnode: array_like, complex
+        node voltage vector
+    
+    Returns
+    -------
+    numpy.array
+        complex, residual of node current"""
+    return get_residual_current_fn(model, get_injected_power)(V).reshape(-1, 1)
+
+def max_ri(cx_array):
+    """Calculates infinity norm from real and imaginary parts.
+    
+    Parameters
+    ----------
+    cx_array: numpy.array
+        complex
+        
+    Returns
+    -------
+    float"""
+    cx = cx_array.reshape(-1)
+    return np.linalg.norm(np.hstack([np.real(cx), np.imag(cx)]), np.inf)
+
 #
 # root finding without slack data in the admittance matrix
 #

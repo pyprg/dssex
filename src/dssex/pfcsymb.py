@@ -559,12 +559,12 @@ def find_root(
         np.array([1.]*count_of_nodes + [0.]*count_of_nodes).reshape(-1, 1))
     values_of_params = casadi.horzcat(
         np.real(Vslack), np.imag(Vslack), tappositions)
-    #rf = casadi.rootfinder('rf', 'nlpsol', fn_Iresidual, {'nlpsol':'ipopt'})
-    rf = casadi.rootfinder('rf', 'newton', fn_Iresidual)
+    rf = casadi.rootfinder('rf', 'nlpsol', fn_Iresidual, {'nlpsol':'ipopt'})
+    #rf = casadi.rootfinder('rf', 'newton', fn_Iresidual)
     try:
         return True, rf(Vinit_, values_of_params)
     except:
-        return False, casadi.DB(Vinit_)
+        return False, casadi.DM(Vinit_)
     
 def calculate_power_flow(
         precision, max_iter, model, 
@@ -605,3 +605,28 @@ def calculate_power_flow(
         fn_Iresidual, tappositions_, Vslack_, 
         count_of_nodes=model.shape_of_Y[0], Vinit=Vinit)
     return success, np.hstack(np.vsplit(voltages, 2)).view(dtype=np.complex128)
+    
+def eval_residual_current(
+        model, pq_factors=None, loadcurve=None, 
+        tappositions=None, Vslack=None, V=None):
+    """Function for evaluating a power flow solution. Calculates
+    the complex residual node current.
+    
+    Parameters
+    ----------
+    
+    
+    Returns
+    -------
+    numpy.array
+        complex"""
+    tappositions_ = (
+        model.branchtaps.position.copy()
+        if tappositions is None else tappositions)
+    Vslack_ = model.slacks.V if Vslack is None else Vslack
+    values_of_params = casadi.horzcat(
+        np.real(Vslack_), np.imag(Vslack_), tappositions_)
+    Vri = V.view(dtype=np.float64).T.reshape(-1)
+    fn_Iresidual = build_residual_fn(model, pq_factors, loadcurve)
+    res = fn_Iresidual(Vri, values_of_params)
+    return np.hstack(np.split(np.array(res), 2)).view(dtype=np.complex128)
