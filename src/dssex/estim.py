@@ -27,7 +27,7 @@ from operator import itemgetter
 from collections import namedtuple
 from egrid.builder import DEFAULT_FACTOR_ID, defk, Loadfactor
 from egrid.model import get_pfc_nodes
-from injections import add_interpol_coeff_to_injections
+from src.dssex.injections import add_interpol_coeff_to_injections
 # helper
 
 # square of voltage magnitude, minimum value for load curve, 

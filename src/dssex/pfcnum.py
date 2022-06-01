@@ -315,12 +315,10 @@ def _get_interpolated_injected_power_fn(vminsqr, injections, pq_factors=None):
         Pres[~interpolate] *= np.power(Vsqr_orig, Exp_v_p_half[~interpolate])
         Qres[~interpolate] *= np.power(Vsqr_orig, Exp_v_q_half[~interpolate])
         # polynomial interpolated
-        Vsqr_inter = Vinj_abs_sqr2[interpolate]
+        Vsqr_inter = Vinj_abs_sqr2[interpolate].reshape(-1, 1)
         cinterpolate = coeffs[interpolate]
         V_abs = np.power(Vsqr_inter, .5)
-        V321 = (
-            np.hstack([Vsqr_inter * V_abs, Vsqr_inter, V_abs])
-            .reshape(-1, 3))
+        V321 = np.hstack([Vsqr_inter * V_abs, Vsqr_inter, V_abs])
         Pres[interpolate] *= np.sum(V321 * cinterpolate[:, :3], axis=1)
         Qres[interpolate] *= np.sum(V321 * cinterpolate[:, 3:], axis=1)
         return Pres, Qres

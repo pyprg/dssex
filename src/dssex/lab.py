@@ -51,19 +51,19 @@ model_devices = [
         )]
 
 model = make_model(model_devices)
-get_injected_power = get_injected_power_fn(model.injections)
+get_injected_power = get_injected_power_fn(model.injections, loadcurve='square')
 pq_factors = np.ones((len(model.injections), 2))
 if len(model.errormessages):
     print(model.errormessages)
 else:
-    success, V = cpfnum(1e-10, 20, model)
+    success, V = cpfsymb(1e-10, 20, model)
     print('SUCCESS' if success else '_F_A_I_L_E_D_')
     Ires = get_residual_current_fn(model, get_injected_power)(V)
-    print('Ires: ', Ires)
-    print('V: ', pd.DataFrame(V, columns=['V']))
+    print('\nIres:\n', Ires)
+    print('\nV:\n', pd.DataFrame(V, columns=['V']))
     res = get_results(model, get_injected_power, model.branchtaps.position, V)  
-    print(res['injections'])
-    print(res['branches'])  
+    print('\ninjections:\n', res['injections'])
+    print('\nbranches:\n', res['branches'])  
 #%%
 from dnadb import egrid_frames
 from dnadb.ifegrid import decorate_injection_results, decorate_branch_results
@@ -80,44 +80,44 @@ import casadi
 #path = r"K:\Siemens\Power\Temp\DSSE\Subsystem_142423"
 
 
-fv = .8 # voltage
-fl = 2 # loads
-loadcurve = 'sq' # 'original' | 'interpolated' | 'square'
+fv = 1. # voltage
+fl = 2.9 # loads
+loadcurve = 'square' # 'original' | 'interpolated' | 'square'
 powerflowfn = cpfsymb # cpfnum | cpfsymb
 
 path = r"D:\eus1_loop"
 frames = egrid_frames(_Y_LO_ABS_MAX, path)
 model = model_from_frames(frames)
 pq_factors = fl * np.ones((len(model.injections), 2))
-calc_Inode_inj = build_injected_current_fn(model, pq_factors, loadcurve)
 
 
 fn_Iresidual = build_residual_fn(model, pq_factors, loadcurve)
+# num
+get_injected_power = get_injected_power_fn(
+    model.injections, pq_factors=pq_factors, loadcurve=loadcurve)
 
 
 #
 # check current calculaiton function
 #
 
-fVprobe = 1.
+# fVprobe = 0.4 # 0.8944271909999159
+# Vprobe = fVprobe * (
+#         np.array([1.+0j]*model.shape_of_Y[0], dtype=np.complex128))
+# # symb
+# calc_Inode_inj = build_injected_current_fn(model, pq_factors, loadcurve)
+# Vprobe_ri = np.concatenate([np.real(Vprobe), np.imag(Vprobe)]).reshape(-1)
+# Inode_inj_ri = np.array(calc_Inode_inj(Vprobe_ri))
+# Inode_inj = np.hstack(np.split(Inode_inj_ri, 2)).view(dtype=np.complex128)
+# print('\nInode_inj:\n', Inode_inj)
+# # util
+# Inode_inj2 = get_injected_current_per_node(
+#     get_injected_power, model, Vprobe.reshape(-1, 1))
+# print('\nInode_inj2:\n', Inode_inj2)
+
 Vslack = fv * model.slacks.V
 values_of_params = casadi.horzcat(
     np.real(Vslack), np.imag(Vslack), model.branchtaps.position.copy())
-Vprobe = fVprobe * (
-        np.array([1.+0j]*model.shape_of_Y[0], dtype=np.complex128))
-# symb
-Vprobe_ri = np.concatenate([np.real(Vprobe), np.imag(Vprobe)]).reshape(-1)
-Inode_inj_ri = np.array(calc_Inode_inj(Vprobe_ri))
-Inode_inj = np.hstack(np.split(Inode_inj_ri, 2)).view(dtype=np.complex128)
-print('\nInode_inj:\n', Inode_inj)
-# num
-get_injected_power = get_injected_power_fn(
-    model.injections, pq_factors=pq_factors, loadcurve=loadcurve)
-# util
-Inode_inj2 = get_injected_current_per_node(get_injected_power, model, Vprobe.reshape(-1, 1))
-print('\nInode_inj2:\n', Inode_inj2)
-
-#%%
 if len(model.errormessages):
     print(model.errormessages)
 else:

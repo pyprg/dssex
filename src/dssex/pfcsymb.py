@@ -195,13 +195,13 @@ def get_injected_squared_current(V, Vinj_sqr, Mnodeinj, P10, Q10):
     """Calculates current flowing into injections. Returns separate
     real and imaginary parts.
     Injected power is calculated this way
-    (P = |V|**Exvp * P10, Q = |V|**Exvq * Q10; with |V| - magnitude of V):
+    (P = |V|**2 * P10, Q = |V|**2 * Q10; with |V| - magnitude of V):
     ::
-        +- -+   +-                            -+
-        | P |   | (Vre ** 2 + Vim ** 2) * P_10 |
-        |   | = |                              |
-        | Q |   | (Vre ** 2 + Vim ** 2) * Q_10 |
-        +- -+   +-                            -+
+        +- -+   +-                           -+
+        | P |   | (Vre ** 2 + Vim ** 2) * P10 |
+        |   | = |                             |
+        | Q |   | (Vre ** 2 + Vim ** 2) * Q10 |
+        +- -+   +-                           -+
 
     How to calculate current from given complex power and from voltage:
     ::
@@ -231,11 +231,8 @@ def get_injected_squared_current(V, Vinj_sqr, Mnodeinj, P10, Q10):
 
     How to calculate injected real and imaginary current from voltage:
     ::
-        Ire =  (Vre ** 2 + Vim ** 2) * P_10 * Vre
-             + (Vre ** 2 + Vim ** 2) * Q_10 * Vim
-
-        Iim = -(Vre ** 2 + Vim ** 2) * Q_10 * Vre
-             + (Vre ** 2 + Vim ** 2) * P_10 * Vim
+        Ire =  P10 * Vre + Q10 * Vim
+        Iim = -Q10 * Vre + P10 * Vim
 
     Parameters
     ----------
@@ -259,10 +256,10 @@ def get_injected_squared_current(V, Vinj_sqr, Mnodeinj, P10, Q10):
     tuple
         * vector of injected current per node, real part
         * vector of injected current per node, imaginary part"""
-    Gexpr_node = Mnodeinj @ (Vinj_sqr * P10)
-    Bexpr_node = Mnodeinj @ (Vinj_sqr * Q10)
-    Ire =  Gexpr_node * V.re + Bexpr_node * V.im
-    Iim = -Bexpr_node * V.re + Gexpr_node * V.im
+    Gexpr_node = Mnodeinj @ P10
+    Bexpr_node = Mnodeinj @ Q10
+    Ire =  (Gexpr_node * V.re) + (Bexpr_node * V.im)
+    Iim = (-Bexpr_node * V.re) + (Gexpr_node * V.im)
     return Ire, Iim
 
 def get_injected_original_current(
@@ -272,11 +269,11 @@ def get_injected_original_current(
     Injected power is calculated this way
     (P = |V|**Exvp * P10, Q = |V|**Exvq * Q10; with |V| - magnitude of V):
     ::
-        +- -+   +-                                           -+
-        | P |   | (Vre ** 2 + Vim ** 2) ** (Expvp / 2) * P_10 |
-        |   | = |                                             |
-        | Q |   | (Vre ** 2 + Vim ** 2) ** (Expvq / 2) * Q_10 |
-        +- -+   +-                                           -+
+        +- -+   +-                                          -+
+        | P |   | (Vre ** 2 + Vim ** 2) ** (Expvp / 2) * P10 |
+        |   | = |                                            |
+        | Q |   | (Vre ** 2 + Vim ** 2) ** (Expvq / 2) * Q10 |
+        +- -+   +-                                          -+
 
     How to calculate current from given complex power and from voltage:
     ::
@@ -306,11 +303,11 @@ def get_injected_original_current(
 
     How to calculate injected real and imaginary current from voltage:
     ::
-        Ire =  (Vre ** 2 + Vim ** 2) ** (Expvp / 2 - 1) * P_10 * Vre
-             + (Vre ** 2 + Vim ** 2) ** (Expvq / 2 - 1) * Q_10 * Vim
+        Ire =  (Vre ** 2 + Vim ** 2) ** (Expvp / 2 - 1) * P10 * Vre
+             + (Vre ** 2 + Vim ** 2) ** (Expvq / 2 - 1) * Q10 * Vim
 
-        Iim = -(Vre ** 2 + Vim ** 2) ** (Expvq / 2 - 1) * Q_10 * Vre
-             + (Vre ** 2 + Vim ** 2) ** (Expvp / 2 - 1) * P_10 * Vim
+        Iim = -(Vre ** 2 + Vim ** 2) ** (Expvq / 2 - 1) * Q10 * Vre
+             + (Vre ** 2 + Vim ** 2) ** (Expvp / 2 - 1) * P10 * Vim
 
     Parameters
     ----------

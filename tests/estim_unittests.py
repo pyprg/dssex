@@ -23,9 +23,6 @@ import unittest
 import src.dssex as dssex
 import src.dssex.estim as estim
 
-
-dssex.print_power_flow()
-
 class Estim(unittest.TestCase):
     pass    
 

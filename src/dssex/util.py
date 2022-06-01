@@ -177,8 +177,7 @@ def get_injected_current_per_node(calculate_injected_power, model, Vnode):
     Sinj = (
         np.hstack([Pinj.reshape(-1, 1), Qinj.reshape(-1, 1)])
         .view(dtype=np.complex128))
-    # injected current is negative for positve power
-    return -np.conjugate((model.mnodeinj @ Sinj) / Vnode)
+    return np.conjugate((model.mnodeinj @ Sinj) / Vnode)
 
 def get_injection_results(calculate_injected_power, model, Vnode):
     """Returns active and reactive power in pu for given node voltages.
@@ -399,7 +398,7 @@ def get_residual_current(model, get_injected_power, Y, Vnode):
     V_ =  Vnode.reshape(-1, 1)
     Inode = Y @ V_
     Iinj = get_injected_current_per_node(get_injected_power, model, V_)
-    return (Inode - Iinj).reshape(-1)
+    return (Inode + Iinj).reshape(-1)
 
 def get_residual_current_fn(model, get_injected_power, tappositions=None):
     """Parameterizes function get_residual_current.
@@ -477,7 +476,7 @@ def get_residual_current2(model, get_injected_power, Vslack, Y, Vnode):
     Iinj = (
         get_injected_current_per_node(get_injected_power, model, V_)
         [count_of_slacks:])
-    return (Inode - Iinj).reshape(-1)
+    return (Inode + Iinj).reshape(-1)
 
 def get_residual_current_fn2(
         model, get_injected_power, Vslack=None, tappositions=None):

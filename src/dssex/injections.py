@@ -53,33 +53,32 @@ def get_coefficients(x, y, dydx_0, dydx):
     x_sqr = x * x
     x_cub = x * x_sqr
     cm = np.array([
-        [   x_cub, x_sqr,  x],
-        [      0.,    0., 1.],
-        [3.*x_sqr,  2.*x, 1.]])
+        [   x_cub, x_sqr,  x],  # f(x1)
+        [      0.,    0., 1.],  # df(x0)/dx
+        [3.*x_sqr,  2.*x, 1.]]) # df(x1)/dx
     return solve(cm, np.array([y, dydx_0, dydx]))
 
-def calc_dpower_dvsqr(v_sqr, _2p):
-    """Calculates the derivative of exponential power function at v_sqr.
+def calc_dx(x, exp):
+    """Calculates the derivative of exponential power function at x.
     
     Parameters
     ----------
-    v_sqr: float
-        square of voltage magnitude
-    _2p: float
-        double of voltage exponent
+    x: float
+        magnitude
+    exp: float
+        exponent
     
     Returns
     -------
     float"""
-    p = _2p/2
-    return p * np.power(v_sqr, p-1)
+    return exp * np.power(x, exp-1)
 
-def get_polynomial_coefficients(ul, exp):
+def get_polynomial_coefficients(x1, exp):
     """Calculates coefficients of polynomials for interpolation.
     
     Parameters
     ----------
-    ul: float
+    x1: float
         upper limit of interpolation range
     exp: numpy.array
         float, exponents of function 'load over voltage'
@@ -89,8 +88,45 @@ def get_polynomial_coefficients(ul, exp):
     numpy.array
         float, shape(n,3)"""
     return np.vstack([
-        get_coefficients(ul, 1., 1., dp)
-        for dp in calc_dpower_dvsqr(ul, exp)])
+        get_coefficients(x1, y1, 1., dx) 
+        for y1, dx in zip(np.power(x1, exp), calc_dx(x1, exp))])
+
+def polynome(x1, exp, x):
+    """Function for checking the polynome.
+    
+    Parameters
+    ----------
+    x1: float
+        coordinate at which y1 = x1**exp
+    exp: float
+        exponent of original function
+    x: float
+        value to calculate y for"""
+    xsqr = x*x
+    coeffs = get_coefficients(
+        x1, 
+        x1**exp, 1., 
+        calc_dx(x1, exp))
+    return (coeffs[0] * xsqr * x) + (coeffs[1] * xsqr) + (coeffs[2] * x)
+
+def interpolate(x1, exp, x):
+    """Function for checking the interpolation concept.
+    the function x**exp shall be interpolated near x~0 that y->0 for x=0.
+    The function is interpolated with a polynome of third order.
+    
+    Parameters
+    ----------
+    x1: float
+        upper limit of interpolation, above the limit y is according to 
+        the original function, below is interpolated
+    exp: float
+        exponent of original function
+    x: float
+        value to calculate y for"""
+    if x < x1:
+        return polynome(x1, exp, x)
+    else:
+        return x**exp
 
 def add_interpol_coeff_to_injections(injections, vminsqr):
     """Adds polynomial coefficients to injections for linear interpolation
