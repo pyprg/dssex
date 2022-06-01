@@ -70,7 +70,8 @@ from dnadb.ifegrid import decorate_injection_results, decorate_branch_results
 from egrid import model_from_frames
 from egrid.model import _Y_LO_ABS_MAX
 
-from pfcsymb import build_residual_fn
+from pfcsymb import build_residual_fn, build_injected_current_fn
+from util import get_injected_current_per_node
 import casadi
 
 #path = r"C:\UserData\deb00ap2\OneDrive - Siemens AG\Documents\defects\SP7-219086\eus1_loop\eus1_loop.db"
@@ -88,14 +89,35 @@ path = r"D:\eus1_loop"
 frames = egrid_frames(_Y_LO_ABS_MAX, path)
 model = model_from_frames(frames)
 pq_factors = fl * np.ones((len(model.injections), 2))
+calc_Inode_inj = build_injected_current_fn(model, pq_factors, loadcurve)
+
 
 fn_Iresidual = build_residual_fn(model, pq_factors, loadcurve)
+
+
+#
+# check current calculaiton function
+#
+
+fVprobe = 1.
 Vslack = fv * model.slacks.V
 values_of_params = casadi.horzcat(
     np.real(Vslack), np.imag(Vslack), model.branchtaps.position.copy())
+Vprobe = fVprobe * (
+        np.array([1.+0j]*model.shape_of_Y[0], dtype=np.complex128))
+# symb
+Vprobe_ri = np.concatenate([np.real(Vprobe), np.imag(Vprobe)]).reshape(-1)
+Inode_inj_ri = np.array(calc_Inode_inj(Vprobe_ri))
+Inode_inj = np.hstack(np.split(Inode_inj_ri, 2)).view(dtype=np.complex128)
+print('\nInode_inj:\n', Inode_inj)
+# num
+get_injected_power = get_injected_power_fn(
+    model.injections, pq_factors=pq_factors, loadcurve=loadcurve)
+# util
+Inode_inj2 = get_injected_current_per_node(get_injected_power, model, Vprobe.reshape(-1, 1))
+print('\nInode_inj2:\n', Inode_inj2)
 
-
-
+#%%
 if len(model.errormessages):
     print(model.errormessages)
 else:
@@ -112,17 +134,15 @@ else:
         loadcurve=loadcurve)
     print()
     print('SUCCESS' if success else '_F_A_I_L_E_D_', '\n')
-    
     Vri = np.concatenate([np.real(V), np.imag(V)]).reshape(-1)
     res = fn_Iresidual(Vri, values_of_params)
     Ires_symb = np.hstack(np.split(np.array(res), 2)).view(dtype=np.complex128)
     print('Ires_symb:\n', Ires_symb, '\n')
     Ires_symb_max = np.linalg.norm(
-        np.hstack([np.real(Ires_symb[1:]), np.imag(Ires_symb[1:])]).reshape(-1), 
+        np.hstack([np.real(Ires_symb[1:]), np.imag(Ires_symb[1:])])
+        .reshape(-1), 
         np.inf)
     print('Ires_symb_max: ', Ires_symb_max, '\n')
-    get_injected_power = get_injected_power_fn(
-        model.injections, pq_factors=pq_factors, loadcurve=loadcurve)
     Ires = get_residual_current_fn(
         model, 
         get_injected_power)(V).reshape(-1, 1)

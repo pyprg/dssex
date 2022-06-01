@@ -191,7 +191,6 @@ def create_Vvars(count_of_nodes, slacks=_no_slacks):
         decvars=casadi.vertcat(Vre_dec, Vim_dec),
         slack=casadi.vertcat(Vre_slack, Vim_slack))
 
-
 def get_injected_squared_current(V, Vinj_sqr, Mnodeinj, P10, Q10):
     """Calculates current flowing into injections. Returns separate
     real and imaginary parts.
@@ -437,6 +436,32 @@ def get_injected_current(matrix_nodeinj, V, injections,
     Inode_re = casadi.if_else(interpolate, Ire_ip, Ire)
     Inode_im = casadi.if_else(interpolate, Iim_ip, Iim)
     return Inode_re, Inode_im    
+
+def build_injected_current_fn(model, pq_factors=None, loadcurve='original'):
+    """Creates a function for calculating the injected current per node.
+    
+    Parameters
+    ----------
+    model: egrid.model.Model
+    
+    pq_factors: numpy.array, float, (nx2)
+        factors for active and reactive power of loads
+    loadcurve: 'original' | 'interpolated' | 'square'
+        default is 'original', just first letter is used
+    
+    Returns
+    -------
+    casadi.Function
+        (casadi.SX)->(casadi.DM)
+        (vector_of_Vnode_ri)->(vector_of_Inode_inj_ri)"""
+    # variables of voltages
+    count_of_nodes = model.shape_of_Y[0]
+    V = create_Vvars(count_of_nodes)
+    # injected current per node
+    Inode_re, Inode_im = get_injected_current(
+        model.mnodeinj, V, model.injections, pq_factors, loadcurve)
+    Inode = casadi.vertcat(Inode_re, Inode_im)
+    return casadi.Function('fn_Inode_inj_ri', [V.reim], [Inode])
 
 def build_residual_fn(model, pq_factors=None, loadcurve='original'):
     """Creates function for calculating the residual node current.

@@ -134,8 +134,7 @@ def create_y_matrix(model, pos):
         dtype=np.complex128)
     return vstack([diag.tocsc(), Y.tocsc()[count_of_slacks:, :]])
 
-def _get_injected_power_per_injection(
-        calculate_injected_power, mnodeinjT, Vnode):
+def get_injected_power_per_injection(calculate_injected_power, Vinj):
     """
     
     Parameters
@@ -143,10 +142,8 @@ def _get_injected_power_per_injection(
     calculate_injected_power: function
         (numpy.array<float>) -> (numpy.array<float>, numpy.array<float>)
         (square_of_absolute_node-voltage) -> (active power P, reactive power Q)
-    mnodeinjT: scipy.sparse.Matrix
-        X_per_injection = mnodeinjT * X_per_node
-    Vnode: numpy.array
-        complex, voltage per node
+    Vinj: numpy.array
+        complex, voltage per injection
     
     Returns
     -------
@@ -154,7 +151,6 @@ def _get_injected_power_per_injection(
         * numpy.array, float, real power per injection
         * numpy.array, float, imaginary power per injection
         * numpy.array, float, voltage at per injection"""
-    Vinj = mnodeinjT @ Vnode
     Vinj_abs_sqr = np.power(np.real(Vinj), 2) + np.power(np.imag(Vinj), 2)
     return *calculate_injected_power(Vinj_abs_sqr), Vinj
 
@@ -176,8 +172,8 @@ def get_injected_current_per_node(calculate_injected_power, model, Vnode):
     Returns
     -------
     numpy.array, complex, injected current per node"""
-    Pinj, Qinj, _ = _get_injected_power_per_injection(
-        calculate_injected_power, model.mnodeinj.T, Vnode)
+    Pinj, Qinj, _ = get_injected_power_per_injection(
+        calculate_injected_power, model.mnodeinj.T @ Vnode)
     Sinj = (
         np.hstack([Pinj.reshape(-1, 1), Qinj.reshape(-1, 1)])
         .view(dtype=np.complex128))
@@ -202,8 +198,8 @@ def get_injection_results(calculate_injected_power, model, Vnode):
     pandas.DataFrame"""
     df = model.injections.loc[
         :, ['id', 'Exp_v_p', 'Exp_v_q', 'P10', 'Q10']]
-    df['P_pu'], df['Q_pu'], Vinj = _get_injected_power_per_injection(
-        calculate_injected_power, model.mnodeinj.T, Vnode)
+    df['P_pu'], df['Q_pu'], Vinj = get_injected_power_per_injection(
+        calculate_injected_power, model.mnodeinj.T @ Vnode)
     df['V_pu'] = np.abs(Vinj)
     df['P_pu'] *= 3
     df['Q_pu'] *= 3

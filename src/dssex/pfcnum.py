@@ -365,12 +365,13 @@ get_injected_power_fn = partial(get_calc_injected_power_fn, _VMINSQR)
 
 def calculate_injected_node_current(
         mnodeinj, mnodeinjT, calc_injected_power, idx_slack, Vslack, Vnode_ri):
-    """Calculates injected current per injection.
+    """Calculates injected current per injection. Special processing of
+    slack nodes.
     
     Parameters
     ----------
     mnodeinj: scipy.sparse.matrix
-        mnodeinjT @ values_per_injection -> values_per_node
+        mnodeinj @ values_per_injection -> values_per_node
     mnodeinjT: scipy.sparse.matrix
         mnodeinjT @ values_per_node -> values_per_injection
     calc_injected_power: function
@@ -378,7 +379,7 @@ def calculate_injected_node_current(
     idx_slack: array_like, int
         indices of slack nodes
     Vslack: array_like, float
-        voltages at slack nodes
+        complex, voltages at slack nodes
     Vnode_ri: pandas.Series
         vector of node voltages (real and imaginary separated)
     
@@ -388,12 +389,11 @@ def calculate_injected_node_current(
         float, shape (2*number_of_nodes,)"""
     Vnode_ri2 = np.hstack(np.vsplit(Vnode_ri, 2))
     Vnode_ri2_sqr = np.power(Vnode_ri2, 2)
-    Vnode_abs_sqr = (Vnode_ri2_sqr[:, 0] + Vnode_ri2_sqr[:, 1]).reshape(-1, 1)
+    Vnode_abs_sqr = Vnode_ri2_sqr.sum(axis=1).reshape(-1, 1)
     Vinj_abs_sqr = mnodeinjT @ Vnode_abs_sqr
     Pinj, Qinj = calc_injected_power(Vinj_abs_sqr)
     Sinj = (
-        np
-        .hstack([Pinj.reshape(-1, 1), Qinj.reshape(-1, 1)])
+        np.hstack([Pinj.reshape(-1, 1), Qinj.reshape(-1, 1)])
         .view(dtype=np.complex128))
     Sinj_node = mnodeinj @ csc_array(Sinj)
     Vnode = Vnode_ri2.view(dtype=np.complex128)
