@@ -461,7 +461,8 @@ def build_injected_current_fn(model, pq_factors=None, loadcurve='original'):
     return casadi.Function('fn_Inode_inj_ri', [V.reim], [Inode])
 
 def build_residual_fn(model, pq_factors=None, loadcurve='original'):
-    """Creates function for calculating the residual node current.
+    """Creates function for calculating the residual node current. The
+    returned function can be used for root-finding.
     
     Parameters
     ----------
@@ -610,11 +611,23 @@ def eval_residual_current(
         model, pq_factors=None, loadcurve=None, 
         tappositions=None, Vslack=None, V=None):
     """Function for evaluating a power flow solution. Calculates
-    the complex residual node current.
+    the complex residual node current. 
+    Not intended to be used inside a solver loop.
     
     Parameters
     ----------
+    model: egrid.model.Model
     
+    pq_factors: numpy.array
+        float
+    loadcurve: 'original' | 'interpolated' | 'square'
+    
+    tappositions: numyp.array
+        int
+    Vslack: array_like
+        complex
+    V: numpy.array
+        complex
     
     Returns
     -------

@@ -70,6 +70,7 @@ else:
 #%%
 from dnadb import egrid_frames
 from dnadb.ifegrid import decorate_injection_results, decorate_branch_results
+
 from egrid import model_from_frames
 from egrid.model import _Y_LO_ABS_MAX
 import casadi
@@ -82,7 +83,7 @@ from util import eval_residual_current, max_ri
 
 
 fv = 1. # voltage
-fl = 2.4 # loads
+fl = 1 # loads
 loadcurve = 'interpolated' # 'original' | 'interpolated' | 'square'
 powerflowfn = cpfsymb # cpfnum | cpfsymb
 
