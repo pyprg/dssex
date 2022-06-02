@@ -28,6 +28,9 @@ from collections import namedtuple
 from egrid.builder import DEFAULT_FACTOR_ID, defk, Loadfactor
 from egrid.model import get_pfc_nodes
 from src.dssex.injections import add_interpol_coeff_to_injections
+
+from src.dssex.pfcsymb import create_Vvars
+
 # helper
 
 # square of voltage magnitude, minimum value for load curve, 
@@ -1389,6 +1392,31 @@ def get_estimation_data(model, count_of_steps, vminsqr=_VMINSQR):
     -------
     function (int) -> (Estimation_data)"""
     pfc_nodes = get_pfc_nodes(model.nodes)
+
+    # >>first part of new implementation approach (no selection using Pandas)
+    count_of_nodes = len(pfc_nodes)
+    Vnode = create_Vvars(count_of_nodes)
+    from scipy.sparse import coo_matrix
+    count_of_terms = len(model.branchterminals)
+    shape = count_of_terms, count_of_nodes
+    node_to_termidx = casadi.SX(coo_matrix(
+        ([1.]*count_of_terms, 
+         (model.branchterminals.index, 
+          model.branchterminals.index_of_node)), 
+        shape=shape, dtype=float))
+    node_to_othertermidx = casadi.SX(coo_matrix(
+        ([1.]*count_of_terms, 
+         (model.branchterminals.index, 
+          model.branchterminals.index_of_other_node)), 
+        shape=shape, dtype=float))
+    Vterm_re = node_to_termidx @ Vnode.re
+    Votherterm_re = node_to_othertermidx @ Vnode.re
+    Vterm_im = node_to_termidx @ Vnode.im
+    Votherterm_im = node_to_othertermidx @ Vnode.im
+    Vterm_sqr = node_to_termidx @ Vnode.node_sqr
+    Votherterm_sqr = node_to_othertermidx @ Vnode.node_sqr
+    # end of >>first part of new implementation approach
+    
     Vsymbols = _create_v_symbols(pfc_nodes)
     branch_terminal_data, branch_taps = _get_branch_estimation_data(
         model, Vsymbols)

@@ -22,8 +22,8 @@ Created on Sun Aug  8 08:36:10 2021
 from egrid import make_model
 from egrid.builder import (
     Slacknode, Branch, Injection, PValue, QValue, Output, Vvalue, Defk, Link)
-from estim import calculate
-import present as pr
+from src.dssex.estim import calculate
+import src.dssex.present as pr
 
 # Always use a decimal point for floats. Now and then processing ints
 # fails with casadi/pandas/numpy.
