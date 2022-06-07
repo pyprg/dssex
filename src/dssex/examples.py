@@ -140,9 +140,9 @@ pr.print_measurements(results04)
 model05_V_setpoint = [Vvalue(id_of_node='n_2', V=1.,)]
 model05_scale_q = [
      # define a scaling factor
-     Defk(step=0, id='kq'),
+     Defk(id='kq'),
      # link the factor to the generator
-     Link(step=0, objid='Gen', part='q', id='kq')]
+     Link(objid='Gen', part='q', id='kq')]
 model05 = make_model(
     model04_devices,
     model05_V_setpoint,
@@ -189,9 +189,9 @@ schema06 = """
 model06 = make_model(
     schema06,
     # define a scaling factor
-    Defk(step=0, id='kq'),
+    Defk(id='kq'),
     # link the factor to the generator
-    Link(step=0, objid='Gen_7', part='q', id='kq'))
+    Link(objid='Gen_7', part='q', id='kq'))
 result06 = [*calculate(model06, parameters_of_steps=[{'objectives': 'V'}])]
 # print the result
 pr.print_estim_results(result06)
@@ -200,10 +200,10 @@ pr.print_measurements(result06)
 model07 = make_model(
     schema06,
     # load scaling
-    Defk(step=(0, 1), id=('kp_load', 'kq_load')),
+    Defk(id=('kp_load', 'kq_load'), step=(0, 1)),
     Link(
-        step=(0, 1), 
         objid=('load_1', 'load_2', 'load_3', 'load_4', 'load_51'), 
+        step=(0, 1), 
         part='pq', 
         id=('kp_load', 'kq_load')),
     # generator scaling

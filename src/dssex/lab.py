@@ -50,7 +50,6 @@ model_devices = [
         Exp_v_p=1.0,
         Exp_v_q=2.0
         )]
-
 model = make_model(model_devices)
 get_injected_power = get_injected_power_fn(
     model.injections, 
@@ -129,25 +128,45 @@ else:
     result_br = decorate_branch_results(names, res['branches'])
     print('Branches:\n', result_br, '\n')
 #%%
-from scipy.optimize import root
+# Always use a decimal point for floats. Now and then processing ints
+# fails with casadi/pandas/numpy.
 
-Vnode_initial = (
-    np.array([1.+0j]*model.shape_of_Y[0], dtype=np.complex128)
-    .reshape(-1, 1))
-fn_res = get_residual_current_fn(model, get_injected_power)
-res = root(fn_res, x0=Vnode_initial, method='krylov')
-Vnode_res = res.x
-#%%
-Ires = get_residual_current_fn(model, get_injected_power)(Vnode_res)
-print('Ires: ', Ires)
-#%%
-fn_res2 = get_residual_current_fn2(model, get_injected_power)
-res2 = root(fn_res2, x0=Vnode_initial[model.count_of_slacks:], method='broyden1') #'broyden1' | 'krylov'
-Ires2 = get_residual_current_fn(
-    model, 
-    get_injected_power)(np.vstack([model.slacks.V, res2.x]))
-print('\nres2.x:\n', res2.x)
-Ires_max2 = np.linalg.norm(
-    np.hstack([np.real(Ires2[1:]), np.imag(Ires2[1:])]).reshape(-1), 
-    np.inf)
-print('\nIres_max2:\n', Ires_max2, '\n')
+# node: 0               1
+#
+#       |     line_0
+#       +-----=====-----+
+#       |               |
+#                      \|/ consumer
+#                       '
+model_devices2 = [
+    Slacknode(id_of_node='n_0', V=1.+0.j),
+    Branch(
+        id='line_0',
+        id_of_node_A='n_0',
+        id_of_node_B='n_1',
+        y_lo=1e3-1e3j,
+        y_tr=1e-6+1e-6j
+        ),
+    Injection(
+        id='consumer_0',
+        id_of_node='n_1',
+        P10=30.0,
+        Q10=10.0,
+        Exp_v_p=1.0,
+        Exp_v_q=2.0
+        )]
+model2 = make_model(
+    model_devices2,
+    Vvalue(id_of_node='n_1', V=1.,),
+    Defk(step=0, id='kq'),
+    Link(step=0, objid='Gen', part='q', id='kq'))
+if len(model2.errormessages):
+    print(model2.errormessages)
+else:
+    success2, V2 = cpfsymb(1e-10, 20, model2)
+    print('\n--->>>','SUCCESS' if success2 else '_F_A_I_L_E_D_', '<<<---\n')
+    print('V:\n', V2, '\n')
+    get_injected_power2 = get_injected_power_fn(model2.injections)
+    res2 = get_results(model2, get_injected_power2, model2.branchtaps.position, V2)
+    print('\ninjections:\n', res2['injections'])
+    print('\branches:\n', res2['branches'])

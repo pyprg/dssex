@@ -241,11 +241,11 @@ def _power_into_branch(
         V_other' V = |                      | |          |
                      | -Vim_other Vre_other | | Vim  Vre |
                      +-                    -+ +-        -+
-           +-                                                               -+
-           |  (Vre Vre_other + Vim Vim_other) (Vre Vim_other - Vim Vre_other)|
-         = |                                                                 |
-           | (-Vre Vim_other + Vim Vre_other) (Vre Vre_other + Vim Vim_other)|
-           +-                                                               -+
+           +-                                                                -+
+           |  (Vre Vre_other + Vim Vim_other) (Vre Vim_other - Vim Vre_other) |
+         = |                                                                  |
+           | (-Vre Vim_other + Vim Vre_other) (Vre Vre_other + Vim Vim_other) |
+           +-                                                                -+
            +-    -+
            | A -B |    A = (Vre Vre_other + Vim Vim_other)
          = |      |
@@ -258,11 +258,11 @@ def _power_into_branch(
         y_mn' V_other' V = |            | |      |
                            | -b_mn g_mn | | B  A |
                            +-          -+ +-    -+
-    					   +-                                   -+
-    					   |  (g_mn A + b_mn B) (b_mn A - g_mn B)|
-    					 = |                                     |
-    					   | (-b_mn A + g_mn B) (g_mn A + b_mn B)|
-    					   +-                                   -+
+    					   +-                                    -+
+    					   |  (g_mn A + b_mn B) (b_mn A - g_mn B) |
+    					 = |                                      |
+    					   | (-b_mn A + g_mn B) (g_mn A + b_mn B) |
+    					   +-                                    -+
     S_mn:
     ::
         +-    -+   +-                  -+
