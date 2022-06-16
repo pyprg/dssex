@@ -73,7 +73,7 @@ def calc_dx(x, exp):
     float"""
     return exp * np.power(x, exp-1)
 
-def get_polynomial_coefficients(x1, exp):
+def get_polynomial_coefficients(x1, exp, dydx_0=1.):
     """Calculates coefficients of polynomials for interpolation.
     
     Parameters
@@ -82,13 +82,15 @@ def get_polynomial_coefficients(x1, exp):
         upper limit of interpolation range
     exp: numpy.array
         float, exponents of function 'load over voltage'
+    dydx_0: float
+        df(0) / dx
     
     Returns
     -------
     numpy.array
         float, shape(n,3)"""
     return np.vstack([
-        get_coefficients(x1, y1, 1., dx) 
+        get_coefficients(x1, y1, dydx_0, dx) 
         for y1, dx in zip(np.power(x1, exp), calc_dx(x1, exp))])
 
 def polynome(x1, exp, x):

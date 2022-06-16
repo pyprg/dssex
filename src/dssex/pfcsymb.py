@@ -18,7 +18,11 @@ _EPSILON = 1e-12
 
 Vvar = namedtuple(
     'Vvar',
-    're im reim node_sqr decvars slack')
+    're im reim sqr')
+
+Vslackvar = namedtuple(
+    'Vvar',
+    're im reim')
 
 def get_tap_factors(branchtaps, pos):
     """Creates vars for tap positions, expressions for longitudinal and
@@ -124,7 +128,7 @@ def create_gb_matrix(model, pos):
     B_ = casadi.vertcat(
         casadi.SX(count_of_slacks, count_of_nodes), 
         B[count_of_slacks:, :])
-    return  casadi.blockcat([[G_, -B_], [B_,  G_]])
+    return casadi.blockcat([[G_, -B_], [B_,  G_]])
 
 def create_branch_gb_matrix2(model, pos):
     """Generates a conductance-susceptance matrix of branches equivalent to
@@ -156,9 +160,7 @@ def create_branch_gb_matrix2(model, pos):
         G[count_of_slacks:, :count_of_slacks],
         B[count_of_slacks:, :count_of_slacks])
 
-_no_slacks = casadi.DM(0,2)
-
-def create_Vvars(count_of_nodes, slacks=_no_slacks):
+def create_Vvars(count_of_nodes):
     """Creates casadi.SX for voltages.
     
     Parameters
@@ -172,24 +174,40 @@ def create_Vvars(count_of_nodes, slacks=_no_slacks):
         * .re
         * .im
         * .reim
-        * .node_sqr"""
-    count_of_slacks = slacks.size1()
-    count = count_of_nodes - count_of_slacks
-    Vre_dec = casadi.SX.sym('Vre', count)
-    Vim_dec = casadi.SX.sym('Vim', count)
-    Vre_slack = slacks[:, 0]
-    Vim_slack = slacks[:, 1]
-    Vre = casadi.vertcat(Vre_slack, Vre_dec)
-    Vim = casadi.vertcat(Vim_slack, Vim_dec)
+        * .sqr"""
+    count = count_of_nodes
+    Vre = casadi.SX.sym('Vre', count)
+    Vim = casadi.SX.sym('Vim', count)
     Vreim = casadi.vertcat(Vre, Vim)
-    Vnode_sqr = casadi.power(Vre, 2) + casadi.power(Vim, 2)
+    Vsqr = casadi.power(Vre, 2) + casadi.power(Vim, 2)
     return Vvar(
         re=Vre,
         im=Vim,
         reim=Vreim,
-        node_sqr=Vnode_sqr,
-        decvars=casadi.vertcat(Vre_dec, Vim_dec),
-        slack=casadi.vertcat(Vre_slack, Vim_slack))
+        sqr=Vsqr)
+
+def create_Vslackvars(count_of_slacks):
+    """Creates casadi.SX for voltages.
+    
+    Parameters
+    ----------
+    count_of_slacks: int
+        number of slack busbars
+    
+    Returns
+    -------
+    Vvar
+        * .re
+        * .im
+        * .reim"""
+    count = count_of_slacks
+    Vre = casadi.SX.sym('Vslack_re', count)
+    Vim = casadi.SX.sym('Vslack_im', count)
+    Vreim = casadi.vertcat(Vre, Vim)
+    return Vslackvar(
+        re=Vre,
+        im=Vim,
+        reim=Vreim)
 
 def get_injected_squared_current(V, Vinj_sqr, Mnodeinj, P10, Q10):
     """Calculates current flowing into injections. Returns separate
@@ -262,6 +280,43 @@ def get_injected_squared_current(V, Vinj_sqr, Mnodeinj, P10, Q10):
     Iim = (-Bexpr_node * V.re) + (Gexpr_node * V.im)
     return Ire, Iim
 
+def get_injected_power_per_node(
+        Vinj_sqr, Mnodeinj, exp_v_p, P10, exp_v_q, Q10):
+    """Calculates injected power per node. Returns separate
+    real and imaginary parts.
+    Injected power is calculated this way
+    (P = |V|**Exvp * P10, Q = |V|**Exvq * Q10; with |V| - magnitude of V):
+    ::
+        +- -+   +-                                          -+
+        | P |   | (Vre ** 2 + Vim ** 2) ** (Expvp / 2) * P10 |
+        |   | = |                                            |
+        | Q |   | (Vre ** 2 + Vim ** 2) ** (Expvq / 2) * Q10 |
+        +- -+   +-                                          -+
+        
+    Parameters
+    ----------
+    Vinj_sqr: casadi.SX
+        vector, voltage at injection squared
+    Mnodeinj: casadi.SX
+        matrix
+    exp_v_p: numpy.array, float
+        voltage exponents of active power per injection
+    P10: numpy.array, float
+        active power per injection
+    exp_v_q: numpy.array, float
+        voltage exponents of reactive power per injection
+    Q10: numpy.array, float
+        active power per injection
+        
+    Returns
+    -------
+    tuple
+        * vector of injected power per node, real part
+        * vector of injected power per node, imaginary part"""
+    Pnode = Mnodeinj @ (casadi.power(Vinj_sqr, exp_v_p/2) * P10)
+    Qnode = Mnodeinj @ (casadi.power(Vinj_sqr, exp_v_q/2) * Q10)
+    return Pnode, Qnode
+
 def get_injected_original_current(
         V, Vinj_sqr, Mnodeinj, exp_v_p, P10, exp_v_q, Q10):
     """Calculates current flowing into injections. Returns separate
@@ -331,10 +386,10 @@ def get_injected_original_current(
     tuple
         * vector of injected current per node, real part
         * vector of injected current per node, imaginary part"""
-    Gexpr_node = Mnodeinj @ (casadi.power(Vinj_sqr, exp_v_p/2 - 1) * P10)
-    Bexpr_node = Mnodeinj @ (casadi.power(Vinj_sqr, exp_v_q/2 - 1) * Q10)
-    Ire =  Gexpr_node * V.re + Bexpr_node * V.im
-    Iim = -Bexpr_node * V.re + Gexpr_node * V.im
+    Pnode_expr = Mnodeinj @ (casadi.power(Vinj_sqr, exp_v_p/2 - 1) * P10)
+    Qnode_expr = Mnodeinj @ (casadi.power(Vinj_sqr, exp_v_q/2 - 1) * Q10)
+    Ire =  Pnode_expr * V.re + Qnode_expr * V.im
+    Iim = -Qnode_expr * V.re + Pnode_expr * V.im
     return Ire, Iim
 
 def get_injected_interpolated_current(
@@ -374,15 +429,15 @@ def get_injected_interpolated_current(
     # per node
     pnodeexpr = Mnodeinj @ (fpinj * P10)
     qnodeexpr = Mnodeinj @ (fqinj * Q10)
-    gt_zero = _EPSILON < V.node_sqr
+    gt_zero = _EPSILON < V.sqr
     Ire_ip = casadi.if_else(
-        gt_zero, (pnodeexpr * V.re + qnodeexpr * V.im) / V.node_sqr, 0.0)
+        gt_zero, (pnodeexpr * V.re + qnodeexpr * V.im) / V.sqr, 0.0)
     Iim_ip = casadi.if_else(
-        gt_zero, (-qnodeexpr * V.re + pnodeexpr * V.im) / V.node_sqr, 0.0)
+        gt_zero, (-qnodeexpr * V.re + pnodeexpr * V.im) / V.sqr, 0.0)
     return Ire_ip, Iim_ip
 
-def get_injected_current(matrix_nodeinj, V, injections, 
-                         pq_factors=None, loadcurve='original'):
+def get_injected_current(
+        matrix_nodeinj, V, injections, pq_factors=None, loadcurve='original'):
     """Creates a vector of injected node current.
     
     Parameters
@@ -393,13 +448,13 @@ def get_injected_current(matrix_nodeinj, V, injections,
         * .re, casadi.SX, vector, real part of node voltage
         * .im, casadi.SX, vector, imaginary part of node voltage
         * .reim (not used)
-        * .node_sqr, casadi.SX, vector, .re**2  + .im**2
+        * .sqr, casadi.SX, vector, .re**2  + .im**2
     injections: pandas.DataFrame
         * .P10, float, active power at |V| = 1.0 pu, sum of all 3 phases
         * .Q10, float, reactive power at |V| = 1.0 pu, sum of all 3 phases
         * .Exp_v_p, float, voltage exponent of active power
         * .Exp_v_q, float, voltage exponent of reactive power
-    pq_factors: numpy.array, float, (nx2)
+    pq_factors: numpy.array/casadi.SX, float, (number_of_injections x 2)
         factors for active and reactive power of loads
     loadcurve: 'original' | 'interpolated' | 'square'
         default is 'original', just first letter is used
@@ -410,14 +465,14 @@ def get_injected_current(matrix_nodeinj, V, injections,
         vector, injected current per node (real parts, imaginary parts),
         shape (2*count_of_nodes, 1)"""
     control_character = loadcurve[:1].lower()
-    P10 = injections.P10 / 3 # for one phase only
-    Q10 = injections.Q10 / 3 # for one phase only
+    P10 = casadi.SX(injections.P10 / 3) # for one phase only
+    Q10 = casadi.SX(injections.Q10 / 3) # for one phase only
     Mnodeinj = casadi.SX(matrix_nodeinj)
-    Vinj_sqr = casadi.transpose(Mnodeinj) @ V.node_sqr # V**2 per injection
+    Vinj_sqr = casadi.transpose(Mnodeinj) @ V.sqr # V**2 per injection
     if not pq_factors is None:
         P10 *= pq_factors[:,0]
         Q10 *= pq_factors[:,1]
-    control_character = loadcurve[:1].lower()
+    control_character = loadcurve[:1].lower() # first character only
     if control_character == 's':
         return get_injected_squared_current(V, Vinj_sqr, Mnodeinj, P10, Q10)         
     exp_v_p = injections.Exp_v_p.copy()
@@ -429,7 +484,7 @@ def get_injected_current(matrix_nodeinj, V, injections,
     Ire_ip, Iim_ip = get_injected_interpolated_current(
         V, Vinj_sqr, Mnodeinj, exp_v_p, P10, exp_v_q, Q10)
     # compose functions from original and interpolated
-    interpolate = V.node_sqr < _VMINSQR
+    interpolate = V.sqr < _VMINSQR
     Inode_re = casadi.if_else(interpolate, Ire_ip, Ire)
     Inode_im = casadi.if_else(interpolate, Iim_ip, Iim)
     return Inode_re, Inode_im    
@@ -460,6 +515,25 @@ def build_injected_current_fn(model, pq_factors=None, loadcurve='original'):
     Inode = casadi.vertcat(Inode_re, Inode_im)
     return casadi.Function('fn_Inode_inj_ri', [V.reim], [Inode])
 
+def create_vars(model):
+    """Creates variables for node voltages, slack voltages and tappositions
+    
+    Parameters
+    ----------
+    model: egrid.model.Model
+    
+    Returns
+    -------
+    tuple
+        * Vvar
+        * Vslackvar
+        * casadi.SX"""
+    count_of_branch_taps = len(model.branchtaps)
+    pos = casadi.SX.sym('pos', count_of_branch_taps)
+    Vslack = create_Vslackvars(len(model.slacks))
+    V = create_Vvars(model.shape_of_Y[0])
+    return V, Vslack, pos
+
 def build_residual_fn(model, pq_factors=None, loadcurve='original'):
     """Creates function for calculating the residual node current. The
     returned function can be used for root-finding.
@@ -476,29 +550,22 @@ def build_residual_fn(model, pq_factors=None, loadcurve='original'):
     Returns
     -------
     casadi.Function"""
-    count_of_branch_taps = len(model.branchtaps)
-    pos = casadi.SX.sym('pos', count_of_branch_taps)
+    V, Vslack, pos = create_vars(model)
     # branch gb-matrix, g:conductance, b:susceptance
     gb = create_gb_matrix(model, pos)
-    # variables of voltages
-    count_of_nodes = gb.size1() // 2
-    V = create_Vvars(count_of_nodes)
     # injected current
     injections = model.injections
     Inode_re, Inode_im = get_injected_current(
         model.mnodeinj, V, injections[~injections.is_slack], 
         pq_factors, loadcurve)
-    vslack_var = casadi.SX.sym('Vslack', len(model.slacks), 2)# 0:real, 1:imag
     # modify Inode of slacks
     index_of_slack = model.slacks.index_of_node
-    Inode_re[index_of_slack] = -vslack_var[:, 0]
-    Inode_im[index_of_slack] = -vslack_var[:, 1]
+    Inode_re[index_of_slack] = -Vslack.re
+    Inode_im[index_of_slack] = -Vslack.im
     # equation of node current
     Ires = (gb @ V.reim) + casadi.vertcat(Inode_re, Inode_im)
-    # parameters, horzcat returns wrong shape for count_of_branch_taps==0
-    param = (casadi.horzcat(vslack_var[:, 0], vslack_var[:, 1], pos) 
-             if count_of_branch_taps else 
-             casadi.horzcat(vslack_var[:, 0], vslack_var[:, 1]))
+    # parameters, vertcat returns wrong shape for count_of_branch_taps==0
+    param = casadi.vertcat(Vslack.reim, pos) if pos.size1() else Vslack.reim
     # create node current function
     return casadi.Function('fn_Iresidual', [V.reim, param], [Ires])
 

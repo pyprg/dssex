@@ -13,8 +13,7 @@ from pfcsymb import calculate_power_flow as cpfsymb
 from pfcsymb import eval_residual_current as eval_symb
 from pfcnum import calculate_power_flow as cpfnum
 from pfcnum import get_injected_power_fn
-from src.dssex.util import \
-    get_results, get_residual_current_fn, get_residual_current_fn2
+from src.dssex.util import get_results, get_residual_current_fn
 
 # Always use a decimal point for floats. Now and then processing ints
 # fails with casadi/pandas/numpy.
@@ -167,6 +166,260 @@ else:
     print('\n--->>>','SUCCESS' if success2 else '_F_A_I_L_E_D_', '<<<---\n')
     print('V:\n', V2, '\n')
     get_injected_power2 = get_injected_power_fn(model2.injections)
-    res2 = get_results(model2, get_injected_power2, model2.branchtaps.position, V2)
+    res2 = get_results(
+        model2, get_injected_power2, model2.branchtaps.position, V2)
     print('\ninjections:\n', res2['injections'])
     print('\branches:\n', res2['branches'])
+#%% root finding with casadi
+from pfcsymb import create_vars, create_gb_matrix, get_injected_current, find_root
+V, Vslack, pos = create_vars(model)
+# branch gb-matrix, g:conductance, b:susceptance
+gb = create_gb_matrix(model, pos)
+# injected current
+injections = model.injections
+Inode_re, Inode_im = get_injected_current(
+    model.mnodeinj, V, injections[~injections.is_slack], 
+    pq_factors, loadcurve)
+# modify Inode of slacks
+index_of_slack = model.slacks.index_of_node
+Inode_re[index_of_slack] = -Vslack.re
+Inode_im[index_of_slack] = -Vslack.im
+# equation of node current
+Ires = (gb @ V.reim) + casadi.vertcat(Inode_re, Inode_im)
+# parameters, vertcat returns wrong shape for count_of_branch_taps==0
+param = (casadi.vertcat(Vslack.reim, pos) if pos.size1() else Vslack.reim)
+# create node current function
+fn_Iresidual = casadi.Function('fn_Iresidual', [V.reim, param], [Ires])
+# calculate
+Vslack_ = model.slacks.V
+tappositions_ = model.branchtaps.position.copy() 
+success, voltages = find_root(
+    fn_Iresidual, tappositions_, Vslack_, count_of_nodes=model.shape_of_Y[0])
+Vcomp = np.hstack(np.vsplit(voltages, 2)).view(dtype=np.complex128)
+#%% calculate voltage 'manually'
+# node: 0               1
+#
+#       |     line_0
+#       +-----=====-----+
+#       |               |
+#                      -+- 
+#                      --- shunt
+g0 = 1e3
+b0 = -1e3
+y0 = complex(g0, b0)
+b1 = 1e2
+y1 = complex(0., b1)
+V0 = 1.+.0j
+# helper
+I = V0 / (1/y0 + 1/y1)
+V1 = I / y1
+S1 = V1 * I.conjugate()
+Q1 = S1.imag
+V0r = V0.real
+V0j = V0.imag
+V1r = V1.real
+V1j = V1.imag
+V01 = I / y0
+f = Q1 / (g0**2 + b0**2)
+# real
+V1sqr = abs(V1 * V1.conjugate())
+Null_r = V0r*V1r + V0j*V1j + b0 * f - V1sqr
+print('Null_r: ', Null_r)
+# imaginary
+Null_j = V0j*V1r - V0r*V1j + g0 * f
+print('Null_j: ', Null_j)
+#%% find V1.real, V1.imag with given V0, Q
+V1ri = casadi.SX.sym('V1ri', 2, 1)
+res_ = casadi.SX(2, 1)
+res_[0, 0] = V0r*V1ri[0] + V0j*V1ri[1] + b0 * f - V1sqr
+res_[1, 0] = V0j*V1ri[0] - V0r*V1ri[1] + g0 * f
+fn_res_ = casadi.Function('fn_Iresidual', [V1ri], [res_])
+rf_ = casadi.rootfinder('rf_', 'newton', fn_res_)
+result = rf_(casadi.vertcat(1., 0.))
+print('\nresult: ', result, '\n')
+#%% find V1.real, V1.imag, Q with given V0, abs(V1)
+V1ri = casadi.SX.sym('V1ri', 2)
+Q1_ = casadi.SX.sym('Q1')
+f = Q1_ /(g0**2 + b0**2)
+Q_ = casadi.SX.sym('Q')
+VV1sqr = casadi.SX(2,1)
+VV1sqr[0, 0] = V1sqr
+res_ = casadi.SX(4, 1)
+res_[0, 0] = V0r*V1ri[0] + V0j*V1ri[1] + b0*f - V1sqr
+res_[1, 0] = V0j*V1ri[0] - V0r*V1ri[1] + g0*f
+res_[2, 0] = casadi.sumsqr(V1ri) - V1sqr
+res_[3, 0] = Q_ - Q1_
+fn_res_ = casadi.Function('fn_Iresidual', [casadi.vertcat(V1ri, Q_, Q1_)], [res_])
+rf_ = casadi.rootfinder('rf_', 'newton', fn_res_)
+result = rf_(casadi.vertcat(1., 0., 0., 0.))
+print('\nresult: ', result, '\n')
+#%%
+# node: 0               1               2
+#
+#       |     line_0          line_1
+#       +-----=====-----+-----=====-----+
+#       |               |               |
+#                      ---             \|/ consumer
+#                      --- shunt        '
+g0 = 1e3
+b0 = -1e3
+y0 = complex(g0, b0)
+b1 = 1e2
+y1 = complex(0., b1)
+V0 = 1.+.0j
+# helper
+I = V0 / (1/y0 + 1/y1)
+V1 = I / y1
+S1 = V1 * I.conjugate()
+Q1 = S1.imag
+V0r = V0.real
+V0j = V0.imag
+V1r = V1.real
+V1j = V1.imag
+V01 = I / y0
+f = Q1 / (g0**2 + b0**2)
+# real
+V1sqr = abs(V1 * V1.conjugate())
+Null_r = V0r*V1r + V0j*V1j + b0 * f - V1sqr
+print('Null_r: ', Null_r)
+# imaginary
+Null_j = V0j*V1r - V0r*V1j + g0 * f
+print('Null_j: ', Null_j)
+#%%
+# Always use a decimal point for floats. Now and then processing ints
+# fails with casadi/pandas/numpy.
+
+# node: 0               1               2
+#
+#       |     line_0    |     line_1    |
+#       +-----=====-----+-----=====-----+
+#       |               |               |
+#                      (~) generator   \|/ consumer
+#                                       '
+model_devices3 = [
+    Slacknode(id_of_node='n_0', V=1.+0.j),
+    Branch(
+        id='line_0',
+        id_of_node_A='n_0',
+        id_of_node_B='n_1',
+        y_lo=1e3-1e3j,
+        y_tr=1e-6+1e-6j),
+    Injection(
+        id='generator',
+        id_of_node='n_1',
+        Q10=10.0,
+        Exp_v_q=2.0),
+    Branch(
+        id='line_1',
+        id_of_node_A='n_1',
+        id_of_node_B='n_2',
+        y_lo=1e3-1e3j,
+        y_tr=1e-6+1e-6j),
+    Injection(
+        id='consumer',
+        id_of_node='n_2',
+        P10=30.0,
+        Q10=10.0,
+        Exp_v_p=2.0,
+        Exp_v_q=2.0)]
+model3 = make_model(
+    model_devices3,
+    Vvalue(id_of_node='n_1', V=1.0),
+    # define a scaling factor
+    Defk(id='kq_generator'),
+    # link the factor to the generator
+    Link(objid='generator', part='q', id='kq_generator'))
+injections = model3.injections
+pq_factors = fl * np.ones((len(injections), 2))
+V, Vslack, pos = create_vars(model3)
+# branch gb-matrix, g:conductance, b:susceptance
+gb = create_gb_matrix(model3, pos)
+# injected current
+Inode_re, Inode_im = get_injected_current(
+    model3.mnodeinj, V, injections[~injections.is_slack], 
+    pq_factors, loadcurve)
+# modify Inode of slacks
+index_of_slack = model3.slacks.index_of_node
+Inode_re[index_of_slack] = -Vslack.re
+Inode_im[index_of_slack] = -Vslack.im
+# equation of node current
+Ires = (gb @ V.reim) + casadi.vertcat(Inode_re, Inode_im)
+# parameters, vertcat returns wrong shape for count_of_branch_taps==0
+param = (casadi.vertcat(Vslack.reim, pos) if pos.size1() else Vslack.reim)
+# create node current function
+fn_Iresidual = casadi.Function('fn_Iresidual', [V.reim, param], [Ires])
+# calculate
+Vslack_ = model3.slacks.V
+tappositions_ = model3.branchtaps.position.copy() 
+success, voltages = find_root(
+    fn_Iresidual, tappositions_, Vslack_, count_of_nodes=model3.shape_of_Y[0])
+Vcomp = np.hstack(np.vsplit(voltages, 2)).view(dtype=np.complex128)
+#%%
+def get_v_setpoints(model):
+    """Extracts voltage setpoints having a variable Q at their 
+    power flow calculation nodes.
+    
+    Parmeters
+    ---------
+    model: egrid.model.Model
+    
+    Returns
+    -------
+    pandas.DataFrame (id_of_source)
+        * .value, initial value
+        * .min, float
+        * .max, float
+        * .injid, str, identifier of injection
+        * .id_of_node, str
+        * .index_of_node, int
+        * .V, float, setpoint"""
+    factors_step0 = (
+        model.load_scaling_factors.droplevel('id').filter(items=[0], axis=0))
+    var_step0 = factors_step0[factors_step0.type=='var']
+    inj_to_factor = (
+        model.injection_factor_associations.reset_index().set_index('id'))
+    inj_to_qfactor = (
+        inj_to_factor[(inj_to_factor.step==0) & (inj_to_factor.part=='q')])
+    injs = (
+        model3.injections
+        .reset_index()
+        .rename(columns={'index': 'index_of_injection'})
+        .loc[:,['id', 'index_of_injection', 'id_of_node', 'index_of_node']]
+        .set_index('id'))
+    qvars_ = (
+        var_step0
+        .join(inj_to_qfactor, on='id_of_source')
+        .drop(columns=['type', 'step', 'part'])
+        .set_index('id_of_source'))
+    qvars = qvars_.join(injs, on='injid', how='inner')
+    vsetpoints = (
+        model.vvalues[~model.vvalues.is_slack][['id_of_node', 'V']]
+        .set_index('id_of_node'))
+    return qvars.join(vsetpoints, on='id_of_node', how='inner')
+
+vsetpoints = get_v_setpoints(model3)
+kq = casadi.SX.sym('kq', len(vsetpoints))
+f_pq = casadi.SX.ones(len(injections), 2)
+f_pq[vsetpoints.index_of_injection, 1] = kq
+Inode_re, Inode_im = get_injected_current(
+    model3.mnodeinj, V, injections[~injections.is_slack], 
+    f_pq, loadcurve)
+# modify Inode of slacks
+index_of_slack = model3.slacks.index_of_node
+Inode_re[index_of_slack] = -Vslack.re
+Inode_im[index_of_slack] = -Vslack.im
+# equation of node current
+Ires = (gb @ V.reim) + casadi.vertcat(Inode_re, Inode_im)
+# parameters, vertcat returns wrong shape for count_of_branch_taps==0
+param = (casadi.vertcat(Vslack.reim, pos) if pos.size1() else Vslack.reim)
+if (kq.size1()):
+    param = casadi.vertcat(param, kq)
+# create node current function
+fn_Iresidual = casadi.Function('fn_Iresidual', [V.reim, param], [Ires])
+# calculate
+Vslack_ = model3.slacks.V
+parameters = np.concatenate(
+    [model3.branchtaps.position.copy(), vsetpoints.value])
+success, voltages = find_root(
+    fn_Iresidual, parameters, Vslack_, count_of_nodes=model3.shape_of_Y[0])
+Vcomp2 = np.hstack(np.vsplit(voltages, 2)).view(dtype=np.complex128)

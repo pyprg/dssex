@@ -1413,8 +1413,8 @@ def get_estimation_data(model, count_of_steps, vminsqr=_VMINSQR):
     Votherterm_re = node_to_othertermidx @ Vnode.re
     Vterm_im = node_to_termidx @ Vnode.im
     Votherterm_im = node_to_othertermidx @ Vnode.im
-    Vterm_sqr = node_to_termidx @ Vnode.node_sqr
-    Votherterm_sqr = node_to_othertermidx @ Vnode.node_sqr
+    Vterm_sqr = node_to_termidx @ Vnode.sqr
+    Votherterm_sqr = node_to_othertermidx @ Vnode.sqr
     # end of >>first part of new implementation approach
     
     Vsymbols = _create_v_symbols(pfc_nodes)
