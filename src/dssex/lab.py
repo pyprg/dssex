@@ -54,10 +54,12 @@ get_injected_power = get_injected_power_fn(
     model.injections, 
     loadcurve='original')
 pq_factors = np.ones((len(model.injections), 2))
+count_of_nodes = model.shape_of_Y[0]
+init = np.array([1.]*count_of_nodes + [0.]*count_of_nodes).reshape(-1, 1)
 if len(model.errormessages):
     print(model.errormessages)
 else:
-    success, V = cpfsymb(1e-10, 20, model)
+    success, V = cpfsymb(1e-10, 20, model, Vinit=init)
     print('SUCCESS' if success else '_F_A_I_L_E_D_')
     Ires = get_residual_current_fn(model, get_injected_power)(V)
     print('\nIres:\n', Ires)
@@ -97,15 +99,14 @@ values_of_params = casadi.horzcat(
 if len(model.errormessages):
     print(model.errormessages)
 else:
-    Vnode_initial = fv * (
-        np.array([1.+0j]*model.shape_of_Y[0], dtype=np.complex128)
-        .reshape(-1, 1))
+    count_of_nodes = model.shape_of_Y[0]
+    init = np.array([1.]*count_of_nodes + [0.]*count_of_nodes).reshape(-1, 1)
     success, V = powerflowfn(
         1e-10, 
         20, 
         model, 
         Vslack=Vslack, 
-        Vinit=Vnode_initial, 
+        Vinit=init, 
         pq_factors=pq_factors,
         loadcurve=loadcurve)
     print()
@@ -162,7 +163,9 @@ model2 = make_model(
 if len(model2.errormessages):
     print(model2.errormessages)
 else:
-    success2, V2 = cpfsymb(1e-10, 20, model2)
+    count_of_nodes = model2.shape_of_Y[0]
+    init = np.array([1.]*count_of_nodes + [0.]*count_of_nodes).reshape(-1, 1)
+    success2, V2 = cpfsymb(1e-10, 20, model2, Vinit=init)
     print('\n--->>>','SUCCESS' if success2 else '_F_A_I_L_E_D_', '<<<---\n')
     print('V:\n', V2, '\n')
     get_injected_power2 = get_injected_power_fn(model2.injections)
@@ -192,9 +195,10 @@ param = (casadi.vertcat(Vslack.reim, pos) if pos.size1() else Vslack.reim)
 fn_Iresidual = casadi.Function('fn_Iresidual', [V.reim, param], [Ires])
 # calculate
 Vslack_ = model.slacks.V
-tappositions_ = model.branchtaps.position.copy() 
-success, voltages = find_root(
-    fn_Iresidual, tappositions_, Vslack_, count_of_nodes=model.shape_of_Y[0])
+tappositions_ = model.branchtaps.position.copy()
+count_of_nodes = model.shape_of_Y[0]
+init = np.array([1.]*count_of_nodes + [0.]*count_of_nodes).reshape(-1, 1)
+success, voltages = find_root(fn_Iresidual, tappositions_, Vslack_, init)
 Vcomp = np.hstack(np.vsplit(voltages, 2)).view(dtype=np.complex128)
 #%% calculate voltage 'manually'
 # node: 0               1
@@ -285,7 +289,7 @@ print('Null_r: ', Null_r)
 # imaginary
 Null_j = V0j*V1r - V0r*V1j + g0 * f
 print('Null_j: ', Null_j)
-#%%
+#%% model with generator, search for V
 # Always use a decimal point for floats. Now and then processing ints
 # fails with casadi/pandas/numpy.
 
@@ -351,10 +355,12 @@ fn_Iresidual = casadi.Function('fn_Iresidual', [V.reim, param], [Ires])
 # calculate
 Vslack_ = model3.slacks.V
 tappositions_ = model3.branchtaps.position.copy() 
+count_of_nodes = model3.shape_of_Y[0]
+init = np.array([1.]*count_of_nodes + [0.]*count_of_nodes).reshape(-1, 1)
 success, voltages = find_root(
-    fn_Iresidual, tappositions_, Vslack_, count_of_nodes=model3.shape_of_Y[0])
+    fn_Iresidual, tappositions_, Vslack_, init)
 Vcomp = np.hstack(np.vsplit(voltages, 2)).view(dtype=np.complex128)
-#%%
+#%% search for V and Q
 def get_v_setpoints(model):
     """Extracts voltage setpoints having a variable Q at their 
     power flow calculation nodes.
@@ -398,8 +404,9 @@ def get_v_setpoints(model):
     return qvars.join(vsetpoints, on='id_of_node', how='inner')
 
 vsetpoints = get_v_setpoints(model3)
-kq = casadi.SX.sym('kq', len(vsetpoints))
+injections = model3.injections
 f_pq = casadi.SX.ones(len(injections), 2)
+kq = casadi.SX.sym('kq', len(vsetpoints))
 f_pq[vsetpoints.index_of_injection, 1] = kq
 Inode_re, Inode_im = get_injected_current(
     model3.mnodeinj, V, injections[~injections.is_slack], 
@@ -410,16 +417,21 @@ Inode_re[index_of_slack] = -Vslack.re
 Inode_im[index_of_slack] = -Vslack.im
 # equation of node current
 Ires = (gb @ V.reim) + casadi.vertcat(Inode_re, Inode_im)
-# parameters, vertcat returns wrong shape for count_of_branch_taps==0
-param = (casadi.vertcat(Vslack.reim, pos) if pos.size1() else Vslack.reim)
-if (kq.size1()):
-    param = casadi.vertcat(param, kq)
-# create node current function
-fn_Iresidual = casadi.Function('fn_Iresidual', [V.reim, param], [Ires])
-# calculate
-Vslack_ = model3.slacks.V
-parameters = np.concatenate(
-    [model3.branchtaps.position.copy(), vsetpoints.value])
-success, voltages = find_root(
-    fn_Iresidual, parameters, Vslack_, count_of_nodes=model3.shape_of_Y[0])
-Vcomp2 = np.hstack(np.vsplit(voltages, 2)).view(dtype=np.complex128)
+# difference of voltage to setpoint
+diff_v = V.sqr[vsetpoints.index_of_node] - np.power(vsetpoints.V, 2)
+# residuum
+res_expr = casadi.vertcat(Ires, diff_v) if diff_v.size1() else Ires
+# decision variables
+vars_ = casadi.vertcat(V.reim, kq) if kq.size1() else V.reim
+# create residual function
+fn_residual = casadi.Function('fn_residual', [vars_, param], [res_expr])
+#
+count_of_nodes = model3.shape_of_Y[0]
+Vinit = np.array([1.]*count_of_nodes + [0.]*count_of_nodes).reshape(-1, 1)
+init = casadi.vertcat(Vinit, vsetpoints.V) if len(vsetpoints) else Vinit
+tappositions = model3.branchtaps.position.copy()
+success, vals_ = find_root(fn_residual, tappositions, Vslack_, init)
+# process results
+vals = np.array(vals_)
+voltages = vals[:(2*count_of_nodes)]
+qfactors = vals[(2*count_of_nodes):]

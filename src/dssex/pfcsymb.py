@@ -457,7 +457,7 @@ def get_injected_current(
     pq_factors: numpy.array/casadi.SX, float, (number_of_injections x 2)
         factors for active and reactive power of loads
     loadcurve: 'original' | 'interpolated' | 'square'
-        default is 'original', just first letter is used
+        default is 'original', just first letter is evaluated
 
     Returns
     -------
@@ -597,23 +597,19 @@ def build_objective(model, gb_matrix, V, count_of_slacks, pq_factors=None):
     Ires = ((gb_matrix[count_of_slacks:, :] @ V.reim) + I)
     return casadi.norm_2(Ires)
     
-def find_root(
-        fn_Iresidual, tappositions, Vslack, count_of_nodes=0, Vinit=None):
-    """Finds root of fn_Iresidual.
+def find_root(fn_residual, tappositions, Vslack, init):
+    """Finds root of fn_residual.
     
     Parameters
     ----------
-    fn_Iresidual: casadi.Function
+    fn_residual: casadi.Function
         function to find a root for
     tappositions: numpy.array, int
         positions of taps
     Vslack: array_like, shape (n, 1) of complex
         values for slack voltages (parameter), n: number of slacks
-    count_of_nodes: int
-        number of nodes, defaults to 0
-    Vinit: array_like, shape (n, 1) of complex
-        vector of initial complex node voltages
-        n: number of nodes, defaults to None
+    init: array_like, shape (n, 1) of float
+        vector of initial values for decision variables
     
     Returns
     -------
@@ -621,18 +617,14 @@ def find_root(
         * success?, bool
         * casadi.DM, voltage vector of floats, shape (2n,1), 
           n real parts followed by n imaginary parts"""
-    Vinit_ = (
-        np.vstack([np.real(Vinit), np.imag(Vinit)]) 
-        if not Vinit is None else
-        np.array([1.]*count_of_nodes + [0.]*count_of_nodes).reshape(-1, 1))
     values_of_params = casadi.horzcat(
         np.real(Vslack), np.imag(Vslack), tappositions)
-    rf = casadi.rootfinder('rf', 'nlpsol', fn_Iresidual, {'nlpsol':'ipopt'})
-    #rf = casadi.rootfinder('rf', 'newton', fn_Iresidual)
+    rf = casadi.rootfinder('rf', 'nlpsol', fn_residual, {'nlpsol':'ipopt'})
+    #rf = casadi.rootfinder('rf', 'newton', fn_residual)
     try:
-        return True, rf(Vinit_, values_of_params)
+        return True, rf(init, values_of_params)
     except:
-        return False, casadi.DM(Vinit_)
+        return False, casadi.DM(init)
     
 def calculate_power_flow(
         precision, max_iter, model, 
@@ -670,8 +662,7 @@ def calculate_power_flow(
         if tappositions is None else tappositions
     fn_Iresidual = build_residual_fn(model, pq_factors, loadcurve)
     success, voltages = find_root(
-        fn_Iresidual, tappositions_, Vslack_, 
-        count_of_nodes=model.shape_of_Y[0], Vinit=Vinit)
+        fn_Iresidual, tappositions_, Vslack_, Vinit)
     return success, np.hstack(np.vsplit(voltages, 2)).view(dtype=np.complex128)
     
 def eval_residual_current(
