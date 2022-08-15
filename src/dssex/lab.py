@@ -433,5 +433,199 @@ tappositions = model3.branchtaps.position.copy()
 success, vals_ = find_root(fn_residual, tappositions, Vslack_, init)
 # process results
 vals = np.array(vals_)
-voltages = vals[:(2*count_of_nodes)]
+voltages = (
+    np.hstack(np.split(vals[:(2*count_of_nodes)],2)).view(dtype=np.complex128))
 qfactors = vals[(2*count_of_nodes):]
+#%%
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+from matplotlib import gridspec
+from matplotlib import cm
+import matplotlib.colors as colors
+import matplotlib.ticker as ticker
+import numpy as np
+
+mpl.rcParams['figure.figsize']  = 18, 18
+mpl.rcParams['legend.fontsize'] = 12
+
+Vsetpoint = 1
+
+# smallest possible reactive power
+q_min = -10 
+# greatest possible reactive power
+q_max = 5   
+vdiff_ = -0.2
+# half of q-residuum function exponent 
+n_half = 10
+
+
+def res_vdiff(v_diff):
+    """Calculates residuum for voltage part.
+    
+    Parameters
+    ==========
+    v_diff: float
+        setpoint - value
+    
+    Returns
+    =======
+    float"""
+    return 3*v_diff
+
+def get_res_q(q_min, q_max, res_qmin, n_half):
+    """Returns a function calculating the residuum of the q-part.
+    Calculation of coefficient c:
+    ::        
+        ges: 
+          c for: res_q(q_min) = ((q_min-q_centre)*q_range_size)/(2*c) ** (2*n)
+        solution:
+          f(q_min, vdiff) = 0
+          res_v(vdiff_) + res_q(q_min) = 0
+          res_v(vdiff_) + (((q_min-q_centre)*q_range_size)/(2*c))**(2*n) = 0
+        
+          (((q_min-q_centre)*q_range_size)/(2*c))**(2*n) = -res_v(vdiff_)
+          (((q_min-q_centre)*q_range_size)/(2*c)) = (-res_v(vdiff_))**(1/(2*n))
+        
+          c = ((q_min-q_centre)*q_range_size) / 2*((-res_v(vdiff_))**(1/(2*n)))
+          c = q_min / (-res_v(vdiff_))**(1/(2*n))
+        
+    
+    Parameters
+    ==========
+    q_min: float
+        smallest possible reactive power
+    q_max: float
+        greates possible reactive power
+    res_qmin: float
+        value of function at q_min (and q_max)
+    n_half: int
+        half exponent of residuum function
+    
+    Returns
+    =======
+    function (float)->(float)
+        (reactive_power_Q)->(residuum)"""
+    q_centre = (q_min + q_max) / 2
+    q_range_size = q_max - q_min
+    assert 0 <= res_qmin
+    c = ((q_min - q_centre)*(q_range_size/2)) / (res_qmin**(1/(2*n_half)))
+    return lambda q: ( ((q - q_centre)*(q_range_size/2))/c )**( 2*n_half )
+
+
+res_q = get_res_q(q_min, q_max, -res_vdiff(vdiff_), n_half)
+
+fn_res = lambda q, vdiff: res_q(q) + res_vdiff(vdiff)
+
+
+
+
+q_text = 'Q'
+vdiff_text = 'Vdiff'
+residuum_text = 'residuum'
+
+volt_padding = .2
+volt_limit = volt_padding + Vsetpoint
+v_limits = [-volt_limit, volt_limit]
+q_padding = .2
+q_limits = [-q_padding + q_min, q_max + q_padding]
+residuum_limits = [-0.2, 1.] # residuum-axis
+
+
+# Make data.
+Vdiff_range = np.linspace(
+    start=-volt_limit, stop=volt_limit, num=1000, endpoint=True)
+Qrange = np.linspace(start=q_limits[0], stop=q_limits[1], num=1000, endpoint=True)
+Vdiff, Q = np.meshgrid(Vdiff_range, Qrange)
+
+vdiff_res = res_vdiff(Vdiff)
+q_res = res_q(Q)
+
+res = fn_res(Q, Vdiff)
+
+levels = np.linspace(-1, 1, 3, endpoint=True)
+
+fig = plt.figure()
+
+
+
+elev = 50
+azim = -40
+alpha=0.3
+color = cm.cool
+norm = colors.CenteredNorm(vcenter=0)
+
+def plot_vdiff_q_res_contour(ax):
+    ax.set_title('Residuum contour over Q and Vdiff')
+    ax.grid()
+    ax.set_ylim(q_limits)
+    ctf = ax.contourf(V, Q, res, levels=100, norm=norm, cmap=color, alpha=alpha, antialiased=True)
+    cs = ax.contour(V, Q, res, levels=levels, norm=norm,  cmap=color, antialiased=True, linewidths=2)
+    cbar = fig.colorbar(ctf, ticks=ticker.AutoLocator())
+    ax.clabel(cs, inline=True, fontsize=15)
+    ax.set_xlabel(vdiff_text, fontsize=10)
+    ax.set_ylabel(q_text, fontsize=10)
+
+def plot_vdiff_res(ax):
+    ax.set_title('Vdiff-Residuum vs. Vdiff')
+    ax.grid()
+    ax.plot(Vdiff_range, res_vdiff(Vdiff_range))
+    ax.set_xlabel(vdiff_text, fontsize=10)
+    ax.set_ylabel(residuum_text, fontsize=10)
+
+def plot_q_res(ax):
+    ax.set_title('Q-Residuum vs. Q')
+    ax.grid()
+    ax.plot(Qrange, res_q(Qrange))
+    ax.set_xlim(q_limits)
+    ax.set_ylim(residuum_limits)
+    ax.set_xlabel(q_text, fontsize=10)
+    ax.set_ylabel(residuum_text, fontsize=10)
+
+def plot3d_vdiff_res(ax):
+    ax.set_title('Vdiff-Residuum vs. Q and Vdiff')
+    ax.set_xlim(v_limits)
+    ax.set_ylim(q_limits)
+    ax.set_zlim(-4, 4.0)
+    ax.view_init(elev=elev, azim=azim)
+    ax.set_proj_type('ortho')
+    surf = ax.plot_surface(V, Q, vdiff_res, alpha=alpha, norm=norm, cmap=color, antialiased=True)
+    cnt = ax.contour(V, Q, vdiff_res, levels=levels, norm=norm, cmap=color, antialiased=True)
+    ax.set_xlabel(vdiff_text , fontsize=10)
+    ax.set_ylabel(q_text, fontsize=10)
+    ax.set_zlabel(residuum_text, fontsize=10)
+
+def plot3d_q_res(ax):
+    ax.set_title('Q-Residuum vs. Q and Vdiff')
+    ax.set_xlim(v_limits)
+    ax.set_ylim(q_limits)
+    ax.set_zlim(-4, 4.0)
+    ax.view_init(elev=elev, azim=azim)
+    ax.set_proj_type('ortho')
+    surf = ax.plot_surface(V, Q, q_res, alpha=alpha, norm=norm, cmap=color, antialiased=True)
+    cnt = ax.contour(V, Q, q_res, levels=levels, norm=norm, cmap=color, antialiased=True)
+    ax.set_xlabel(vdiff_text , fontsize=10)
+    ax.set_ylabel(q_text, fontsize=10)
+    ax.set_zlabel(residuum_text, fontsize=10)
+
+def plot3d_vdiff_q_res(ax):
+    ax.set_title('Residuum vs. Q and Vdiff')
+    ax.set_xlim(v_limits)
+    ax.set_ylim(q_limits)
+    ax.set_zlim(-4, 4.0)
+    ax.view_init(elev=elev, azim=azim)
+    ax.set_proj_type('ortho')
+    surf = ax.plot_surface(V, Q, res, alpha=alpha, norm=norm, cmap=color, antialiased=True)
+    cnt = ax.contour(V, Q, res, levels=levels, norm=norm, cmap=color, antialiased=True)
+    ax.set_xlabel(vdiff_text, fontsize=10)
+    ax.set_ylabel(q_text, fontsize=10)
+    ax.set_zlabel(residuum_text, fontsize=10)
+
+
+
+gs = gridspec.GridSpec(5, 5, fig, wspace=0.5, hspace=0.5)
+plot_vdiff_q_res_contour(fig.add_subplot(gs[0:3, 0:3]))
+plot_q_res(fig.add_subplot(gs[0, 3:5]))
+plot3d_q_res(fig.add_subplot(gs[1:3, 3:5], projection='3d'))
+plot3d_vdiff_q_res(fig.add_subplot(gs[3:5, 3:5], projection='3d'))
+plot_vdiff_res(fig.add_subplot(gs[3:5, 0]))
+plot3d_vdiff_res(fig.add_subplot(gs[3:5, 1:3], projection='3d'))
