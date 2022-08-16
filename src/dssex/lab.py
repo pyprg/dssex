@@ -476,17 +476,19 @@ def get_res_q(q_min, q_max, res_qmin, n_half):
     """Returns a function calculating the residuum of the q-part.
     Calculation of coefficient c:
     ::        
-        ges: 
+        target: 
           c for: res_q(q_min) = ((q_min-q_centre)*q_range_size)/(2*c) ** (2*n)
         solution:
-          f(q_min, vdiff) = 0
-          res_v(vdiff_) + res_q(q_min) = 0
-          res_v(vdiff_) + (((q_min-q_centre)*q_range_size)/(2*c))**(2*n) = 0
+          res(q_min, vdiff_) = 0
+          res_vdiff(vdiff_) + res_q(q_min) = 0
+          res_vdiff(vdiff_) + (((q_min-q_centre)*q_range_size)/(2*c))**(2*n) = 0
         
-          (((q_min-q_centre)*q_range_size)/(2*c))**(2*n) = -res_v(vdiff_)
-          (((q_min-q_centre)*q_range_size)/(2*c)) = (-res_v(vdiff_))**(1/(2*n))
+          ((q_min-q_centre)*q_range_size)/(2*c)**(2*n) = 
+              -res_vdiff(vdiff_)
+          ((q_min-q_centre)*q_range_size)/(2*c) = 
+              (-res_vdiff(vdiff_))**(1/(2*n))
         
-          c = ((q_min-q_centre)*q_range_size) / 2*((-res_v(vdiff_))**(1/(2*n)))
+          c = ((q_min-q_centre)*q_range_size) / 2*((-res_vdiff(vdiff_))**(1/(2*n)))
           c = q_min / (-res_v(vdiff_))**(1/(2*n))
         
     
@@ -526,7 +528,7 @@ residuum_text = 'residuum'
 volt_padding = .2
 volt_limit = volt_padding + Vsetpoint
 v_limits = [-volt_limit, volt_limit]
-q_padding = .2
+q_padding = 0.2
 q_limits = [-q_padding + q_min, q_max + q_padding]
 residuum_limits = [-0.2, 1.] # residuum-axis
 
@@ -558,8 +560,8 @@ def plot_vdiff_q_res_contour(ax):
     ax.set_title('Residuum contour over Q and Vdiff')
     ax.grid()
     ax.set_ylim(q_limits)
-    ctf = ax.contourf(V, Q, res, levels=100, norm=norm, cmap=color, alpha=alpha, antialiased=True)
-    cs = ax.contour(V, Q, res, levels=levels, norm=norm,  cmap=color, antialiased=True, linewidths=2)
+    ctf = ax.contourf(Vdiff, Q, res, levels=100, norm=norm, cmap=color, alpha=alpha, antialiased=True)
+    cs = ax.contour(Vdiff, Q, res, levels=levels, norm=norm,  cmap=color, antialiased=True, linewidths=2)
     cbar = fig.colorbar(ctf, ticks=ticker.AutoLocator())
     ax.clabel(cs, inline=True, fontsize=15)
     ax.set_xlabel(vdiff_text, fontsize=10)
@@ -588,8 +590,8 @@ def plot3d_vdiff_res(ax):
     ax.set_zlim(-4, 4.0)
     ax.view_init(elev=elev, azim=azim)
     ax.set_proj_type('ortho')
-    surf = ax.plot_surface(V, Q, vdiff_res, alpha=alpha, norm=norm, cmap=color, antialiased=True)
-    cnt = ax.contour(V, Q, vdiff_res, levels=levels, norm=norm, cmap=color, antialiased=True)
+    surf = ax.plot_surface(Vdiff, Q, vdiff_res, alpha=alpha, norm=norm, cmap=color, antialiased=True)
+    cnt = ax.contour(Vdiff, Q, vdiff_res, levels=levels, norm=norm, cmap=color, antialiased=True)
     ax.set_xlabel(vdiff_text , fontsize=10)
     ax.set_ylabel(q_text, fontsize=10)
     ax.set_zlabel(residuum_text, fontsize=10)
@@ -601,8 +603,8 @@ def plot3d_q_res(ax):
     ax.set_zlim(-4, 4.0)
     ax.view_init(elev=elev, azim=azim)
     ax.set_proj_type('ortho')
-    surf = ax.plot_surface(V, Q, q_res, alpha=alpha, norm=norm, cmap=color, antialiased=True)
-    cnt = ax.contour(V, Q, q_res, levels=levels, norm=norm, cmap=color, antialiased=True)
+    surf = ax.plot_surface(Vdiff, Q, q_res, alpha=alpha, norm=norm, cmap=color, antialiased=True)
+    cnt = ax.contour(Vdiff, Q, q_res, levels=levels, norm=norm, cmap=color, antialiased=True)
     ax.set_xlabel(vdiff_text , fontsize=10)
     ax.set_ylabel(q_text, fontsize=10)
     ax.set_zlabel(residuum_text, fontsize=10)
@@ -614,8 +616,8 @@ def plot3d_vdiff_q_res(ax):
     ax.set_zlim(-4, 4.0)
     ax.view_init(elev=elev, azim=azim)
     ax.set_proj_type('ortho')
-    surf = ax.plot_surface(V, Q, res, alpha=alpha, norm=norm, cmap=color, antialiased=True)
-    cnt = ax.contour(V, Q, res, levels=levels, norm=norm, cmap=color, antialiased=True)
+    surf = ax.plot_surface(Vdiff, Q, res, alpha=alpha, norm=norm, cmap=color, antialiased=True)
+    cnt = ax.contour(Vdiff, Q, res, levels=levels, norm=norm, cmap=color, antialiased=True)
     ax.set_xlabel(vdiff_text, fontsize=10)
     ax.set_ylabel(q_text, fontsize=10)
     ax.set_zlabel(residuum_text, fontsize=10)
