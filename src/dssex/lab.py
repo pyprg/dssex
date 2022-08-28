@@ -361,9 +361,8 @@ success, voltages = find_root(
     fn_Iresidual, tappositions_, Vslack_, init)
 Vcomp = np.hstack(np.vsplit(voltages, 2)).view(dtype=np.complex128)
 #%% search for V and Q
-def get_v_setpoints(model):
-    """Extracts voltage setpoints having a variable Q at their 
-    power flow calculation nodes.
+def get_kq_vsetpoints(model):
+    """Extracts q-scaling factors of voltage setpoints.
     
     Parmeters
     ---------
@@ -373,8 +372,8 @@ def get_v_setpoints(model):
     -------
     pandas.DataFrame (id_of_source)
         * .value, initial value
-        * .min, float
-        * .max, float
+        * .min, float, smallest possible value
+        * .max, float, greatest possible value
         * .injid, str, identifier of injection
         * .id_of_node, str
         * .index_of_node, int
@@ -403,11 +402,12 @@ def get_v_setpoints(model):
         .set_index('id_of_node'))
     return qvars.join(vsetpoints, on='id_of_node', how='inner')
 
-vsetpoints = get_v_setpoints(model3)
+kq_vsetpoints = get_kq_vsetpoints(model3)
 injections = model3.injections
 f_pq = casadi.SX.ones(len(injections), 2)
-kq = casadi.SX.sym('kq', len(vsetpoints))
-f_pq[vsetpoints.index_of_injection, 1] = kq
+kq = casadi.SX.sym('kq', len(kq_vsetpoints))
+# set f_q
+f_pq[kq_vsetpoints.index_of_injection, 1] = kq
 Inode_re, Inode_im = get_injected_current(
     model3.mnodeinj, V, injections[~injections.is_slack], 
     f_pq, loadcurve)
@@ -418,7 +418,7 @@ Inode_im[index_of_slack] = -Vslack.im
 # equation of node current
 Ires = (gb @ V.reim) + casadi.vertcat(Inode_re, Inode_im)
 # difference of voltage to setpoint
-diff_v = V.sqr[vsetpoints.index_of_node] - np.power(vsetpoints.V, 2)
+diff_v = V.sqr[kq_vsetpoints.index_of_node] - np.power(kq_vsetpoints.V, 2)
 # residuum
 res_expr = casadi.vertcat(Ires, diff_v) if diff_v.size1() else Ires
 # decision variables
@@ -428,14 +428,17 @@ fn_residual = casadi.Function('fn_residual', [vars_, param], [res_expr])
 #
 count_of_nodes = model3.shape_of_Y[0]
 Vinit = np.array([1.]*count_of_nodes + [0.]*count_of_nodes).reshape(-1, 1)
-init = casadi.vertcat(Vinit, vsetpoints.V) if len(vsetpoints) else Vinit
+init = casadi.vertcat(Vinit, kq_vsetpoints.V) if len(kq_vsetpoints) else Vinit
 tappositions = model3.branchtaps.position.copy()
 success, vals_ = find_root(fn_residual, tappositions, Vslack_, init)
 # process results
 vals = np.array(vals_)
 voltages = (
     np.hstack(np.split(vals[:(2*count_of_nodes)],2)).view(dtype=np.complex128))
+voltages_abs_angle = np.hstack([np.abs(voltages), np.angle(voltages)])
 qfactors = vals[(2*count_of_nodes):]
+k_pq = np.ones((len(injections), 2))
+k_pq[kq_vsetpoints.index_of_injection, 1] = qfactors
 #%%
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -447,16 +450,6 @@ import numpy as np
 
 mpl.rcParams['figure.figsize']  = 18, 18
 mpl.rcParams['legend.fontsize'] = 12
-
-Vsetpoint = 1
-
-# smallest possible reactive power
-q_min = -10 
-# greatest possible reactive power
-q_max = 5   
-vdiff_ = -0.2
-# half of q-residuum function exponent 
-n_half = 10
 
 
 def res_vdiff(v_diff):
@@ -477,19 +470,19 @@ def get_res_q(q_min, q_max, res_qmin, n_half):
     Calculation of coefficient c:
     ::        
         target: 
-          c for: res_q(q_min) = ((q_min-q_centre)*q_range_size)/(2*c) ** (2*n)
+          c for: res_q(q_min) = ((q_min-q_centre)*q_range_size)/(2*c) ** n
         solution:
           res(q_min, vdiff_) = 0
           res_vdiff(vdiff_) + res_q(q_min) = 0
-          res_vdiff(vdiff_) + (((q_min-q_centre)*q_range_size)/(2*c))**(2*n) = 0
+          res_vdiff(vdiff_) + (((q_min-q_centre)*q_range_size)/(2*c))**n = 0
         
-          ((q_min-q_centre)*q_range_size)/(2*c)**(2*n) = 
+          ((q_min-q_centre)*q_range_size)/(2*c)**n = 
               -res_vdiff(vdiff_)
           ((q_min-q_centre)*q_range_size)/(2*c) = 
-              (-res_vdiff(vdiff_))**(1/(2*n))
+              (-res_vdiff(vdiff_))**(1/n)
         
-          c = ((q_min-q_centre)*q_range_size) / 2*((-res_vdiff(vdiff_))**(1/(2*n)))
-          c = q_min / (-res_v(vdiff_))**(1/(2*n))
+          c = ((q_min-q_centre)*q_range_size) / 2*((-res_vdiff(vdiff_))**(1/n))
+          c = q_min / (-res_v(vdiff_))**(1/n)
         
     
     Parameters
@@ -506,12 +499,27 @@ def get_res_q(q_min, q_max, res_qmin, n_half):
     Returns
     =======
     function (float)->(float)
-        (reactive_power_Q)->(residuum)"""
-    q_centre = (q_min + q_max) / 2
-    q_range_size = q_max - q_min
+        (reactive_power_Q)->(residuum)""" 
     assert 0 <= res_qmin
-    c = ((q_min - q_centre)*(q_range_size/2)) / (res_qmin**(1/(2*n_half)))
-    return lambda q: ( ((q - q_centre)*(q_range_size/2))/c )**( 2*n_half )
+    assert q_min <= q_max
+    if q_min == -np.inf and q_max == np.inf:
+        return lambda q: 0.0
+    float64info = np.finfo(np.float64)
+    q_min = np.max([float64info.min, q_min])
+    q_max = np.min([float64info.max, q_max])
+    n = 2*n_half + 1
+    q_min_m_max = q_min - q_max
+    q_min_p_max = q_min + q_max
+    return lambda q: res_qmin * ((((2*q) - q_min_p_max) / q_min_m_max)**n)
+
+Vsetpoint = 1
+# smallest possible reactive power
+q_min = -10 
+# greatest possible reactive power
+q_max = 5   
+vdiff_ = -0.2
+# half of q-residuum function exponent 
+n_half = 15
 
 
 res_q = get_res_q(q_min, q_max, -res_vdiff(vdiff_), n_half)
@@ -522,13 +530,13 @@ fn_res = lambda q, vdiff: res_q(q) + res_vdiff(vdiff)
 
 
 q_text = 'Q'
-vdiff_text = 'Vdiff'
+vdiff_text = 'Vdiff = V - Vsetpoint'
 residuum_text = 'residuum'
 
 volt_padding = .2
 volt_limit = volt_padding + Vsetpoint
 v_limits = [-volt_limit, volt_limit]
-q_padding = 0.2
+q_padding = 0.6
 q_limits = [-q_padding + q_min, q_max + q_padding]
 residuum_limits = [-0.2, 1.] # residuum-axis
 
@@ -566,6 +574,10 @@ def plot_vdiff_q_res_contour(ax):
     ax.clabel(cs, inline=True, fontsize=15)
     ax.set_xlabel(vdiff_text, fontsize=10)
     ax.set_ylabel(q_text, fontsize=10)
+    xtick = np.arange(-.8, .9, np.abs(vdiff_))
+    ax.set_xticks(xtick, minor=False)
+    ytick = np.arange(q_min, q_max+0.1, 1.)
+    ax.set_yticks(ytick, minor=False)
 
 def plot_vdiff_res(ax):
     ax.set_title('Vdiff-Residuum vs. Vdiff')
