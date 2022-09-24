@@ -330,7 +330,7 @@ model3 = make_model(
     model_devices3,
     Vvalue(id_of_node='n_1', V=1.0),
     # define a scaling factor
-    Defk(id='kq_generator'),
+    Defk(id='kq_generator', min=-3, max=6),
     # link the factor to the generator
     Link(objid='generator', part='q', id='kq_generator'))
 injections = model3.injections
@@ -404,8 +404,21 @@ def get_kq_vsetpoints(model):
 
 kq_vsetpoints = get_kq_vsetpoints(model3)
 injections = model3.injections
+# scaling of P and Q
 f_pq = casadi.SX.ones(len(injections), 2)
+# Q-scaling of PV-generators
 kq = casadi.SX.sym('kq', len(kq_vsetpoints))
+# residuum of Q-scaling
+kq_min_p_kq_max = kq_vsetpoints['min'] + kq_vsetpoints['max']
+kq_min_m_kq_max = kq_vsetpoints['min'] - kq_vsetpoints['max']
+m = 3
+res_q = 0.2 * m * casadi.power((2*kq - kq_min_p_kq_max) / kq_min_m_kq_max, 3)
+# residuum of V-difference
+res_v = m * (
+    casadi.SX(kq_vsetpoints.V) 
+    - casadi.sqrt(V.sqr[kq_vsetpoints.index_of_node]))
+# 
+res_vsetpoint = res_v + res_q
 # set f_q
 f_pq[kq_vsetpoints.index_of_injection, 1] = kq
 Inode_re, Inode_im = get_injected_current(
@@ -419,6 +432,9 @@ Inode_im[index_of_slack] = -Vslack.im
 Ires = (gb @ V.reim) + casadi.vertcat(Inode_re, Inode_im)
 # difference of voltage to setpoint
 diff_v = V.sqr[kq_vsetpoints.index_of_node] - np.power(kq_vsetpoints.V, 2)
+
+diff_v = res_v
+
 # residuum
 res_expr = casadi.vertcat(Ires, diff_v) if diff_v.size1() else Ires
 # decision variables
@@ -431,6 +447,7 @@ Vinit = np.array([1.]*count_of_nodes + [0.]*count_of_nodes).reshape(-1, 1)
 init = casadi.vertcat(Vinit, kq_vsetpoints.V) if len(kq_vsetpoints) else Vinit
 tappositions = model3.branchtaps.position.copy()
 success, vals_ = find_root(fn_residual, tappositions, Vslack_, init)
+print("\n>>> SUCCESS <<<" if success else "\n>>> F_A_I_L_E_D <<<")
 # process results
 vals = np.array(vals_)
 voltages = (
@@ -465,7 +482,7 @@ def res_vdiff(v_diff):
     float"""
     return 3*v_diff
 
-def get_res_q(q_min, q_max, res_qmin, n_half):
+def get_res_q(k_min, k_max, y_kmin, n_half):
     """Returns a function calculating the residuum of the q-part.
     Calculation of coefficient c:
     ::        
@@ -487,11 +504,11 @@ def get_res_q(q_min, q_max, res_qmin, n_half):
     
     Parameters
     ==========
-    q_min: float
+    k_min: float
         smallest possible reactive power
-    q_max: float
+    k_max: float
         greates possible reactive power
-    res_qmin: float
+    y_kmin: float
         value of function at q_min (and q_max)
     n_half: int
         half exponent of residuum function
@@ -499,27 +516,27 @@ def get_res_q(q_min, q_max, res_qmin, n_half):
     Returns
     =======
     function (float)->(float)
-        (reactive_power_Q)->(residuum)""" 
-    assert 0 <= res_qmin
-    assert q_min <= q_max
-    if q_min == -np.inf and q_max == np.inf:
+        (scaling_factor_kq)->(residuum)"""
+    assert 0 <= y_kmin
+    assert k_min < k_max
+    if k_min == -np.inf and k_max == np.inf:
         return lambda q: 0.0
     float64info = np.finfo(np.float64)
-    q_min = np.max([float64info.min, q_min])
-    q_max = np.min([float64info.max, q_max])
+    k_min_ = np.max([float64info.min, k_min])
+    k_max_ = np.min([float64info.max, k_max])
     n = 2*n_half + 1
-    q_min_m_max = q_min - q_max
-    q_min_p_max = q_min + q_max
-    return lambda q: res_qmin * ((((2*q) - q_min_p_max) / q_min_m_max)**n)
+    k_min_m_max = k_min_ - k_max_
+    k_min_p_max = k_min_ + k_max_
+    return lambda kq: y_kmin * ((((2*kq) - k_min_p_max) / k_min_m_max)**n)
 
-Vsetpoint = 1
 # smallest possible reactive power
-q_min = -10 
+q_min = -1 
 # greatest possible reactive power
-q_max = 5   
+q_max = 1
+# voltage deviation at smallest possible reactive power  
 vdiff_ = -0.2
 # half of q-residuum function exponent 
-n_half = 15
+n_half = 1
 
 
 res_q = get_res_q(q_min, q_max, -res_vdiff(vdiff_), n_half)
@@ -534,11 +551,12 @@ vdiff_text = 'Vdiff = V - Vsetpoint'
 residuum_text = 'residuum'
 
 volt_padding = .2
-volt_limit = volt_padding + Vsetpoint
+Vdiff_range_max = 1
+volt_limit = volt_padding + Vdiff_range_max
 v_limits = [-volt_limit, volt_limit]
 q_padding = 0.6
 q_limits = [-q_padding + q_min, q_max + q_padding]
-residuum_limits = [-0.2, 1.] # residuum-axis
+residuum_limits = [-4.0, 4.0] # residuum-axis
 
 
 # Make data.
@@ -612,10 +630,13 @@ def plot3d_q_res(ax):
     ax.set_title('Q-Residuum vs. Q and Vdiff')
     ax.set_xlim(v_limits)
     ax.set_ylim(q_limits)
-    ax.set_zlim(-4, 4.0)
+    ax.set_zlim(residuum_limits)
     ax.view_init(elev=elev, azim=azim)
     ax.set_proj_type('ortho')
-    surf = ax.plot_surface(Vdiff, Q, q_res, alpha=alpha, norm=norm, cmap=color, antialiased=True)
+    mask = (q_res < -4) | (4 < q_res)
+    q_res_ = q_res.copy()
+    q_res_[mask] = np.nan
+    surf = ax.plot_surface(Vdiff, Q, q_res_, alpha=alpha, norm=norm, cmap=color, antialiased=True)
     cnt = ax.contour(Vdiff, Q, q_res, levels=levels, norm=norm, cmap=color, antialiased=True)
     ax.set_xlabel(vdiff_text , fontsize=10)
     ax.set_ylabel(q_text, fontsize=10)
@@ -628,7 +649,10 @@ def plot3d_vdiff_q_res(ax):
     ax.set_zlim(-4, 4.0)
     ax.view_init(elev=elev, azim=azim)
     ax.set_proj_type('ortho')
-    surf = ax.plot_surface(Vdiff, Q, res, alpha=alpha, norm=norm, cmap=color, antialiased=True)
+    mask = (res < -4) | (4 < res)
+    res_ = res.copy()
+    res_[mask] = np.nan
+    surf = ax.plot_surface(Vdiff, Q, res_, alpha=alpha, norm=norm, cmap=color, antialiased=True)
     cnt = ax.contour(Vdiff, Q, res, levels=levels, norm=norm, cmap=color, antialiased=True)
     ax.set_xlabel(vdiff_text, fontsize=10)
     ax.set_ylabel(q_text, fontsize=10)

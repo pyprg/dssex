@@ -175,9 +175,8 @@ def create_Vvars(count_of_nodes):
         * .im
         * .reim
         * .sqr"""
-    count = count_of_nodes
-    Vre = casadi.SX.sym('Vre', count)
-    Vim = casadi.SX.sym('Vim', count)
+    Vre = casadi.SX.sym('Vre', count_of_nodes)
+    Vim = casadi.SX.sym('Vim', count_of_nodes)
     Vreim = casadi.vertcat(Vre, Vim)
     Vsqr = casadi.power(Vre, 2) + casadi.power(Vim, 2)
     return Vvar(

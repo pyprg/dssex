@@ -21,7 +21,7 @@ Created on Sun Aug  8 08:36:10 2021
 """
 from egrid import make_model
 from egrid.builder import (
-    Slacknode, Branch, Injection, PValue, QValue, Output, Vvalue, Defk, Link)
+    Slacknode, Branch, Branchtaps, Injection, PValue, QValue, Output, Vvalue, Defk, Link)
 from src.dssex.estim import calculate
 import src.dssex.present as pr
 
@@ -49,6 +49,15 @@ model_devices = [
         id_of_node_B='n_2',
         y_lo=1e3-1e3j,
         y_tr=1e-6+1e-6j),
+    Branchtaps(
+        id='tap_line1',
+        id_of_node='n_1',
+        id_of_branch='line_1',
+        Vstep=10/16,
+        positionmin=-16,
+        positionneutral=0,
+        positionmax=16,
+        position=1),
     Injection(
         id='consumer_0',
         id_of_node='n_2',
@@ -319,4 +328,30 @@ model09 = make_model(
 result09 = [*calculate(model09, parameters_of_steps=[{'objectives': 'P'}])]
 pr.print_estim_results(result09)
 pr.print_measurements(result09)
+#%%
+import casadi
+from src.dssex.estim2 import create_gb_matrix, create_Vvars, calculate_Y_by_V
+position_vars = casadi.SX.sym('pos', len(model00.branchtaps), 1)
+G, B = create_gb_matrix(model00, position_vars)
+Vvars = create_Vvars(model00.shape_of_Y[0])
+Y_by_V = calculate_Y_by_V(G, B, Vvars)
+#%%
+from src.dssex.estim2 import get_factors, get_scaling_data_fn
+model10 = make_model(
+    schema09,
+    # define a scaling factor
+    Defk(id='kp'),
+    # link the factor to the loads
+    Link(
+        objid=('load_1', 'load_2', 'load_3', 'load_4', 'load_51'), 
+        part='p', 
+        id='kp'))
+
+
+scaling_factors_of_step = get_scaling_data_fn(model10, count_of_steps=2)
+
+scaling_data = scaling_factors_of_step(step=0)
+
+
+
 

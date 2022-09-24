@@ -35,7 +35,7 @@ def show_factors(model, count_of_steps=3):
     factors, injection_factors = get_load_scaling_factors(
         model.injections.id,
         model.load_scaling_factors,
-        model.injection_factor_association,
+        model.injection_factor_associations,
         count_of_steps)
     return factors.applymap(str), injection_factors.applymap(str)
 
