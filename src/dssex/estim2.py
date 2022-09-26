@@ -286,7 +286,7 @@ def calculate_Y_by_V(G, B, Vreim):
 
 def _get_step_factor_to_injection_part(
         injectionids, assoc_frame, step_factors, count_of_steps):
-    """Arranges ids for all steps and injections.
+    """Arranges ids for all calculation steps and injections.
 
     Parameters
     ----------
@@ -339,7 +339,7 @@ def _get_factor_ini_values(myfactors, symbols):
     return ini.astype(dtype='Int64')
 
 def _get_default_factors(count_of_steps):
-    """Generates one default factor per step.
+    """Generates one default scaling factor per step.
     
     Parameters
     ----------
@@ -358,7 +358,7 @@ def _get_default_factors(count_of_steps):
 
 def _factor_index_per_step(factors):
     """Creates an index (0...n) for each step. 
-    (Alternative for _get_default_factors)
+    (Alternative for _factor_index)
     
     Parameters
     ----------
@@ -376,6 +376,7 @@ def _factor_index_per_step(factors):
 
 def _factor_index(factors):
     """Creates an index for all factors (includes all steps).
+    (Alternative for _factor_index_per_step)
     
     Parameters
     ----------
@@ -530,32 +531,29 @@ def _get_values_of_symbols(factor_data, value_of_previous_step):
     values[calc.index_of_symbol] = value_of_previous_step[calc.index_of_source]
     return values
     
-def _select_type(factor_data, vecs, type_):
+def _select_type(vecs, factor_data):
     """Creates column vectors from vecs by extracting elements by their 
     indices.
     
     Parameters
     ----------
-    factor_data: pandas.DataFrame
-        * .type
-        * .index_of_symbol
     vecs: iterable
         casadi.SX or casadi.DM, column vector
-    type_: 'const' | 'var'
+    factor_data: pandas.DataFrame
+        * .index_of_symbol
         
     Returns
     -------
-    tuple
-        * casadi.SX
-        * casadi.DM"""
-    indices = factor_data[factor_data.type==type_].index_of_symbol
-    return (v[indices, 0] for v in vecs)
+    iterator
+        * casadi.SX / casadi.DM"""
+    return (v[factor_data.index_of_symbol, 0] for v in vecs)
 
 _k_prev_default = casadi.DM.zeros(0,1)
 
 Scalingdata = namedtuple(
-    'Scalingfactors',
-    'kp kq vars_ values_of_vars consts values_of_consts symbols')
+    'Scalingdata',
+    'kp kq kvars values_of_vars kvar_min kvar_max kconsts values_of_consts '
+    'symbols')
 Scalingdata.__doc__="""
 Symbols of variables and constants for scaling factors.
 
@@ -565,11 +563,15 @@ kp: casadi.SX
     column vector, symbols for scaling factor of active power per injection
 kq: casadi.SX
     column vector, symbols for scaling factor of reactive power per injection
-vars_: casadi.SX
+kvars: casadi.SX
     column vector, symbols for variables of scaling factors
 values_of_vars: casadi.DM
-    column vector, initial values for vars_
-consts: casadi.SX
+    column vector, initial values for kvars
+kvar_min: casadi.DM
+    lower limits of kvars
+kvar_max: casadi.DM
+    upper limits of kvars
+kconsts: casadi.SX
     column vector, symbols for constants of scaling factors
 values_of_consts: casadi.DM
     column vector, values for consts
@@ -577,7 +579,19 @@ symbols: casadi.SX
     vector of all symbols (variables and constants) for extracting values 
     which shall be passed to next step 
     (function 'get_scaling_data', parameter 'k_prev')"""
+ 
+def _make_DM_vector(array_like):
+    """Creates a casadi.DM vector from array_like.
     
+    Parameters
+    ----------
+    array_like: array_like
+    
+    Returns
+    -------
+    casadi.DM"""
+    return casadi.DM(array_like) if len(array_like) else casadi.DM(0,1)
+ 
 def get_scaling_data(
         factor_step_groups, injection_factor_step_groups, 
         step=0, k_prev=_k_prev_default):
@@ -604,15 +618,19 @@ def get_scaling_data(
         .sort_values(by='index_of_injection'))
     symbols = _create_symbols_with_ids(factors.id)
     values = _get_values_of_symbols(factors, k_prev)
-    symbols_values = partial(_select_type, factors, [symbols, values])
-    symbols_of_consts, values_of_consts = symbols_values('const')
-    symbols_of_vars, values_of_vars = symbols_values('var')
+    symbols_values = partial(_select_type, [symbols, values])
+    factors_consts = factors[factors.type=='const']
+    symbols_of_consts, values_of_consts = symbols_values(factors_consts)
+    factors_var = factors[factors.type=='var']
+    symbols_of_vars, values_of_vars = symbols_values(factors_var)
     return Scalingdata(
         kp=symbols[injections_factors.kp],
         kq=symbols[injections_factors.kq],
-        vars_=symbols_of_vars,
+        kvars=symbols_of_vars,
         values_of_vars=values_of_vars,
-        consts=symbols_of_consts,
+        kvar_min=_make_DM_vector(factors_var['min']),
+        kvar_max=_make_DM_vector(factors_var['max']),
+        kconsts=symbols_of_consts,
         values_of_consts=values_of_consts,
         symbols=symbols)
     
@@ -635,11 +653,11 @@ def get_scaling_data_fn(model, count_of_steps=1):
         kq: casadi.SX
             column vector, symbols for scaling factor 
             of reactive power per injection
-        vars_: casadi.SX
+        kvars: casadi.SX
             column vector, symbols for variables of scaling factors
         values_of_vars: casadi.DM
             column vector, initial values for vars_
-        consts: casadi.SX
+        kconsts: casadi.SX
             column vector, symbols for constants of scaling factors
         values_of_consts: casadi.DM
             column vector, values for consts"""

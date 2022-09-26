@@ -825,7 +825,7 @@ def _get_measured_and_calculated_current(
         Icalculated, lsuffix='_measured', rsuffix="_calculated", how='inner')
 
 def _get_measured_and_calculated_voltage(Vvalues, Vnode):
-    """Arranges calculated and measured current per node id.
+    """Arranges calculated and measured voltage per node id.
 
     Parameters
     ----------
@@ -1418,9 +1418,6 @@ def get_estimation_data(model, count_of_steps, vminsqr=_VMINSQR):
     Votherterm_im = node_to_othertermidx @ Vnode.im
     Vterm_sqr = node_to_termidx @ Vnode.sqr
     Votherterm_sqr = node_to_othertermidx @ Vnode.sqr
-
-
-    
     # <<end of first part of new implementation approach
     
     Vsymbols = _create_v_symbols(pfc_nodes)
@@ -1709,6 +1706,8 @@ def _calculate_pf(rootfinder, values_of_parameters, Vguess):
         value of parameters
     Vguess: array_like
         float, start value of unknown voltage vector
+        
+        
     Vslack: array_like
         float, slack voltage, parameters
     positions_of_branch_taps: array_like
@@ -2110,7 +2109,7 @@ def estimate(vslack_tappos, estimation_data, previous_data, mynlp,
         * bool, success
         * funtion (casadi.SX) -> (casadi.DM) for result retrieval"""
     # 'estimation_data.kvars.ini' and 'estimation_data.kconsts.ini' provide
-    #   scaling factor symbols of previous run (or skalar values - especially
+    #   scaling factor symbols of previous run (or scalar values - especially
     #   for the initial run), 'evaluate_expression' provides
     #   the context of the previous run, thus the initial values are
     #   retrieved from previous run
