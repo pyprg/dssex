@@ -26,10 +26,11 @@ from scipy.sparse import coo_matrix
 from egrid.builder import DEFAULT_FACTOR_ID, defk, Loadfactor
 from itertools import chain
 from collections import namedtuple
+from src.dssex.injections import get_polynomial_coefficients
 # square of voltage magnitude, minimum value for load curve, 
 #   if value is below _VMINSQR the load curves for P and Q converge
 #   towards a linear load curve which is 0 when V=0; P(V=0)=0, Q(V=0)=0
-_VMINSQR = 0.8
+_VMINSQR = 0.8**2
 # value of zero check, used for load curve calculation    
 _EPSILON = 1e-12
 _EMPTY_TUPLE = ()
@@ -646,25 +647,244 @@ def get_scaling_data_fn(model, count_of_steps=1):
     
     Returns
     -------
-    Scalingdata:
-        kp: casadi.SX
-            column vector, symbols for scaling factor 
-            of active power per injection
-        kq: casadi.SX
-            column vector, symbols for scaling factor 
-            of reactive power per injection
-        kvars: casadi.SX
-            column vector, symbols for variables of scaling factors
-        values_of_vars: casadi.DM
-            column vector, initial values for vars_
-        kconsts: casadi.SX
-            column vector, symbols for constants of scaling factors
-        values_of_consts: casadi.DM
-            column vector, values for consts"""
+    function 
+        (int, casadi.DM) -> (Scalingdata)
+        (index_of_calculation_step, result_of_previous_step) -> (Scalingdata)
+        Scalingdata:
+            kp: casadi.SX
+                column vector, symbols for scaling factor 
+                of active power per injection
+            kq: casadi.SX
+                column vector, symbols for scaling factor 
+                of reactive power per injection
+            kvars: casadi.SX
+                column vector, symbols for variables of scaling factors
+            values_of_vars: casadi.DM
+                column vector, initial values for vars_
+            kconsts: casadi.SX
+                column vector, symbols for constants of scaling factors
+            values_of_consts: casadi.DM
+                column vector, values for consts"""
     assert 0 < count_of_steps, "count_of_steps must be an int greater than 0"
     factors, injection_factors = get_factors(model, count_of_steps)
     return partial(
         get_scaling_data,
         _groupby_step(factors),
         _groupby_step(injection_factors))
+
+#
+# injected node current
+#
+
+def get_node_to_inj(injections, count_of_pfcnodes):
+    """Creates a sparse matrix for mapping node values (e.g. voltages)
+    to the terminals of injections.
+    ::
+        injection_values = m @ node_values
+    The returned matrix has shape (number_of_injections, number_of_nodes)
+    
+    Parameters
+    ----------
+    injections: pandas.DataFrame (int index_of_injection)
+        * .index_of_node
+    count_of_pfcnodes: int
+        number of power flow calculation nodes
+    
+    Returns
+    -------
+    scipy.sparse.coo_matrix"""
+    injections_index = injections.index
+    count_of_injections = injections_index.size
+    shape = count_of_injections, count_of_pfcnodes
+    return coo_matrix(
+        ([1.]*count_of_injections, 
+         (injections_index, 
+          injections.index_of_node)), 
+        shape=shape, dtype=float)
+
+def get_inj_current_original(inj, Vinj, P, Q):
+    """Creates expressions for real and imaginary current injected into
+    power flow calculation nodes per injection (load, capacitor, generator).
+    Injected power is calculated this way
+    (P = |V|**Exvp * P10, Q = |V|**Exvq * Q10; with |V| - magnitude of V):
+    ::
+        +- -+   +-                                           -+
+        | P |   | (Vre ** 2 + Vim ** 2) ** (Expvp / 2) * P_10 |
+        |   | = |                                             |
+        | Q |   | (Vre ** 2 + Vim ** 2) ** (Expvq / 2) * Q_10 |
+        +- -+   +-                                           -+
+
+    How to calculate current from given complex power and from voltage:
+    ::
+                S_conjugate
+        I_inj = -----------
+                V_conjugate
+
+    How to calculate current with separated real and imaginary parts:
+    ::
+                              +-        -+ -1  +-    -+
+                S_conjugate   |  Vre Vim |     |  P Q |
+        I_inj = ----------- = |          |  *  |      |
+                V_conjugate   | -Vim Vre |     | -Q P |
+                              +-        -+     +-    -+
+
+                                  +-        -+   +-    -+
+                       1          | Vre -Vim |   |  P Q |
+              = --------------- * |          | * |      |
+                Vre**2 + Vim**2   | Vim  Vre |   | -Q P |
+                                  +-        -+   +-    -+
+
+                                   +-              -+
+                          1        |  P Vre + Q Vim |
+        I_inj_ri = --------------- |                |
+                   Vre**2 + Vim**2 | -Q Vre + P Vim |
+                                   +-              -+
+
+    How to calculate injected real and imaginary current from voltage:
+    ::
+        Ire =  (Vre ** 2 + Vim ** 2) ** (Expvp / 2 - 1) * P_10 * Vre
+             + (Vre ** 2 + Vim ** 2) ** (Expvq / 2 - 1) * Q_10 * Vim
+
+        Iim = -(Vre ** 2 + Vim ** 2) ** (Expvq / 2 - 1) * Q_10 * Vre
+             + (Vre ** 2 + Vim ** 2) ** (Expvp / 2 - 1) * P_10 * Vim
+    
+    Parameters
+    ----------
+    inj: pandas.DataFrame (int index_of_injection)
+        * .Exp_v_p, float, voltage exponent of active power
+        * .Exp_v_q, float, voltage exponent of reactive power
+    Vinj: Vinjection
+        expression for the voltage vector at injections, 
+        each element expresses the voltage at one paticular injection
+        * .re, float, real part of voltage
+        * .im, float, imaginary part of voltage
+        * .abs_sqr, float, Vinj.re**2 + Vinj.im**2
+    P: casadi.SX
+        expression for active power when voltag is 1 pu
+    Q: casadi.SX
+        expression for reactive power when voltag is 1 pu
+    
+    Returns
+    -------
+    tuple
+        * Ire, casadi.SX, expression for real part of current per injection
+        * Iim, casadi.SX, expression for imaginary part 
+          of current per injection"""
+    y_p = casadi.power(Vinj.abs_sqr, inj.Exp_v_p/2 - 1) * P
+    y_q = casadi.power(Vinj.abs_sqr, inj.Exp_v_q/2 - 1) * Q
+    return y_p * Vinj.re + y_q * Vinj.im, -y_q * Vinj.re + y_p * Vinj.im
+
+def get_inj_current_interpolated(vminsqr, inj, Vinj, P, Q):
+    """Interpolates complex current injected into power flow calculation nodes 
+    per injection when the absolute voltage is below vminsqr**.5. The current
+    decreases when the magnitude of voltage comes closer to zero.
+    ::
+        I_complex(|V|) = A|V|³ + B|V|² + C|V|
+    
+    Parameters
+    ----------
+    vminsqr: float
+        square of voltage, upper limit interpolation interval [0...vminsqr]
+    inj: pandas.DataFrame (int index_of_injection)
+        * .Exp_v_p, float, voltage exponent of active power
+        * .Exp_v_q, float, voltage exponent of reactive power
+    Vinj: Vinjection
+        expression for the voltage vector at injections, 
+        each element expresses the voltage at one paticular injection
+        * .re, float, real part of voltage
+        * .im, float, imaginary part of voltage
+        * .abs_sqr, float, Vinj.re**2 + Vinj.im**2
+    P: casadi.SX
+        expression for active power when voltag is 1 pu
+    Q: casadi.SX
+        expression for reactive power when voltag is 1 pu
+    
+    Returns
+    -------
+    tuple
+        * Ire, casadi.SX, expression for real part of current per injection
+        * Iim, casadi.SX, expression for imaginary part 
+          of current per injection"""
+    Vinj_abs = casadi.sqrt(Vinj.abs_sqr)
+    Vinj_abs_cub = Vinj.abs_sqr * Vinj_abs
+    cp = get_polynomial_coefficients(vminsqr, inj.Exp_v_p)
+    p_expr = (
+        (cp[:,0]*Vinj_abs_cub + cp[:,1]*Vinj.abs_sqr + cp[:,2]*Vinj_abs) * P)
+    cq = get_polynomial_coefficients(vminsqr, inj.Exp_v_q)
+    q_expr = (
+        (cq[:,0]*Vinj_abs_cub + cq[:,1]*Vinj.abs_sqr + cq[:,2]*Vinj_abs) * Q)
+    calculate = _EPSILON < Vinj.abs_sqr
+    Ire_ip = casadi.if_else(
+        calculate, (p_expr * Vinj.re + q_expr * Vinj.im) / Vinj.abs_sqr, 0.0)
+    Iim_ip = casadi.if_else(
+        calculate, (-q_expr * Vinj.re + p_expr * Vinj.im) / Vinj.abs_sqr, 0.0)
+    return Ire_ip, Iim_ip
+
+Vinjection = namedtuple('Vinjection', 're im abs_sqr')
+Vinjection.__doc__ = """
+Voltage values per injection.
+
+Parameters
+----------
+re: casadi.SX
+    vector, real part of voltages at injections
+re: casadi.SX
+    vector, imaginary part of voltages at injections
+abs_sqr: casadi.SX
+    vector, re**2 + im**2"""
+
+def get_injected_node_current(
+        injections, node_to_inj, Vnode, scaling_data, vminsqr=_VMINSQR):
+    """Creates casadi.SX expressions (vectors) for real and imaginary part of 
+    current injected into power flow calculation nodes. Vectors have elements
+    per power flow calculation node.
+    
+    Parameters
+    ----------
+    injections: pandas.DataFrame (int index_of_injection)
+        * .P10, float, rated active power at voltage of 1.0 pu
+        * .Q10, float, rated reactive power at voltage of 1.0 pu
+        * .Exp_v_p, float, voltage exponent of active power
+        * .Exp_v_q, float, voltage exponent of reactive power
+    node_to_inj: scipy.sparse.coo_matrix
+        the matrix converts node to injection values
+        injection_values = node_to_inj @ node_values
+    Vnode: casadi.SX
+        three vector of node voltage expressions
+        * Vnode[:,0], float, Vre vector of real node voltages
+        * Vnode[:,1], float, Vim vector of imaginary node voltages
+        * Vnode[:,2], float, Vre**2 + Vim**2, vector of imaginary node voltages
+    scaling_data: Scalingdata
+        * .kp, casadi.SX expression, vector of injection scaling factors for
+          active power
+        * .kq, casadi.SX expression, vector of injection scaling factors for
+          reactive power
+    vminsqr: float
+        square of voltage, upper limit interpolation interval [0...vminsqr]
+    
+    Returns
+    -------
+    tuple
+        * Ire, casadi.SX, expression for real part of current per injection
+        * Iim, casadi.SX, expression for imaginary part 
+          of current per injection"""
+    node_to_inj = casadi.SX(node_to_inj)
+    Vinj = Vinjection(
+        re=node_to_inj @ Vnode[:,0], 
+        im=node_to_inj @ Vnode[:,1], 
+        abs_sqr=node_to_inj @ Vnode[:,2])
+    P = casadi.vcat(injections.P10) * scaling_data.kp
+    Q = casadi.vcat(injections.Q10) * scaling_data.kq
+    Iinj_re_orig, Iinj_im_orig = get_inj_current_original(
+        injections, Vinj, P, Q)
+    Iinj_re_ip, Iinj_im_ip = get_inj_current_interpolated(
+        vminsqr, injections, Vinj, P, Q)
+    # compose current functions from original and interpolated
+    inj_to_node = node_to_inj.T
+    interpolate = Vinj.abs_sqr < vminsqr
+    Inode_re = inj_to_node @ casadi.if_else(
+        interpolate, Iinj_re_ip, Iinj_re_orig) 
+    Inode_im = inj_to_node @ casadi.if_else(
+        interpolate, Iinj_im_ip, Iinj_im_orig)
+    return Inode_re, Inode_im
     

@@ -330,11 +330,9 @@ pr.print_estim_results(result09)
 pr.print_measurements(result09)
 #%%
 import casadi
-from scipy.sparse import coo_matrix
-from src.dssex.injections import get_polynomial_coefficients
 from src.dssex.estim2 import (
-    create_gb_matrix, create_Vvars, calculate_Y_by_V, get_scaling_data_fn)
-from collections import namedtuple
+    create_gb_matrix, create_Vvars, calculate_Y_by_V, get_scaling_data_fn,
+    get_node_to_inj, get_injected_node_current)
 model10 = make_model(
     schema09,
     # define a scaling factor
@@ -350,74 +348,12 @@ position_vars = casadi.SX.sym('pos', len(mymodel.branchtaps), 1)
 G, B = create_gb_matrix(mymodel, position_vars)
 Vnode = create_Vvars(mymodel.shape_of_Y[0])
 Y_by_V = calculate_Y_by_V(G, B, Vnode)
-
 scaling_factors_of_step = get_scaling_data_fn(model10, count_of_steps=2)
 scaling_data = scaling_factors_of_step(step=0)
-#%%
 # vars are regarded consts in power flow calculation 
 kconsts = casadi.vertcat(scaling_data.kconsts, scaling_data.kvars)
 kvalues = casadi.vertcat(
     scaling_data.values_of_consts, scaling_data.values_of_vars)
-
-# node to injection terminals
-_VMINSQR = .8**2
-# value of zero check, used for load curve calculation    
-_EPSILON = 1e-12
-
-def get_node_to_inj(injections, count_of_pfcnodes):
-    injections_index = injections.index
-    count_of_injections = injections_index.size
-    shape = count_of_injections, count_of_pfcnodes
-    return casadi.SX(coo_matrix(
-        ([1.]*count_of_injections, 
-         (injections_index, 
-          injections.index_of_node)), 
-        shape=shape, dtype=float))
-
-def get_inj_current_original(inj, Vinj, P, Q):
-    y_p = casadi.power(Vinj.abs_sqr, inj.Exp_v_p/2 - 1) * P
-    y_q = casadi.power(Vinj.abs_sqr, inj.Exp_v_q/2 - 1) * Q
-    return y_p * Vinj.re + y_q * Vinj.im, -y_q * Vinj.re + y_p * Vinj.im
-
-def get_inj_current_interpolated(vminsqr, inj, Vinj, P, Q):
-    Vinj_abs = casadi.sqrt(Vinj.abs_sqr)
-    Vinj_abs_cub = Vinj.abs_sqr * Vinj_abs
-    cp = get_polynomial_coefficients(vminsqr, inj.Exp_v_p)
-    p_expr = (
-        (cp[:,0]*Vinj_abs_cub + cp[:,1]*Vinj.abs_sqr + cp[:,2]*Vinj_abs) * P)
-    cq = get_polynomial_coefficients(vminsqr, inj.Exp_v_q)
-    q_expr = (
-        (cq[:,0]*Vinj_abs_cub + cq[:,1]*Vinj.abs_sqr + cq[:,2]*Vinj_abs) * Q)
-    calculate = _EPSILON < Vinj.abs_sqr
-    Ire_ip = casadi.if_else(
-        calculate, (p_expr * Vinj.re + q_expr * Vinj.im) / Vinj.abs_sqr, 0.0)
-    Iim_ip = casadi.if_else(
-        calculate, (-q_expr * Vinj.re + p_expr * Vinj.im) / Vinj.abs_sqr, 0.0)
-    return Ire_ip, Iim_ip
-
-Vinjection = namedtuple('Vinjection', 're im abs_sqr')
-
-def get_injected_node_current(
-        injections, count_of_pfcnodes, Vnode, scaling_data, vminsqr=_VMINSQR):
-    node_to_inj = get_node_to_inj(injections, count_of_pfcnodes)
-    Vinj = Vinjection(
-        re=node_to_inj @ Vnode[:,0], 
-        im=node_to_inj @ Vnode[:,1], 
-        abs_sqr=node_to_inj @ Vnode[:,2])
-    P = casadi.vcat(injections.P10) * scaling_data.kp
-    Q = casadi.vcat(injections.Q10) * scaling_data.kq
-    Iinj_re_orig, Iinj_im_orig = get_inj_current_original(
-        injections, Vinj, P, Q)
-    Iinj_re_ip, Iinj_im_ip = get_inj_current_interpolated(
-        vminsqr, injections, Vinj, P, Q)
-    # compose current functions from original and interpolated
-    inj_to_node = node_to_inj.T
-    interpolate = Vinj.abs_sqr < vminsqr
-    Inode_re = inj_to_node @ casadi.if_else(
-        interpolate, Iinj_re_ip, Iinj_re_orig) 
-    Inode_im = inj_to_node @ casadi.if_else(
-        interpolate, Iinj_im_ip, Iinj_im_orig)
-    return Inode_re, Inode_im
-    
+node_to_inj = get_node_to_inj(mymodel.injections, mymodel.shape_of_Y[0])
 Inode_re, Inode_im = get_injected_node_current(
-    mymodel.injections, mymodel.shape_of_Y[0], Vnode, scaling_data)
+    mymodel.injections, node_to_inj, Vnode, scaling_data)
