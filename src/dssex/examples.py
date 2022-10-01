@@ -330,9 +330,10 @@ pr.print_estim_results(result09)
 pr.print_measurements(result09)
 #%%
 import casadi
+import numpy as np
 from src.dssex.estim2 import (
-    create_gb_matrix, create_Vvars, calculate_Y_by_V, get_scaling_data_fn,
-    get_node_to_inj, get_injected_node_current)
+    create_gb_matrix, create_V_symbols, multiply_Y_by_V, get_scaling_data_fn,
+    get_injected_node_current, create_symbols_with_ids)
 model10 = make_model(
     schema09,
     # define a scaling factor
@@ -344,16 +345,52 @@ model10 = make_model(
         id='kp'))
 
 mymodel = model10
-position_vars = casadi.SX.sym('pos', len(mymodel.branchtaps), 1)
-G, B = create_gb_matrix(mymodel, position_vars)
-Vnode = create_Vvars(mymodel.shape_of_Y[0])
-Y_by_V = calculate_Y_by_V(G, B, Vnode)
-scaling_factors_of_step = get_scaling_data_fn(model10, count_of_steps=2)
+count_of_pfcnodes = mymodel.shape_of_Y[0]
+position_syms = casadi.SX.sym('pos', len(mymodel.branchtaps), 1)
+G, B = create_gb_matrix(mymodel, position_syms)
+Vnode = create_V_symbols(mymodel.shape_of_Y[0])
+Y_by_V = multiply_Y_by_V(G, B, Vnode)
+scaling_factors_of_step = get_scaling_data_fn(mymodel, count_of_steps=2)
 scaling_data = scaling_factors_of_step(step=0)
-# vars are regarded consts in power flow calculation 
-kconsts = casadi.vertcat(scaling_data.kconsts, scaling_data.kvars)
-kvalues = casadi.vertcat(
-    scaling_data.values_of_consts, scaling_data.values_of_vars)
-node_to_inj = get_node_to_inj(mymodel.injections, mymodel.shape_of_Y[0])
-Inode_re, Inode_im = get_injected_node_current(
+# injected node current
+node_to_inj = casadi.SX(mymodel.mnodeinj.T)#get_node_to_inj(mymodel.injections, count_of_pfcnodes)
+Iinj_re, Iinj_im = get_injected_node_current(
     mymodel.injections, node_to_inj, Vnode, scaling_data)
+slacks = mymodel.slacks
+Vre_slack_syms = create_symbols_with_ids(
+    (f'Vre_slack_{id_}' for id_ in slacks.id_of_node))
+Vim_slack_syms = create_symbols_with_ids(
+    (f'Vim_slack_{id_}' for id_ in slacks.id_of_node))
+Vslack_re = casadi.DM(np.real(slacks.V))
+Vslack_im = casadi.DM(np.imag(slacks.V))
+Iinj_re[slacks.index_of_node] = -Vre_slack_syms
+Iinj_im[slacks.index_of_node] = -Vim_slack_syms
+Iinj = casadi.vertcat(Iinj_re, Iinj_im)
+
+fn_Iresidual = casadi.Function(
+    'fn_Iresidual', 
+    [casadi.vertcat(Vnode[:,0], Vnode[:,1]),
+     casadi.vertcat(
+         Vre_slack_syms, Vim_slack_syms, position_syms, scaling_data.symbols)], 
+    [Y_by_V + Iinj])
+rf = casadi.rootfinder('rf', 'nlpsol', fn_Iresidual, {'nlpsol':'ipopt'})
+Vguess = casadi.vertcat([1.]*count_of_pfcnodes, [0.]*count_of_pfcnodes)
+values_of_parameters = casadi.vertcat(
+    Vslack_re, Vslack_im, mymodel.branchtaps.position, scaling_data.values)
+voltages = rf(Vguess, values_of_parameters)
+success = rf.stats()['success']
+print("\n","SUCCESS" if success else ">--F-A-I-L-E-D--<", "\n")
+if success:
+    Vcomp = np.hstack(np.vsplit(voltages, 2)).view(dtype=np.complex128)
+    print(Vcomp)
+    
+    
+#%%
+from src.dssex.pfcnum import calculate_power_flow
+
+success, voltages = calculate_power_flow(1e-8, 30, mymodel)
+print("\n","SUCCESS" if success else ">--F-A-I-L-E-D--<", "\n")
+if success:
+    Vcomp = voltages.view(dtype=np.complex128)
+    print(Vcomp)
+    
