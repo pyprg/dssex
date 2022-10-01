@@ -29,6 +29,7 @@ from scipy.sparse import \
 from scipy.sparse.linalg import splu
 from injections import get_polynomial_coefficients
 from src.dssex.util import get_tap_factors
+from src.dssex.util import get_results as util_get_results
 
 # square of voltage magnitude, minimum value for load curve, 
 #   if value is below _VMINSQR the load curves for P and Q converge
@@ -522,3 +523,32 @@ def calculate_power_flow(
             break
         iter_counter += 1;
     return False, np.hstack(np.vsplit(V, 2)).view(dtype=np.complex128)
+
+def calculate_electric_data(model, power_fn, tappositions, Vnode):
+    """Calculates and arranges electric data of injections and branches
+    for a given voltage vector which is typically the result of a power
+    flow calculation.
+    
+    Parameters
+    ----------
+    model: egrid.model.Model
+        model of grid for calculation
+    power_fn: function or 'original' | 'interpolated' | 'square'
+        if function:
+            (pandas.DataFrame, numpy.array<float>) -> 
+            (numpy.array<float>, numpy.array<float>)
+            (injections, square_of _absolute_node-voltage) ->
+            (active power P, reactive power Q)
+    tappositions: array_like, int
+        positions of taps
+    Vnode: array_like, complex
+        node voltage vector
+    
+    Returns
+    -------
+    dict
+        * 'injections': pandas.DataFrame
+        * 'branches': pandas.DataFrame"""
+    power_fn_ = (get_injected_power_fn(model.injections, loadcurve=power_fn)
+                 if isinstance(power_fn, str) else power_fn)
+    return util_get_results(model, power_fn_, tappositions, Vnode)

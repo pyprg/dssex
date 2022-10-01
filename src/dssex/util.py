@@ -200,8 +200,8 @@ def get_injection_results(calculate_injected_power, model, Vnode):
     df['P_pu'], df['Q_pu'], Vinj = get_injected_power_per_injection(
         calculate_injected_power, model.mnodeinj.T @ Vnode)
     df['V_pu'] = np.abs(Vinj)
-    df['P_pu'] *= 3
-    df['Q_pu'] *= 3
+    df['P_pu'] *= 3 # converts from single phase calculation to 3-phase system
+    df['Q_pu'] *= 3 # converts from single phase calculation to 3-phase system
     return df
 
 def get_crossrefs(terms, count_of_nodes):
@@ -345,7 +345,7 @@ def get_branch_results(model, Vnode, pos):
     return pd.concat([dfbr, dfres, dfv], axis=1)
 
 def get_results(model, get_injected_power, tappositions, Vnode):
-    """Calcualtes and arranges electric data of injections and branches
+    """Calculates and arranges electric data of injections and branches
     for a given voltage vector which is typically the result of a power
     flow calculation.
     

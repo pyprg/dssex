@@ -36,7 +36,7 @@ from src.dssex.pfcsymb import create_Vvars
 # square of voltage magnitude, minimum value for load curve, 
 #   if value is below _VMINSQR the load curves for P and Q converge
 #   towards a linear load curve which is 0 when V=0; P(V=0)=0, Q(V=0)=0
-_VMINSQR = 0.8
+_VMINSQR = 0.8**2
 # value of zero check, used for load curve calculation    
 _EPSILON = 1e-12
 _EMPTY_TUPLE = ()
@@ -1706,16 +1706,6 @@ def _calculate_pf(rootfinder, values_of_parameters, Vguess):
         value of parameters
     Vguess: array_like
         float, start value of unknown voltage vector
-        
-        
-    Vslack: array_like
-        float, slack voltage, parameters
-    positions_of_branch_taps: array_like
-        int, parameters
-    kconsts: array_like
-        float, load scaling factors, parameters
-    kvars: array_like
-        float, load scaling factors, parameters
 
     Returns
     -------

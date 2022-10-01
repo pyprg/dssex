@@ -331,9 +331,9 @@ pr.print_measurements(result09)
 #%%
 import casadi
 import numpy as np
-from src.dssex.estim2 import (
-    create_gb_matrix, create_V_symbols, multiply_Y_by_V, get_scaling_data_fn,
-    get_injected_node_current, create_symbols_with_ids)
+from src.dssex.estim2 import calculate_power_flow
+from src.dssex.pfcnum import calculate_electric_data
+
 model10 = make_model(
     schema09,
     # define a scaling factor
@@ -345,45 +345,14 @@ model10 = make_model(
         id='kp'))
 
 mymodel = model10
-count_of_pfcnodes = mymodel.shape_of_Y[0]
-position_syms = casadi.SX.sym('pos', len(mymodel.branchtaps), 1)
-G, B = create_gb_matrix(mymodel, position_syms)
-Vnode = create_V_symbols(mymodel.shape_of_Y[0])
-Y_by_V = multiply_Y_by_V(G, B, Vnode)
-scaling_factors_of_step = get_scaling_data_fn(mymodel, count_of_steps=2)
-scaling_data = scaling_factors_of_step(step=0)
-# injected node current
-node_to_inj = casadi.SX(mymodel.mnodeinj.T)#get_node_to_inj(mymodel.injections, count_of_pfcnodes)
-Iinj_re, Iinj_im = get_injected_node_current(
-    mymodel.injections, node_to_inj, Vnode, scaling_data)
-slacks = mymodel.slacks
-Vre_slack_syms = create_symbols_with_ids(
-    (f'Vre_slack_{id_}' for id_ in slacks.id_of_node))
-Vim_slack_syms = create_symbols_with_ids(
-    (f'Vim_slack_{id_}' for id_ in slacks.id_of_node))
-Vslack_re = casadi.DM(np.real(slacks.V))
-Vslack_im = casadi.DM(np.imag(slacks.V))
-Iinj_re[slacks.index_of_node] = -Vre_slack_syms
-Iinj_im[slacks.index_of_node] = -Vim_slack_syms
-Iinj = casadi.vertcat(Iinj_re, Iinj_im)
+success, voltages = calculate_power_flow(mymodel)
 
-fn_Iresidual = casadi.Function(
-    'fn_Iresidual', 
-    [casadi.vertcat(Vnode[:,0], Vnode[:,1]),
-     casadi.vertcat(
-         Vre_slack_syms, Vim_slack_syms, position_syms, scaling_data.symbols)], 
-    [Y_by_V + Iinj])
-rf = casadi.rootfinder('rf', 'nlpsol', fn_Iresidual, {'nlpsol':'ipopt'})
-Vguess = casadi.vertcat([1.]*count_of_pfcnodes, [0.]*count_of_pfcnodes)
-values_of_parameters = casadi.vertcat(
-    Vslack_re, Vslack_im, mymodel.branchtaps.position, scaling_data.values)
-voltages = rf(Vguess, values_of_parameters)
-success = rf.stats()['success']
 print("\n","SUCCESS" if success else ">--F-A-I-L-E-D--<", "\n")
 if success:
     Vcomp = np.hstack(np.vsplit(voltages, 2)).view(dtype=np.complex128)
     print(Vcomp)
-    
+    e_data = calculate_electric_data(
+        mymodel, 'interpolated', mymodel.branchtaps.position, Vcomp)
     
 #%%
 from src.dssex.pfcnum import calculate_power_flow

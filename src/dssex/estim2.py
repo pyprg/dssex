@@ -21,6 +21,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 import casadi
 import pandas as pd
+import numpy as np
 from functools import partial
 from scipy.sparse import coo_matrix
 from egrid.builder import DEFAULT_FACTOR_ID, defk, Loadfactor
@@ -291,20 +292,20 @@ def create_mapping(from_index, to_index, shape):
         ([1.]*len(from_index), (to_index, from_index)), 
         shape=shape, dtype=float)
 
-def multiply_Y_by_V(G, B, Vreim):
+def multiply_Y_by_V(Vreim, G, B):
     """Creates the Y-matrix from G and B, creates a vector from Vreim.
     Multiplies Y @ V.
     
     Parameters
     ----------
-    G: casadi.SX
-        conductance matrix
-    B: casadi.SX
-        susceptance matrix
     Vreim: casadi.SX
         two vectors
         * Vreim[:,0] Vre, real part of complex voltage
         * Vreim[:,1] Vim, imaginary part of complex voltage
+    G: casadi.SX
+        conductance matrix
+    B: casadi.SX
+        susceptance matrix
         
     Returns
     -------
@@ -851,7 +852,7 @@ def get_injected_node_current(
         the matrix converts node to injection values
         injection_values = node_to_inj @ node_values
     Vnode: casadi.SX
-        three vector of node voltage expressions
+        three vectors of node voltage expressions
         * Vnode[:,0], float, Vre vector of real node voltages
         * Vnode[:,1], float, Vim vector of imaginary node voltages
         * Vnode[:,2], float, Vre**2 + Vim**2, vector of imaginary node voltages
@@ -888,4 +889,114 @@ def get_injected_node_current(
     Inode_im = inj_to_node @ casadi.if_else(
         interpolate, Iinj_im_ip, Iinj_im_orig)
     return Inode_re, Inode_im
+
+def _reset_slack_current(
+        slack_indices, Vre_slack_syms, Vim_slack_syms, Iinj_re, Iinj_im):
+    Iinj_re[slack_indices] = -Vre_slack_syms
+    Iinj_im[slack_indices] = -Vim_slack_syms
+    return casadi.vertcat(Iinj_re, Iinj_im)
+
+def create_expressions(model):
+    """Creates symbols and an expression for Y @ I.
     
+    Parameters
+    ----------
+    model: egrid.model.Model
+        data of electric grid
+    
+    Returns
+    -------
+    dict
+        * 'Vnode_syms', casadi.SX, expressions of node Voltages
+        * 'Vre_slack_syms', casadi.SX, symbols of slack voltages, real part
+        * 'Vim_slack_syms', casadi.SX, symbols of slack voltages, 
+           imaginary part
+        * 'position_syms', casadi.SX, symbols of tap positions
+        * 'Y_by_V', casadi.SX, expression for Y @ V"""
+    count_of_pfcnodes = model.shape_of_Y[0]
+    Vnode_syms = create_V_symbols(count_of_pfcnodes)
+    position_syms = casadi.SX.sym('pos', len(model.branchtaps), 1)
+    return dict(
+        Vnode_syms=Vnode_syms,
+        Vre_slack_syms=casadi.SX.sym('Vre_slack', model.count_of_slacks),
+        Vim_slack_syms=casadi.SX.sym('Vim_slack', model.count_of_slacks),
+        position_syms=position_syms,
+        Y_by_V=multiply_Y_by_V(
+            Vnode_syms, *create_gb_matrix(model, position_syms)))
+
+def calculate_power_flow(
+        model, scaling_data=None, expr=None, tappositions=None, Vguess=None):
+    """Solves the power flow problem using a rootfinding algorithm.
+    
+    Parameters
+    ----------
+    model: egrid.model.Model
+        data of electric grid
+    scaling_data: Scalingdata
+        optional
+    expr: dict
+        * 'Vnode_syms', casadi.SX, expressions of node Voltages
+        * 'Vre_slack_syms', casadi.SX, symbols of slack voltages, real part
+        * 'Vim_slack_syms', casadi.SX, symbols of slack voltages, 
+           imaginary part
+        * 'position_syms', casadi.SX, symbols of tap positions
+        * 'Y_by_V', casadi.SX, expression for Y @ V
+    tappositions: array_like
+        int, positions of taps
+    Vguess: array_like
+        float, initial guess of node voltages
+    
+    Returns
+    -------
+    tuple
+        * bool, success?
+        * casadi.DM, float, voltage vector [real parts, imaginary parts]"""
+    expr_ = create_expressions(model) if expr is None else expr
+    scaling_data_ = (get_scaling_data_fn(model, count_of_steps=1)(step=0)
+        if scaling_data is None else scaling_data)
+    tappositions_ = (
+        model.branchtaps.position if tappositions is None else tappositions)
+    Iinj_ = get_injected_node_current(
+        model.injections, 
+        casadi.SX(model.mnodeinj.T), 
+        expr_['Vnode_syms'], 
+        scaling_data_)
+    slacks = model.slacks
+    Iinj = _reset_slack_current(
+        slacks.index_of_node, expr_['Vre_slack_syms'], expr_['Vim_slack_syms'],
+        *Iinj_)
+    variable_syms = casadi.vertcat(
+        expr_['Vnode_syms'][:,0], expr_['Vnode_syms'][:,1])
+    count_of_pfcnodes = model.shape_of_Y[0]
+    Vguess_ = (
+        casadi.vertcat([1.]*count_of_pfcnodes, [0.]*count_of_pfcnodes)
+        if Vguess is None else Vguess)
+    parameter_syms=casadi.vertcat(
+        expr_['Vre_slack_syms'], 
+        expr_['Vim_slack_syms'], 
+        expr_['position_syms'], 
+        scaling_data_.symbols)
+    values_of_parameters=casadi.vertcat(
+        np.real(slacks.V), np.imag(slacks.V), 
+        tappositions_, 
+        scaling_data_.values)
+    fn_Iresidual = casadi.Function(
+        'fn_Iresidual', 
+        [variable_syms, parameter_syms], 
+        [expr_['Y_by_V'] + Iinj])
+    rf = casadi.rootfinder('rf', 'nlpsol', fn_Iresidual, {'nlpsol':'ipopt'})
+    voltages = rf(Vguess_, values_of_parameters)
+    return rf.stats()['success'], voltages
+
+def ri_to_complex(array_like):
+    """Converts a vector with separate real and imaginary parts into a
+    vector of complex values.
+    
+    Parameters
+    ----------
+    array_like: casadi.DM (and other types?)
+    
+    Returns
+    -------
+    numpy.array"""
+    return np.hstack(np.vsplit(array_like, 2)).view(dtype=np.complex128)   

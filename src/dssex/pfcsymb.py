@@ -12,7 +12,7 @@ from injections import get_polynomial_coefficients
 # square of voltage magnitude, minimum value for load curve, 
 #   if value is below _VMINSQR the load curves for P and Q converge
 #   towards a linear load curve which is 0 when V=0; P(V=0)=0, Q(V=0)=0
-_VMINSQR = 0.8
+_VMINSQR = 0.8**2
 # value of zero check, used for load curve calculation    
 _EPSILON = 1e-12
 
