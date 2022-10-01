@@ -78,7 +78,7 @@ from util import eval_residual_current, max_ri
 
 #path = r"C:\UserData\deb00ap2\OneDrive - Siemens AG\Documents\defects\SP7-219086\eus1_loop\eus1_loop.db"
 #path = r"C:\UserData\deb00ap2\OneDrive - Siemens AG\Documents\defects\SP7-219086\eus1_loop"
-#path = r"C:\Users\live\OneDrive\Dokumente\py_projects\data\eus1_loop.db"
+path = r"C:\Users\live\OneDrive\Dokumente\py_projects\data\eus1_loop.db"
 #path = r"K:\Siemens\Power\Temp\DSSE\Subsystem_142423"
 
 
@@ -87,11 +87,10 @@ fl = 1 # loads
 loadcurve = 'interpolated' # 'original' | 'interpolated' | 'square'
 powerflowfn = cpfsymb # cpfnum | cpfsymb
 
-path = r"D:\eus1_loop"
+#path = r"D:\eus1_loop"
 frames = egrid_frames(_Y_LO_ABS_MAX, path)
 model = model_from_frames(frames)
 pq_factors = fl * np.ones((len(model.injections), 2))
-
 
 Vslack = fv * model.slacks.V
 values_of_params = casadi.horzcat(

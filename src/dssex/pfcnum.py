@@ -33,7 +33,7 @@ from src.dssex.util import get_tap_factors
 # square of voltage magnitude, minimum value for load curve, 
 #   if value is below _VMINSQR the load curves for P and Q converge
 #   towards a linear load curve which is 0 when V=0; P(V=0)=0, Q(V=0)=0
-_VMINSQR = 0.8
+_VMINSQR = 0.8**2
 
 _zeros = np.zeros((0, 1), dtype=np.longdouble)
 _power_props = itemgetter('P10', 'Q10', 'Exp_v_p', 'Exp_v_q')
@@ -172,8 +172,8 @@ def _get_squared_injected_power_fn(injections, pq_factors=None):
             * active power P
             * reactive power Q"""
     P10, Q10, _, __ = _power_props(injections)
-    P10 = P10.copy() / 3 # calculate per phase
-    Q10 = Q10.copy() / 3 # calculate per phase
+    P10 = P10.copy() / 3 # calculate per phase, assumes P10 is a 3-phase-value
+    Q10 = Q10.copy() / 3 # calculate per phase, assumes Q10 is a 3-phase-value
     if not pq_factors is None:
         P10 *= pq_factors[:,0]
         Q10 *= pq_factors[:,1]
