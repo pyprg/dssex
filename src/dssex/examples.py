@@ -57,7 +57,7 @@ model_devices = [
         positionmin=-16,
         positionneutral=0,
         positionmax=16,
-        position=1),
+        position=3),
     Injection(
         id='consumer_0',
         id_of_node='n_2',
@@ -331,7 +331,8 @@ pr.print_measurements(result09)
 #%%
 import casadi
 import numpy as np
-from src.dssex.estim2 import calculate_power_flow
+from src.dssex.estim2 import (calculate_power_flow, ri_to_complex, 
+  create_expressions)
 from src.dssex.pfcnum import calculate_electric_data
 
 model10 = make_model(
@@ -344,15 +345,24 @@ model10 = make_model(
         part='p', 
         id='kp'))
 
-mymodel = model10
-success, voltages = calculate_power_flow(mymodel)
+mymodel = model00
+expr = create_expressions(mymodel)
+success, voltages_ri = calculate_power_flow(mymodel, expr=expr)
 
 print("\n","SUCCESS" if success else ">--F-A-I-L-E-D--<", "\n")
 if success:
-    Vcomp = np.hstack(np.vsplit(voltages, 2)).view(dtype=np.complex128)
-    print(Vcomp)
+    voltages_complex = ri_to_complex(voltages_ri)
+    print(voltages_complex)
     e_data = calculate_electric_data(
-        mymodel, 'interpolated', mymodel.branchtaps.position, Vcomp)
+        mymodel, 'interpolated', mymodel.branchtaps.position, voltages_complex)
+    
+#%%
+from src.dssex.estim2 import power_into_branch
+
+P, Q = power_into_branch(
+    mymodel.branchterminals, 
+    expr['gb_mn_mm'], 
+    expr['Vnode_syms'])
     
 #%%
 from src.dssex.pfcnum import calculate_power_flow

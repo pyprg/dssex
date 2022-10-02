@@ -73,7 +73,7 @@ def get_tap_factors(branchtaps, position_syms):
     
     Parameters
     ----------
-    branchtaps: pandas.DataFrame (id of taps)
+    branchtaps: pandas.DataFrame (index of taps)
         * .Vstep, float voltage diff per tap
         * .positionneutral, int
     position_syms: casadi.SX
@@ -81,9 +81,9 @@ def get_tap_factors(branchtaps, position_syms):
     
     Returns
     -------
-    tuple
-        * casadi.SX, longitudinal factors
-        * casadi.SX, transversal factors"""
+    casadi.SX
+        * [:,0] longitudinal factors
+        * [:,1] transversal factors"""
     if position_syms.size1():     
         # longitudinal factor 
         flo = (1 
@@ -108,12 +108,12 @@ def _mult_gb_by_tapfactors(
         gb_mn_mm[:,3] - b_mm
     flo_ftr: casadi.SX
         matrix of 2 column vectors, one row for each tap position
-        flo_ftr[.,0] - longitudinal factor
-        flo_ftr[.,1] - transversal factor
+        flo_ftr[:,0] - longitudinal factor
+        flo_ftr[:,1] - transversal factor
     index_of_term: array_like
-        tap -> index of terminal
+        taps -> index of terminal
     index_of_other_term: array_like
-        tap -> index of other terminal (of same branch)
+        taps -> index of other terminal (of same branch)
     
     Returns
     -------
@@ -139,7 +139,7 @@ def _create_gb_expressions(terms):
     b_mm = casadi.SX(terms.b_tr_half)
     return casadi.horzcat(g_mn, b_mn, g_mm, b_mm)
 
-def _create_gb2(
+def _create_gb_matrix(
         index_of_node, index_of_other_node, count_of_pfcnodes, gb_mn_mm):
     """Creates conductance matrix G and susceptance matrix B.
     
@@ -183,37 +183,6 @@ def _create_gb2(
         G[idx,idx] += g_mm
         B[idx,idx] += b_mm
     return G, B
-
-def _create_gb(model, position_syms):
-    """Creates the branch conductance matrix and the branch susceptance matrix.
-    
-    Parameters
-    ----------
-    model: egrid.model.Model
-    
-    position_syms: casadi.SX
-        one symbol for each tap position
-    
-    Returns
-    -------
-    tuple
-        * casadi.SX - conductance matrix
-        * casadi.SX - susceptance matrix"""
-    terms = model.branchterminals
-    gb_mn_mm = _create_gb_expressions(terms)
-    if position_syms.size1():
-        branchtaps = model.branchtaps
-        flo_ftr = get_tap_factors(branchtaps, position_syms)
-        gb_mn_mm = _mult_gb_by_tapfactors(
-            gb_mn_mm, 
-            flo_ftr, 
-            branchtaps.index_of_term, 
-            branchtaps.index_of_other_term)
-    return _create_gb2(
-        terms.index_of_node, 
-        terms.index_of_other_node,
-        model.shape_of_Y[0],
-        gb_mn_mm)
     
 def _reset_slack_0(matrix, count_of_rows):
     """Removes entries from first count_of_slacks rows of matrix.
@@ -248,29 +217,6 @@ def _reset_slack_1(matrix, count_of_rows):
     casadi.SX"""
     diag = casadi.Sparsity.diag(count_of_rows, matrix.size2())
     return casadi.vertcat(diag, matrix[count_of_rows:, :])
-
-def create_gb_matrix(model, position_syms):
-    """Creates conductance matrix G and susceptance matrix B. Treats
-    slack rows. Values of diagonal in B-slack-rows are set to 1+0j, in
-    G-slack-rows to 0.
-    
-    Parameters
-    ----------
-    model: egrid.model.Model
-    
-    position_syms: casadi.SX
-        one symbol for each tap position
-    
-    Returns
-    -------
-    tuple
-        * casadi.SX - conductance matrix
-        * casadi.SX - susceptance matrix"""
-    G, B = _create_gb(model, position_syms)
-    count_of_slacks = model.count_of_slacks
-    return (
-        _reset_slack_1(G, count_of_slacks), 
-        _reset_slack_0(B, count_of_slacks))
     
 def create_mapping(from_index, to_index, shape):
     """Creates a matrix M for mapping vectors.
@@ -683,7 +629,7 @@ def get_scaling_data_fn(model, count_of_steps=1):
             kvars: casadi.SX
                 column vector, symbols for variables of scaling factors
             values_of_vars: casadi.DM
-                column vector, initial values for vars_
+                column vector, initial values for kvars
             kconsts: casadi.SX
                 column vector, symbols for constants of scaling factors
             values_of_consts: casadi.DM
@@ -896,8 +842,46 @@ def _reset_slack_current(
     Iinj_im[slack_indices] = -Vim_slack_syms
     return casadi.vertcat(Iinj_re, Iinj_im)
 
+def _create_gb_mn_mm(branchterminals, branchtaps, position_syms):
+    """Creates g_mn, b_mn, g_mm, b_mm (mutual and self conductance 
+    and susceptance) for each terminal taking tappositions into consideration.
+    
+    Parameters
+    ----------
+    branchterminals: pandas.DataFrame (index of terminal)
+        * .glo, mutual conductance, longitudinal
+        * .blo, mutual susceptance, longitudinal
+        * .g_tr_half, half of self conductance, tranversal
+        * .b_tr_half, half of self susceptance, tranversal
+    branchtaps: pandas.DataFrame (index of taps)
+        * .Vstep, float voltage diff per tap
+        * .positionneutral, int
+    position_syms: casadi.SX
+        vector of position symbols for terms with taps (index of taps)
+    
+    Returns
+    -------
+    casadi.SX
+        * [:,0] g_mn, mutual conductance
+        * [:,1] b_mn, mutual susceptance
+        * [:,2] b_mm, self conductance
+        * [:,3] b_mm, self susceptance"""
+    gb_mn_mm = _create_gb_expressions(branchterminals)
+    if position_syms.size1():
+        flo_ftr = get_tap_factors(branchtaps, position_syms)
+        gb_mn_mm = _mult_gb_by_tapfactors(
+            gb_mn_mm, 
+            flo_ftr, 
+            branchtaps.index_of_term, 
+            branchtaps.index_of_other_term)
+    return gb_mn_mm
+
 def create_expressions(model):
-    """Creates symbols and an expression for Y @ I.
+    """Creates symbols for node and slack voltages, tappositions,
+    branch conductance/susceptance and an expression for Y @ V. The symbols 
+    and expressions are regarded constant over multiple calculation steps.
+    Diagonal of slack rows are set to 1 for conductance and 0 for susceptance,
+    other values of slack rows are set to 0.
     
     Parameters
     ----------
@@ -916,16 +900,32 @@ def create_expressions(model):
     count_of_pfcnodes = model.shape_of_Y[0]
     Vnode_syms = create_V_symbols(count_of_pfcnodes)
     position_syms = casadi.SX.sym('pos', len(model.branchtaps), 1)
+    gb_mn_mm = _create_gb_mn_mm(
+        model.branchterminals, model.branchtaps, position_syms)
+    terms = model.branchterminals
+    G_, B_ = _create_gb_matrix(
+        terms.index_of_node, 
+        terms.index_of_other_node,
+        model.shape_of_Y[0],
+        gb_mn_mm)
+    count_of_slacks = model.count_of_slacks
+    G = _reset_slack_1(G_, count_of_slacks)
+    B = _reset_slack_0(B_, count_of_slacks)
     return dict(
         Vnode_syms=Vnode_syms,
-        Vre_slack_syms=casadi.SX.sym('Vre_slack', model.count_of_slacks),
-        Vim_slack_syms=casadi.SX.sym('Vim_slack', model.count_of_slacks),
+        Vslack_syms=casadi.horzcat(
+            casadi.SX.sym('Vre_slack', model.count_of_slacks),
+            casadi.SX.sym('Vim_slack', model.count_of_slacks)),
         position_syms=position_syms,
-        Y_by_V=multiply_Y_by_V(
-            Vnode_syms, *create_gb_matrix(model, position_syms)))
+        gb_mn_mm=gb_mn_mm,
+        Y_by_V=multiply_Y_by_V(Vnode_syms, G, B))
+
+#
+# power flow calculation
+#
 
 def calculate_power_flow(
-        model, scaling_data=None, expr=None, tappositions=None, Vguess=None):
+        model, scaling_data=None, expr=None, tappositions=None, Vinit=None):
     """Solves the power flow problem using a rootfinding algorithm.
     
     Parameters
@@ -935,6 +935,7 @@ def calculate_power_flow(
     scaling_data: Scalingdata
         optional
     expr: dict
+        optional
         * 'Vnode_syms', casadi.SX, expressions of node Voltages
         * 'Vre_slack_syms', casadi.SX, symbols of slack voltages, real part
         * 'Vim_slack_syms', casadi.SX, symbols of slack voltages, 
@@ -942,8 +943,10 @@ def calculate_power_flow(
         * 'position_syms', casadi.SX, symbols of tap positions
         * 'Y_by_V', casadi.SX, expression for Y @ V
     tappositions: array_like
+        optional
         int, positions of taps
-    Vguess: array_like
+    Vinit: array_like
+        optional
         float, initial guess of node voltages
     
     Returns
@@ -956,26 +959,22 @@ def calculate_power_flow(
         if scaling_data is None else scaling_data)
     tappositions_ = (
         model.branchtaps.position if tappositions is None else tappositions)
+    count_of_pfcnodes = model.shape_of_Y[0]
+    Vinit_ = (
+        casadi.vertcat([1.]*count_of_pfcnodes, [0.]*count_of_pfcnodes)
+        if Vinit is None else Vinit)
+    Vnode_syms = expr_['Vnode_syms']
     Iinj_ = get_injected_node_current(
         model.injections, 
         casadi.SX(model.mnodeinj.T), 
-        expr_['Vnode_syms'], 
+        Vnode_syms, 
         scaling_data_)
     slacks = model.slacks
-    Iinj = _reset_slack_current(
-        slacks.index_of_node, expr_['Vre_slack_syms'], expr_['Vim_slack_syms'],
-        *Iinj_)
-    variable_syms = casadi.vertcat(
-        expr_['Vnode_syms'][:,0], expr_['Vnode_syms'][:,1])
-    count_of_pfcnodes = model.shape_of_Y[0]
-    Vguess_ = (
-        casadi.vertcat([1.]*count_of_pfcnodes, [0.]*count_of_pfcnodes)
-        if Vguess is None else Vguess)
+    Vslack_syms = expr_['Vslack_syms'][:,0], expr_['Vslack_syms'][:,1]
+    Iinj = _reset_slack_current(slacks.index_of_node, *Vslack_syms, *Iinj_)
+    variable_syms = casadi.vertcat(Vnode_syms[:,0], Vnode_syms[:,1])
     parameter_syms=casadi.vertcat(
-        expr_['Vre_slack_syms'], 
-        expr_['Vim_slack_syms'], 
-        expr_['position_syms'], 
-        scaling_data_.symbols)
+        *Vslack_syms, expr_['position_syms'], scaling_data_.symbols)
     values_of_parameters=casadi.vertcat(
         np.real(slacks.V), np.imag(slacks.V), 
         tappositions_, 
@@ -985,7 +984,7 @@ def calculate_power_flow(
         [variable_syms, parameter_syms], 
         [expr_['Y_by_V'] + Iinj])
     rf = casadi.rootfinder('rf', 'nlpsol', fn_Iresidual, {'nlpsol':'ipopt'})
-    voltages = rf(Vguess_, values_of_parameters)
+    voltages = rf(Vinit_, values_of_parameters)
     return rf.stats()['success'], voltages
 
 def ri_to_complex(array_like):
@@ -999,4 +998,231 @@ def ri_to_complex(array_like):
     Returns
     -------
     numpy.array"""
-    return np.hstack(np.vsplit(array_like, 2)).view(dtype=np.complex128)   
+    return np.hstack(np.vsplit(array_like, 2)).view(dtype=np.complex128)
+
+    
+#
+# Estimation
+#
+
+def _power_into_branch(
+        g_tot, b_tot, g_mn, b_mn, V_abs_sqr, Vre, Vim, Vre_other, Vim_other):
+    """Calculates active and reactive power flow
+    from admittances of a branch and the voltages at its terminals. Assumes
+    PI-equivalient circuit.
+    ::
+        S = VI'
+    with term for I:
+    ::
+        I = (y_mm/2) V + y_mn(V - V_other)
+        I = (y_mm/2 + y_mn) V - y_mn V_other
+        I = y_tot V - y_mn V_other
+    S is:
+    ::
+
+        S = V (y_tot V - y_mn V_other)'
+        S = y_tot' V' V - y_mn' V_other' V = S_tot - S_mn
+    matrix form of y_tot and y_tot' (== conjugate(y_tot))
+    ::
+                +-            -+           +-            -+
+                | g_tot -b_tot |           |  g_tot b_tot |
+        y_tot = |              |  y_tot' = |              |
+                | b_tot  g_tot |           | -b_tot g_tot |
+                +-            -+           +-            -+
+    V' V in matrix form:
+    ::
+                                 +-   -+
+                                 | 1 0 |
+        V' V = (Vre**2 + Vim**2) |     |
+                                 | 0 1 |
+                                 +-   -+
+    matrix form for S_tot:
+    ::
+        +-            -+                     +-   -+ +-            -+
+        | P_tot -Q_tot |                     | 1 0 | |  g_tot b_tot |
+        |              | = (Vre**2 + Vim**2) |     | |              |
+        | Q_tot  P_tot |                     | 0 1 | | -b_tot g_tot |
+        +-            -+                     +-   -+ +-            -+
+                                             +-            -+
+                                             |  g_tot b_tot |
+                         = (Vre**2 + Vim**2) |              |
+                                             | -b_tot g_tot |
+                                             +-            -+
+    vector of S_tot:
+    ::
+        +-     -+   +-                        -+
+        | P_tot |   |  g_tot (Vre**2 + Vim**2) |
+        |       | = |                          |
+        | Q_tot |   | -b_tot (Vre**2 + Vim**2) |
+        +-     -+   +-                        -+
+    matrix for V_other' V:
+    ::
+                     +-                    -+ +-        -+
+                     |  Vre_other Vim_other | | Vre -Vim |
+        V_other' V = |                      | |          |
+                     | -Vim_other Vre_other | | Vim  Vre |
+                     +-                    -+ +-        -+
+           +-                                                                -+
+           |  (Vre Vre_other + Vim Vim_other) (Vre Vim_other - Vim Vre_other) |
+         = |                                                                  |
+           | (-Vre Vim_other + Vim Vre_other) (Vre Vre_other + Vim Vim_other) |
+           +-                                                                -+
+           +-    -+
+           | A -B |    A = (Vre Vre_other + Vim Vim_other)
+         = |      |
+           | B  A |    B = (-Vre Vim_other + Vim Vre_other)
+           +-    -+
+    multiply y_mn' with V_other' V:
+    ::
+                           +-          -+ +-    -+
+                           |  g_mn b_mn | | A -B |
+        y_mn' V_other' V = |            | |      |
+                           | -b_mn g_mn | | B  A |
+                           +-          -+ +-    -+
+    					   +-                                    -+
+    					   |  (g_mn A + b_mn B) (b_mn A - g_mn B) |
+    					 = |                                      |
+    					   | (-b_mn A + g_mn B) (g_mn A + b_mn B) |
+    					   +-                                    -+
+    S_mn:
+    ::
+        +-    -+   +-                  -+
+        | P_mn |   |  (g_mn A + b_mn B) |
+        |      | = |                    |
+        | Q_mn |   | (-b_mn A + g_mn B) |
+        +-    -+   +-                  -+
+    terms for P and Q
+    ::
+        P =  g_tot (Vre**2 + Vim**2)
+    	    - (  g_mn ( Vre Vre_other + Vim Vim_other)
+    		   + b_mn (-Vre Vim_other + Vim Vre_other))
+
+        Q = -b_tot (Vre**2 + Vim**2)
+    	    + (  b_mn ( Vre Vre_other + Vim Vim_other)
+    		   - g_mn (-Vre Vim_other + Vim Vre_other))
+
+    Parameters
+    ----------
+    g_tot: float
+        g_mm + g_mn
+    b_tot: float
+         b_mm + b_mn
+    g_mn: float
+        longitudinal conductance
+    b_mn: float
+        longitudinal susceptance
+    V_abs_sqr: float
+        Vre**2 + Vim**2
+    Vre: float
+        voltage in node, real part
+    Vim: float
+        voltage in node, imaginary part
+    Vre_other: float
+        voltage in other node, real part
+    Vim_other: float
+        voltage in other node, imaginary part
+
+    Returns
+    -------
+    tuple
+        * P, active power
+        * Q, reactive power"""
+    A = Vre * Vre_other + Vim * Vim_other
+    B = Vim * Vre_other - Vre * Vim_other
+    P =  V_abs_sqr * g_tot  - (A * g_mn + B * b_mn)
+    Q = -V_abs_sqr * b_tot  + (A * b_mn - B * g_mn)
+    return P, Q
+
+def power_into_branch(terms, gb_mn_mm, Vnode):
+    """Calculates active and reactive power flow
+    from admittances of a branch and the voltages at its terminals. Assumes
+    PI-equivalient circuit.
+
+    Parameters
+    ----------
+    terms: pandas.DataFrame (index of terminal)
+        * .index_of_node, int, 
+           index of power flow calculation node connected to terminal
+        * .index_of_other_node, int
+           index of power flow calculation node connected to other terminal
+           of same branch like terminal
+     gb_mn_mm: casadi.SX
+         conductance/susceptance of branches at terminals, (index of terminal)
+        * [:,0] g_mn, mutual conductance
+        * [:,1] b_mn, mutual susceptance
+        * [:,2] b_mm, self conductance
+        * [:,3] b_mm, self susceptance
+    Vnode: casadi.SX
+        three vectors of node voltage expressions
+        * Vnode[:,0], float, Vre vector of real node voltages
+        * Vnode[:,1], float, Vim vector of imaginary node voltages
+        * Vnode[:,2], float, Vre**2 + Vim**2, vector of imaginary node voltages
+        
+    Returns
+    -------
+    tuple
+        * P, active power
+        * Q, reactive power"""
+    Vterm = Vnode[terms.index_of_node,:]
+    Vother = Vnode[terms.index_of_other_node,:]
+    gb_mn_mm_ = gb_mn_mm[terms.index]
+    g_mn = gb_mn_mm_[:,0]
+    b_mn = gb_mn_mm_[:,1]
+    return _power_into_branch(
+        g_mn + gb_mn_mm_[:,2], 
+        b_mn + gb_mn_mm_[:,3],
+        g_mn,
+        b_mn,
+        Vterm[:,2],
+        Vterm[:,0],
+        Vterm[:,1],
+        Vother[:,0],
+        Vother[:,1])
+    
+def _current_into_branch(
+        g_tot, b_tot, g_mn, b_mn, Vre, Vim, Vre_other, Vim_other):
+    """Computes real and imaginary current flowing into a branch.
+
+    current flow into one branch
+    ::
+        +-   -+   +-                                -+ +-   -+
+        | Ire |   | (g_mm/2 + g_mn) -(b_mm/2 + b_mn) | | Vre |
+        |     | = |                                  | |     |
+        | Iim |   | (b_mm/2 + b_mn)  (g_mm/2 + g_mn) | | Vim |
+        +-   -+   +-                                -+ +-   -+
+
+                       +-          -+ +-         -+
+                       | g_mn -b_mn | | Vre_other |
+                     - |            | |           |
+                       | b_mn  g_mn | | Vim_other |
+                       +-          -+ +-         -+
+    Parameters
+    ----------
+    g_tot: float
+        g_mm / 2 + g_mn
+    b_tot: float
+        b_mm / 2 + b_mn
+    g_mn: float
+        longitudinal conductance
+    b_mn: float
+        longitudinal susceptance
+    Vre: float
+        voltage in node, real part
+    Vim: float
+        voltage in node, imaginary part
+    Vre_other: float
+        voltage in other node, real part
+    Vim_other: float
+        voltage in other node, imaginary part
+
+    Returns
+    -------
+    tuple
+        * Ire
+        * Iim"""
+    Ire = g_tot * Vre - b_tot * Vim - g_mn * Vre_other + b_mn * Vim_other
+    Iim = b_tot * Vre + g_tot * Vim - b_mn * Vre_other - g_mn * Vim_other
+    return Ire, Iim
+    
+    
+    

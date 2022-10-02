@@ -613,6 +613,7 @@ def _power_into_measured_branches(
         * .flo_other, casadi.SX, factor of longitudinal admittance other side
         * .Ire, .Iim, casadi.SX, real/imaginary current entering the branch
         * .P, .Q, casadi.SX, real/imaginary power entering the branch
+        
     Returns
     -------
     pandas.DataFrame (id_of_batch)
@@ -732,7 +733,7 @@ def _measured_values_per_batch(id_of_batch, values, x__):
         .groupby('id_of_batch')
         .sum())
 
-def _get_measured_and_calculated_value(
+def _get_measured_and_calculated_power(
         branchoutputs, branch_terminal_data,
         injectionoutputs, injection_data,
         values, x__='P'):
@@ -1476,14 +1477,14 @@ def get_estimation_data(model, count_of_steps, vminsqr=_VMINSQR):
         injection_data = _get_injection_data(
             model.injections, Vsymbols, kpq, vminsqr)
         V = _get_measured_and_calculated_voltage(model.vvalues, Vsymbols)
-        P = _get_measured_and_calculated_value(
+        P = _get_measured_and_calculated_power(
             model.branchoutputs,
             branch_terminal_data,
             model.injectionoutputs,
             injection_data,
             model.pvalues,
             'P')
-        Q = _get_measured_and_calculated_value(
+        Q = _get_measured_and_calculated_power(
             model.branchoutputs,
             branch_terminal_data,
             model.injectionoutputs,
@@ -1923,8 +1924,8 @@ def get_nlp(estimation_data, objectives='PQIV', constraints=''):
 
     Parameters
     ----------
-    model: gridmodel.Model
-        grid data prepared for power flow calculation
+    estimation_data: Estimation_data
+    
     objectives: str
         "P?Q?I?V?", default "PQIV'"
         terms of targets value norms (norms of measurements and setpoints;
