@@ -357,12 +357,16 @@ if success:
         mymodel, 'interpolated', mymodel.branchtaps.position, voltages_complex)
     
 #%%
-from src.dssex.estim2 import power_into_branch
+from src.dssex.estim2 import (
+    get_branch_result_fn, get_node_result)
 
-P, Q = power_into_branch(
-    mymodel.branchterminals, 
-    expr['gb_mn_mm'], 
-    expr['Vnode_syms'])
+
+get_branch_result = get_branch_result_fn(
+    expr, voltages_ri, mymodel.branchtaps.position)
+
+PQ_branch = get_branch_result('PQ', mymodel.branchterminals)
+I_branch = get_branch_result('I', mymodel.branchterminals)
+Vnode_abs = get_node_result(mymodel.injections.index_of_node, voltages_ri)
     
 #%%
 from src.dssex.pfcnum import calculate_power_flow

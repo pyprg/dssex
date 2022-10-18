@@ -28,21 +28,34 @@ from egrid.builder import DEFAULT_FACTOR_ID, defk, Loadfactor
 from itertools import chain
 from collections import namedtuple
 from src.dssex.injections import get_polynomial_coefficients
-# square of voltage magnitude, minimum value for load curve, 
+# square of voltage magnitude, minimum value for load curve,
 #   if value is below _VMINSQR the load curves for P and Q converge
 #   towards a linear load curve which is 0 when V=0; P(V=0)=0, Q(V=0)=0
 _VMINSQR = 0.8**2
-# value of zero check, used for load curve calculation    
+# value of zero check, used for load curve calculation
 _EPSILON = 1e-12
 _EMPTY_TUPLE = ()
 
+Vinjection = namedtuple('Vinjection', 're im abs_sqr')
+Vinjection.__doc__ = """
+Voltage values per injection.
+
+Parameters
+----------
+re: casadi.SX
+    vector, real part of voltages at injections
+re: casadi.SX
+    vector, imaginary part of voltages at injections
+abs_sqr: casadi.SX
+    vector, re**2 + im**2"""
+
 def create_symbols_with_ids(ids):
     """Creates a column vector of casadi symbols with given identifiers.
-    
+
     Parameters
     ----------
     ids: iterable of str
-    
+
     Returns
     -------
     casadi.SX"""
@@ -50,15 +63,15 @@ def create_symbols_with_ids(ids):
 
 def create_V_symbols(count_of_nodes):
     """Creates variables for node voltages and expressions for Vre**2+Vim**2.
-    
+
     Parameters
     ----------
     count_of_nodes: int
         number of pfc-nodes
-    
+
     Returns
     -------
-    casadi.SX 
+    casadi.SX
         matrix shape=(number_of_nodes, 3)
         * [:,0] Vre, real part of complex voltage
         * [:,1] Vim, imaginary part of complex voltage
@@ -68,9 +81,9 @@ def create_V_symbols(count_of_nodes):
     return casadi.horzcat(Vre, Vim, Vre.constpow(2)+Vim.constpow(2))
 
 def get_tap_factors(branchtaps, position_syms):
-    """Creates expressions for longitudinal and transversal factors 
+    """Creates expressions for longitudinal and transversal factors
     of branches.
-    
+
     Parameters
     ----------
     branchtaps: pandas.DataFrame (index of taps)
@@ -78,26 +91,26 @@ def get_tap_factors(branchtaps, position_syms):
         * .positionneutral, int
     position_syms: casadi.SX
         vector of position symbols for terms with tap
-    
+
     Returns
     -------
     casadi.SX
         * [:,0] longitudinal factors
         * [:,1] transversal factors"""
-    if position_syms.size1():     
-        # longitudinal factor 
-        flo = (1 
-            - casadi.SX(branchtaps.Vstep) 
+    if position_syms.size1():
+        # longitudinal factor
+        flo = (1
+            - casadi.SX(branchtaps.Vstep)
               * (position_syms - branchtaps.positionneutral))
     else:
         flo = casadi.SX(0, 1)
-    return casadi.horzcat(flo, casadi.constpow(flo, 2))    
+    return casadi.horzcat(flo, casadi.constpow(flo, 2))
 
 def _mult_gb_by_tapfactors(
         gb_mn_mm, flo_ftr, index_of_term, index_of_other_term):
     """Multiplies conductance and susceptance of branch terminals in order
     to consider positions of taps.
-    
+
     Parameters
     ----------
     gb_mn_mm: casadi.SX
@@ -114,7 +127,7 @@ def _mult_gb_by_tapfactors(
         taps -> index of terminal
     index_of_other_term: array_like
         taps -> index of other terminal (of same branch)
-    
+
     Returns
     -------
     casadi.SX
@@ -130,7 +143,7 @@ def _mult_gb_by_tapfactors(
     gb_mn_mm[index_of_other_term, :2] *= flo
     # transversal factor
     gb_mn_mm[index_of_term, 2:] *= flo_ftr[:, 1]
-    return gb_mn_mm 
+    return gb_mn_mm
 
 def _create_gb_expressions(terms):
     g_mn = casadi.SX(terms.g_lo)
@@ -139,88 +152,76 @@ def _create_gb_expressions(terms):
     b_mm = casadi.SX(terms.b_tr_half)
     return casadi.horzcat(g_mn, b_mn, g_mm, b_mm)
 
-def _create_gb_matrix(
-        index_of_node, index_of_other_node, count_of_pfcnodes, gb_mn_mm):
+def _create_gb_matrix(index_of_node, index_of_other_node, shape, gb_mn_tot):
     """Creates conductance matrix G and susceptance matrix B.
-    
+
     Parameters
     ----------
     index_of_node: array_like
         int, branchterminal -> index_of_node
     index_of_other_node
         int, branchterminal -> index_of_other_node (same branch, other side)
-    count_of_pfcnodes: int
-        number of power flow calculation nodes
+    shape: tuple (int,int)
+        shape of branch admittance matrix
     gb_mn_mm: casadi.SX
         matrix of 4 column vectors, one row for each branch terminal
-        gb_mn_mm[:,0] - g_mn
-        gb_mn_mm[:,1] - b_mn
-        gb_mn_mm[:,2] - g_mm
-        gb_mn_mm[:,3] - b_mm
-    
+        [:,0] g_mn, mutual conductance
+        [:,1] b_mn, mutual susceptance
+        [:,2] g_tot, self conductance + mutual conductance
+        [:,3] b_tot, self susceptance + mutual susceptance
+
     Returns
     -------
     tuple
         * casadi.SX - conductance matrix
         * casadi.SX - susceptance matrix"""
-    G = casadi.SX(count_of_pfcnodes, count_of_pfcnodes)
-    B = casadi.SX(count_of_pfcnodes, count_of_pfcnodes)
-    # mutual conductance/susceptance, mn
-    for r, c, g_mn, b_mn in zip(
-            index_of_node,
-            index_of_other_node,
-            gb_mn_mm[:,0].elements(),
-            gb_mn_mm[:,1].elements()):
-        G[r,c] -= g_mn
-        G[r,r] += g_mn # add to diagonal
-        B[r,c] -= b_mn
-        B[r,r] += b_mn # add to diagonal
-    # self conductance/susceptance, mm
-    for idx, g_mm, b_mm in zip(
-            index_of_node,
-            gb_mn_mm[:,2].elements(),
-            gb_mn_mm[:,3].elements()):
-        G[idx,idx] += g_mm
-        B[idx,idx] += b_mm
+    G = casadi.SX(*shape)
+    B = casadi.SX(G)
+    for r, c, gb in zip(
+        index_of_node, index_of_other_node, casadi.vertsplit(gb_mn_tot, 1)):
+        G[r,c] -= gb[0] # g_mn
+        B[r,c] -= gb[1] # b_mn
+        G[r,r] += gb[2] # g_tot, add to diagonal
+        B[r,r] += gb[3] # b_tot, add to diagonal
     return G, B
-    
+
 def _reset_slack_0(matrix, count_of_rows):
     """Removes entries from first count_of_slacks rows of matrix.
     Returns new casadi.SX instance.
-    
+
     Parameters
     ----------
     matrix: casadi.SX
         input matrix
     count_of_rows: int
         number of rows to be processed
-        
+
     Returns
     -------
     casadi.SX"""
     empty = casadi.SX(count_of_rows, matrix.size2())
     return casadi.vertcat(empty, matrix[count_of_rows:, :])
-    
+
 def _reset_slack_1(matrix, count_of_rows):
     """Removes entries from first count_of_slacks rows of matrix, sets diagonal
     entries of first count_of_rows rows to 1.0. Returns new casadi.SX instance.
-    
+
     Parameters
     ----------
     matrix: casadi.SX
         input matrix
     count_of_rows: int
         number of rows to be processed
-        
+
     Returns
     -------
     casadi.SX"""
     diag = casadi.Sparsity.diag(count_of_rows, matrix.size2())
     return casadi.vertcat(diag, matrix[count_of_rows:, :])
-    
+
 def create_mapping(from_index, to_index, shape):
     """Creates a matrix M for mapping vectors.
-    
+
     Parameters
     ----------
     from_index: array_like
@@ -229,19 +230,19 @@ def create_mapping(from_index, to_index, shape):
         int
     shape: tuple
         int,int (number_of_rows (to), number_of_columns (from))
-    
+
     Returns
     -------
     scipy.sparse.coo_matrix
         matrix of float 1.0 with shape=(to_index, from_index)"""
     return coo_matrix(
-        ([1.]*len(from_index), (to_index, from_index)), 
+        ([1.]*len(from_index), (to_index, from_index)),
         shape=shape, dtype=float)
 
 def multiply_Y_by_V(Vreim, G, B):
     """Creates the Y-matrix from G and B, creates a vector from Vreim.
     Multiplies Y @ V.
-    
+
     Parameters
     ----------
     Vreim: casadi.SX
@@ -252,7 +253,7 @@ def multiply_Y_by_V(Vreim, G, B):
         conductance matrix
     B: casadi.SX
         susceptance matrix
-        
+
     Returns
     -------
     casadi.SX"""
@@ -319,36 +320,36 @@ def _get_factor_ini_values(myfactors, symbols):
 
 def _get_default_factors(count_of_steps):
     """Generates one default scaling factor per step.
-    
+
     Parameters
     ----------
     count_of_steps: int
         number of factors to generate
-    
+
     Parameters
     ----------
     pandas.DataFrame"""
     return (
         pd.DataFrame(
-            defk(id_=DEFAULT_FACTOR_ID, type_='const', value=1.0, 
+            defk(id_=DEFAULT_FACTOR_ID, type_='const', value=1.0,
                  min_=1.0, max_=1.0, step=range(count_of_steps)),
             columns=Loadfactor._fields)
         .set_index(['step', 'id']))
 
 def _factor_index_per_step(factors):
-    """Creates an index (0...n) for each step. 
+    """Creates an index (0...n) for each step.
     (Alternative for _factor_index)
-    
+
     Parameters
     ----------
     factors: pandas.DataFrame (step, id)->...
-    
+
     Returns
     -------
     pandas.Series"""
     return pd.Series(
         chain.from_iterable(
-            (range(len(factors.loc[step]))) 
+            (range(len(factors.loc[step])))
             for step in factors.index.levels[0]),
         index=factors.index,
         name='index_of_symbol')
@@ -356,11 +357,11 @@ def _factor_index_per_step(factors):
 def _factor_index(factors):
     """Creates an index for all factors (includes all steps).
     (Alternative for _factor_index_per_step)
-    
+
     Parameters
     ----------
     factors: pandas.DataFrame (step, id)->...
-    
+
     Returns
     -------
     pandas.Series"""
@@ -435,13 +436,13 @@ def get_load_scaling_factor_data(
 def get_factors(model, count_of_steps=1):
     """Creates identifiers and indices of scaling factors. Creates mapping
     from injections to scaling factors. The mapping is specific for each
-    calculation step, injection and scaled part of power (eiher active or 
+    calculation step, injection and scaled part of power (eiher active or
     reactive power)
 
     Parameters
     ----------
-    model: 
-    
+    model:
+
     count_of_steps: int
         number of optimization steps (default is 1)
 
@@ -458,12 +459,12 @@ def get_factors(model, count_of_steps=1):
 def _groupby_step(df):
     """Resets index of pandas.Dataframe df and group the resulting frame by
     column 'step'.
-    
+
     Parameters
     ----------
     df: pandas.DataFrame
         either has column 'step' or one part of the index has name 'step'
-        
+
     Returns
     -------
     pandas.core.groupby.generic.DataFrameGroupBy"""
@@ -471,10 +472,10 @@ def _groupby_step(df):
     return df_.groupby('step')
 
 def _get_values_of_symbols(factor_data, value_of_previous_step):
-    """Returns values for symbols. If the symbols is a variable the value
+    """Returns values for symbols. If a symbol is a variable the value
     is the initial value. Values can either be given explicitely or are
     calculated in the previous calculation step.
-    
+
     Parameters
     ----------
     factor_data: pandas.DataFrame
@@ -483,7 +484,7 @@ def _get_values_of_symbols(factor_data, value_of_previous_step):
         * .index_of_source, int
     value_of_previous_step: casadi.DM
         vector of float
-    
+
     Returns
     -------
     casadi.DM
@@ -497,18 +498,18 @@ def _get_values_of_symbols(factor_data, value_of_previous_step):
     calc = factor_data[~is_given]
     values[calc.index_of_symbol] = value_of_previous_step[calc.index_of_source]
     return values
-    
+
 def _select_type(vecs, factor_data):
-    """Creates column vectors from vecs by extracting elements by their 
+    """Creates column vectors from vecs by extracting elements by their
     indices.
-    
+
     Parameters
     ----------
     vecs: iterable
         casadi.SX or casadi.DM, column vector
     factor_data: pandas.DataFrame
         * .index_of_symbol
-        
+
     Returns
     -------
     iterator
@@ -543,40 +544,40 @@ kconsts: casadi.SX
 values_of_consts: casadi.DM
     column vector, values for consts
 symbols: casadi.SX
-    vector of all symbols (variables and constants) for extracting values 
-    which shall be passed to next step 
+    vector of all symbols (variables and constants) for extracting values
+    which shall be passed to next step
     (function 'get_scaling_data', parameter 'k_prev')
 values: casadi.DM
     float, given values of symbols (variables and constants)"""
- 
+
 def _make_DM_vector(array_like):
     """Creates a casadi.DM vector from array_like.
-    
+
     Parameters
     ----------
     array_like: array_like
-    
+
     Returns
     -------
     casadi.DM"""
     return casadi.DM(array_like) if len(array_like) else casadi.DM(0,1)
- 
+
 def get_scaling_data(
-        factor_step_groups, injection_factor_step_groups, 
+        factor_step_groups, injection_factor_step_groups,
         step=0, k_prev=_k_prev_default):
     """Prepares data of scaling factors per step.
-    
+
     Parameters
     ----------
     factor_step_groups: pandas.groupby
-    
+
     injection_factor_step_groups: pandas.groupby
-    
+
     step: int
         step number 0, 1, ...
     k_prev: casadi.DM
         values of scaling factors from previous step, variables and constants
-        
+
     Returns
     -------
     Scalingdata"""
@@ -593,6 +594,7 @@ def get_scaling_data(
     factors_var = factors[factors.type=='var']
     symbols_of_vars, values_of_vars = symbols_values(factors_var)
     return Scalingdata(
+        # columns of kp/kq store an index
         kp=symbols[injections_factors.kp],
         kq=symbols[injections_factors.kq],
         kvars=symbols_of_vars,
@@ -603,28 +605,28 @@ def get_scaling_data(
         values_of_consts=values_of_consts,
         symbols=symbols,
         values=values)
-    
+
 def get_scaling_data_fn(model, count_of_steps=1):
     """Creates a function for creating Scalingdata.
-    
+
     Parameters
     ----------
     model: egrid.model.Model
         data of electric grid
     count_of_steps: int
-        number of calculation steps > 0 
-    
+        0 < number of calculation steps
+
     Returns
     -------
-    function 
+    function
         (int, casadi.DM) -> (Scalingdata)
         (index_of_calculation_step, result_of_previous_step) -> (Scalingdata)
         Scalingdata:
             kp: casadi.SX
-                column vector, symbols for scaling factor 
+                column vector, symbols for scaling factor
                 of active power per injection
             kq: casadi.SX
-                column vector, symbols for scaling factor 
+                column vector, symbols for scaling factor
                 of reactive power per injection
             kvars: casadi.SX
                 column vector, symbols for variables of scaling factors
@@ -691,14 +693,14 @@ def get_inj_current_original(inj, Vinj, P, Q):
 
         Iim = -(Vre ** 2 + Vim ** 2) ** (Expvq / 2 - 1) * Q_10 * Vre
              + (Vre ** 2 + Vim ** 2) ** (Expvp / 2 - 1) * P_10 * Vim
-    
+
     Parameters
     ----------
     inj: pandas.DataFrame (int index_of_injection)
         * .Exp_v_p, float, voltage exponent of active power
         * .Exp_v_q, float, voltage exponent of reactive power
     Vinj: Vinjection
-        expression for the voltage vector at injections, 
+        expression for the voltage vector at injections,
         each element expresses the voltage at one paticular injection
         * .re, float, real part of voltage
         * .im, float, imaginary part of voltage
@@ -709,24 +711,24 @@ def get_inj_current_original(inj, Vinj, P, Q):
     Q: casadi.SX
         expression for reactive power when voltage is 1 pu,
         value for one phase, 1/3 of a 3-phase-load
-    
+
     Returns
     -------
     tuple
         * Ire, casadi.SX, expression for real part of current per injection
-        * Iim, casadi.SX, expression for imaginary part 
+        * Iim, casadi.SX, expression for imaginary part
           of current per injection"""
     y_p = casadi.power(Vinj.abs_sqr, inj.Exp_v_p/2 - 1) * P
     y_q = casadi.power(Vinj.abs_sqr, inj.Exp_v_q/2 - 1) * Q
     return y_p * Vinj.re + y_q * Vinj.im, -y_q * Vinj.re + y_p * Vinj.im
 
 def get_inj_current_interpolated(vminsqr, inj, Vinj, P, Q):
-    """Interpolates complex current injected into power flow calculation nodes 
+    """Interpolates complex current injected into power flow calculation nodes
     per injection when the absolute voltage is below vminsqr**.5. The current
     decreases when the magnitude of voltage comes closer to zero.
     ::
         I_complex(|V|) = A|V|³ + B|V|² + C|V|
-    
+
     Parameters
     ----------
     vminsqr: float
@@ -735,7 +737,7 @@ def get_inj_current_interpolated(vminsqr, inj, Vinj, P, Q):
         * .Exp_v_p, float, voltage exponent of active power
         * .Exp_v_q, float, voltage exponent of reactive power
     Vinj: Vinjection
-        expression for the voltage vector at injections, 
+        expression for the voltage vector at injections,
         each element expresses the voltage at one paticular injection
         * .re, float, real part of voltage
         * .im, float, imaginary part of voltage
@@ -746,12 +748,12 @@ def get_inj_current_interpolated(vminsqr, inj, Vinj, P, Q):
     Q: casadi.SX
         expression for reactive power when voltage is 1 pu,
         value for one phase, 1/3 of a 3-phase-load
-    
+
     Returns
     -------
     tuple
         * Ire, casadi.SX, expression for real part of current per injection
-        * Iim, casadi.SX, expression for imaginary part 
+        * Iim, casadi.SX, expression for imaginary part
           of current per injection"""
     Vinj_abs = casadi.sqrt(Vinj.abs_sqr)
     Vinj_abs_cub = Vinj.abs_sqr * Vinj_abs
@@ -768,25 +770,11 @@ def get_inj_current_interpolated(vminsqr, inj, Vinj, P, Q):
         calculate, (-q_expr * Vinj.re + p_expr * Vinj.im) / Vinj.abs_sqr, 0.0)
     return Ire_ip, Iim_ip
 
-Vinjection = namedtuple('Vinjection', 're im abs_sqr')
-Vinjection.__doc__ = """
-Voltage values per injection.
-
-Parameters
-----------
-re: casadi.SX
-    vector, real part of voltages at injections
-re: casadi.SX
-    vector, imaginary part of voltages at injections
-abs_sqr: casadi.SX
-    vector, re**2 + im**2"""
-
-def get_injected_node_current(
+def current_into_injection(
         injections, node_to_inj, Vnode, scaling_data, vminsqr=_VMINSQR):
-    """Creates casadi.SX expressions (vectors) for real and imaginary part of 
-    current injected into power flow calculation nodes. Vectors have elements
-    per power flow calculation node.
-    
+    """Creates casadi.SX expressions (vectors) for real and imaginary parts of
+    current flowing into injections.
+
     Parameters
     ----------
     injections: pandas.DataFrame (int index_of_injection)
@@ -809,16 +797,16 @@ def get_injected_node_current(
           reactive power
     vminsqr: float
         square of voltage, upper limit interpolation interval [0...vminsqr]
-    
+
     Returns
     -------
     tuple
         * Ire, casadi.SX, expression for real part of current per injection
-        * Iim, casadi.SX, expression for imaginary part 
+        * Iim, casadi.SX, expression for imaginary part
           of current per injection"""
     Vinj = Vinjection(
-        re=node_to_inj @ Vnode[:,0], 
-        im=node_to_inj @ Vnode[:,1], 
+        re=node_to_inj @ Vnode[:,0],
+        im=node_to_inj @ Vnode[:,1],
         abs_sqr=node_to_inj @ Vnode[:,2])
     # calculates per phase, assumes P10 and Q10 are sums of 3 per-phase-values
     P = casadi.vcat(injections.P10 / 3) * scaling_data.kp
@@ -828,13 +816,70 @@ def get_injected_node_current(
     Iinj_re_ip, Iinj_im_ip = get_inj_current_interpolated(
         vminsqr, injections, Vinj, P, Q)
     # compose current functions from original and interpolated
-    inj_to_node = node_to_inj.T
     interpolate = Vinj.abs_sqr < vminsqr
-    Inode_re = inj_to_node @ casadi.if_else(
-        interpolate, Iinj_re_ip, Iinj_re_orig) 
-    Inode_im = inj_to_node @ casadi.if_else(
-        interpolate, Iinj_im_ip, Iinj_im_orig)
-    return Inode_re, Inode_im
+    Iinj_re = casadi.if_else(interpolate, Iinj_re_ip, Iinj_re_orig)
+    Iinj_im = casadi.if_else(interpolate, Iinj_im_ip, Iinj_im_orig)
+    return Iinj_re, Iinj_im
+
+def _injected_node_current(inj_to_node, Iinj_re, Iinj_im):
+    """Converts current per injection into current per power flow calculation
+    node.
+    
+    Parameters
+    ----------
+    inj_to_node: casadi.SX
+        the matrix converts injection values into node values
+        node_values = inj_to_node @ injection_values
+    Iinj_re: casadi.SX
+        vector of current per injection, real part
+    Iinj_im: casadi.SX
+        vector of current per injection, imaginary part
+    
+    Returns
+    -------
+    tuple
+        * casadi.SX, injected real current per node
+        * casadi.SX, injected imaginary current per node"""
+    return inj_to_node @ Iinj_re, inj_to_node @ Iinj_im
+
+def get_injected_node_current(
+        injections, node_to_inj, Vnode, scaling_data, vminsqr=_VMINSQR):
+    """Creates casadi.SX expressions (vectors) for real and imaginary part of
+    current injected into power flow calculation nodes. Vectors have elements
+    per power flow calculation node.
+
+    Parameters
+    ----------
+    injections: pandas.DataFrame (int index_of_injection)
+        * .P10, float, rated active power at voltage of 1.0 pu
+        * .Q10, float, rated reactive power at voltage of 1.0 pu
+        * .Exp_v_p, float, voltage exponent of active power
+        * .Exp_v_q, float, voltage exponent of reactive power
+    node_to_inj: casadi.SX
+        the matrix converts node to injection values
+        injection_values = node_to_inj @ node_values
+    Vnode: casadi.SX
+        three vectors of node voltage expressions
+        * Vnode[:,0], float, Vre vector of real node voltages
+        * Vnode[:,1], float, Vim vector of imaginary node voltages
+        * Vnode[:,2], float, Vre**2 + Vim**2, vector of imaginary node voltages
+    scaling_data: Scalingdata
+        * .kp, casadi.SX expression, vector of injection scaling factors for
+          active power
+        * .kq, casadi.SX expression, vector of injection scaling factors for
+          reactive power
+    vminsqr: float
+        square of voltage, upper limit interpolation interval [0...vminsqr]
+
+    Returns
+    -------
+    tuple
+        * Ire, casadi.SX, expression for real part of injected current per node
+        * Iim, casadi.SX, expression for imaginary part of injected
+          current per node"""
+    Iinj = current_into_injection(
+        injections, node_to_inj, Vnode, scaling_data, vminsqr)
+    return _injected_node_current(node_to_inj.T, *Iinj)
 
 def _reset_slack_current(
         slack_indices, Vre_slack_syms, Vim_slack_syms, Iinj_re, Iinj_im):
@@ -842,10 +887,10 @@ def _reset_slack_current(
     Iinj_im[slack_indices] = -Vim_slack_syms
     return casadi.vertcat(Iinj_re, Iinj_im)
 
-def _create_gb_mn_mm(branchterminals, branchtaps, position_syms):
-    """Creates g_mn, b_mn, g_mm, b_mm (mutual and self conductance 
+def _create_gb_mn_tot(branchterminals, branchtaps, position_syms):
+    """Creates g_mn, b_mn, g_mm, b_mm (mutual and self conductance
     and susceptance) for each terminal taking tappositions into consideration.
-    
+
     Parameters
     ----------
     branchterminals: pandas.DataFrame (index of terminal)
@@ -858,56 +903,58 @@ def _create_gb_mn_mm(branchterminals, branchtaps, position_syms):
         * .positionneutral, int
     position_syms: casadi.SX
         vector of position symbols for terms with taps (index of taps)
-    
+
     Returns
     -------
     casadi.SX
         * [:,0] g_mn, mutual conductance
         * [:,1] b_mn, mutual susceptance
-        * [:,2] b_mm, self conductance
-        * [:,3] b_mm, self susceptance"""
+        * [:,2] g_tot, self conductance + mutual conductance
+        * [:,3] b_tot, self susceptance + mutual susceptance"""
     gb_mn_mm = _create_gb_expressions(branchterminals)
     if position_syms.size1():
         flo_ftr = get_tap_factors(branchtaps, position_syms)
         gb_mn_mm = _mult_gb_by_tapfactors(
-            gb_mn_mm, 
-            flo_ftr, 
-            branchtaps.index_of_term, 
+            gb_mn_mm,
+            flo_ftr,
+            branchtaps.index_of_term,
             branchtaps.index_of_other_term)
+    gb_mn_mm[:,2] += gb_mn_mm[:,0]
+    gb_mn_mm[:,3] += gb_mn_mm[:,1]
     return gb_mn_mm
 
 def create_expressions(model):
     """Creates symbols for node and slack voltages, tappositions,
-    branch conductance/susceptance and an expression for Y @ V. The symbols 
+    branch conductance/susceptance and an expression for Y @ V. The symbols
     and expressions are regarded constant over multiple calculation steps.
     Diagonal of slack rows are set to 1 for conductance and 0 for susceptance,
     other values of slack rows are set to 0.
-    
+
     Parameters
     ----------
     model: egrid.model.Model
         data of electric grid
-    
+
     Returns
     -------
     dict
         * 'Vnode_syms', casadi.SX, expressions of node Voltages
         * 'Vre_slack_syms', casadi.SX, symbols of slack voltages, real part
-        * 'Vim_slack_syms', casadi.SX, symbols of slack voltages, 
+        * 'Vim_slack_syms', casadi.SX, symbols of slack voltages,
            imaginary part
         * 'position_syms', casadi.SX, symbols of tap positions
         * 'Y_by_V', casadi.SX, expression for Y @ V"""
     count_of_pfcnodes = model.shape_of_Y[0]
     Vnode_syms = create_V_symbols(count_of_pfcnodes)
     position_syms = casadi.SX.sym('pos', len(model.branchtaps), 1)
-    gb_mn_mm = _create_gb_mn_mm(
+    gb_mn_tot = _create_gb_mn_tot(
         model.branchterminals, model.branchtaps, position_syms)
     terms = model.branchterminals
     G_, B_ = _create_gb_matrix(
-        terms.index_of_node, 
+        terms.index_of_node,
         terms.index_of_other_node,
-        model.shape_of_Y[0],
-        gb_mn_mm)
+        model.shape_of_Y,
+        gb_mn_tot)
     count_of_slacks = model.count_of_slacks
     G = _reset_slack_1(G_, count_of_slacks)
     B = _reset_slack_0(B_, count_of_slacks)
@@ -917,17 +964,17 @@ def create_expressions(model):
             casadi.SX.sym('Vre_slack', model.count_of_slacks),
             casadi.SX.sym('Vim_slack', model.count_of_slacks)),
         position_syms=position_syms,
-        gb_mn_mm=gb_mn_mm,
+        gb_mn_tot=gb_mn_tot,
         Y_by_V=multiply_Y_by_V(Vnode_syms, G, B))
 
 #
 # power flow calculation
 #
 
-def calculate_power_flow(
-        model, scaling_data=None, expr=None, tappositions=None, Vinit=None):
+def _calculate_power_flow(
+        model, scaling_data, expr, Iinjection, tappositions=None, Vinit=None):
     """Solves the power flow problem using a rootfinding algorithm.
-    
+
     Parameters
     ----------
     model: egrid.model.Model
@@ -938,7 +985,63 @@ def calculate_power_flow(
         optional
         * 'Vnode_syms', casadi.SX, expressions of node Voltages
         * 'Vre_slack_syms', casadi.SX, symbols of slack voltages, real part
-        * 'Vim_slack_syms', casadi.SX, symbols of slack voltages, 
+        * 'Vim_slack_syms', casadi.SX, symbols of slack voltages,
+           imaginary part
+        * 'position_syms', casadi.SX, symbols of tap positions
+        * 'Y_by_V', casadi.SX, expression for Y @ V
+    Iinjection: tuple, casadi.SX
+        * Ire, real part of current flowing into injection
+        * Ire, imaginary part of current flowing into injection
+    tappositions: array_like
+        optional
+        int, positions of taps
+    Vinit: array_like
+        optional
+        float, initial guess of node voltages
+
+    Returns
+    -------
+    tuple
+        * bool, success?
+        * casadi.DM, float, voltage vector [real parts, imaginary parts]"""
+    Vnode_syms = expr['Vnode_syms']
+    Iinj_ = _injected_node_current(casadi.SX(model.mnodeinj), *Iinjection)
+    Vslack_syms = expr['Vslack_syms'][:,0], expr['Vslack_syms'][:,1]
+    parameter_syms=casadi.vertcat(
+        *Vslack_syms, expr['position_syms'], scaling_data.symbols)
+    slacks = model.slacks
+    Iinj = _reset_slack_current(slacks.index_of_node, *Vslack_syms, *Iinj_)
+    variable_syms = casadi.vertcat(Vnode_syms[:,0], Vnode_syms[:,1])
+    fn_Iresidual = casadi.Function(
+        'fn_Iresidual',
+        [variable_syms, parameter_syms],
+        [expr['Y_by_V'] + Iinj])
+    rf = casadi.rootfinder('rf', 'nlpsol', fn_Iresidual, {'nlpsol':'ipopt'})
+    count_of_pfcnodes = model.shape_of_Y[0]
+    Vinit_ = (
+        casadi.vertcat([1.]*count_of_pfcnodes, [0.]*count_of_pfcnodes)
+        if Vinit is None else Vinit)
+    tappositions_ = (
+        model.branchtaps.position if tappositions is None else tappositions)
+    values_of_parameters=casadi.vertcat(
+        np.real(slacks.V), np.imag(slacks.V),
+        tappositions_,
+        scaling_data.values)
+    voltages = rf(Vinit_, values_of_parameters)
+    return rf.stats()['success'], voltages
+
+def calculate_power_flow(model, expr=None, tappositions=None, Vinit=None):
+    """Solves the power flow problem using a rootfinding algorithm.
+
+    Parameters
+    ----------
+    model: egrid.model.Model
+        data of electric grid
+    expr: dict
+        optional
+        * 'Vnode_syms', casadi.SX, expressions of node Voltages
+        * 'Vre_slack_syms', casadi.SX, symbols of slack voltages, real part
+        * 'Vim_slack_syms', casadi.SX, symbols of slack voltages,
            imaginary part
         * 'position_syms', casadi.SX, symbols of tap positions
         * 'Y_by_V', casadi.SX, expression for Y @ V
@@ -948,59 +1051,35 @@ def calculate_power_flow(
     Vinit: array_like
         optional
         float, initial guess of node voltages
-    
+
     Returns
     -------
     tuple
         * bool, success?
         * casadi.DM, float, voltage vector [real parts, imaginary parts]"""
-    expr_ = create_expressions(model) if expr is None else expr
-    scaling_data_ = (get_scaling_data_fn(model, count_of_steps=1)(step=0)
-        if scaling_data is None else scaling_data)
-    tappositions_ = (
-        model.branchtaps.position if tappositions is None else tappositions)
-    count_of_pfcnodes = model.shape_of_Y[0]
-    Vinit_ = (
-        casadi.vertcat([1.]*count_of_pfcnodes, [0.]*count_of_pfcnodes)
-        if Vinit is None else Vinit)
-    Vnode_syms = expr_['Vnode_syms']
-    Iinj_ = get_injected_node_current(
+    expr_ = (create_expressions(model) if expr is None else expr)
+    scaling_data = get_scaling_data_fn(model, count_of_steps=1)(step=0)
+    Iinjection = current_into_injection(
         model.injections, 
         casadi.SX(model.mnodeinj.T), 
-        Vnode_syms, 
-        scaling_data_)
-    slacks = model.slacks
-    Vslack_syms = expr_['Vslack_syms'][:,0], expr_['Vslack_syms'][:,1]
-    Iinj = _reset_slack_current(slacks.index_of_node, *Vslack_syms, *Iinj_)
-    variable_syms = casadi.vertcat(Vnode_syms[:,0], Vnode_syms[:,1])
-    parameter_syms=casadi.vertcat(
-        *Vslack_syms, expr_['position_syms'], scaling_data_.symbols)
-    values_of_parameters=casadi.vertcat(
-        np.real(slacks.V), np.imag(slacks.V), 
-        tappositions_, 
-        scaling_data_.values)
-    fn_Iresidual = casadi.Function(
-        'fn_Iresidual', 
-        [variable_syms, parameter_syms], 
-        [expr_['Y_by_V'] + Iinj])
-    rf = casadi.rootfinder('rf', 'nlpsol', fn_Iresidual, {'nlpsol':'ipopt'})
-    voltages = rf(Vinit_, values_of_parameters)
-    return rf.stats()['success'], voltages
+        expr_['Vnode_syms'], 
+        scaling_data)
+    return _calculate_power_flow(
+        model, scaling_data, expr_, Iinjection, tappositions, Vinit)
 
 def ri_to_complex(array_like):
     """Converts a vector with separate real and imaginary parts into a
     vector of complex values.
-    
+
     Parameters
     ----------
     array_like: casadi.DM (and other types?)
-    
+
     Returns
     -------
     numpy.array"""
     return np.hstack(np.vsplit(array_like, 2)).view(dtype=np.complex128)
 
-    
 #
 # Estimation
 #
@@ -1133,52 +1212,45 @@ def _power_into_branch(
     Q = -V_abs_sqr * b_tot  + (A * b_mn - B * g_mn)
     return P, Q
 
-def power_into_branch(terms, gb_mn_mm, Vnode):
-    """Calculates active and reactive power flow
-    from admittances of a branch and the voltages at its terminals. Assumes
-    PI-equivalient circuit.
+def power_into_branch(terms, gb_mn_tot, Vnode):
+    """Calculates active and reactive power flow for a subset of 
+    branch terminals from admittances of branches and voltages at 
+    branch terminals. Assumes PI-equivalent circuits.
 
     Parameters
     ----------
     terms: pandas.DataFrame (index of terminal)
-        * .index_of_node, int, 
+        * .index_of_node, int,
            index of power flow calculation node connected to terminal
         * .index_of_other_node, int
            index of power flow calculation node connected to other terminal
            of same branch like terminal
-     gb_mn_mm: casadi.SX
-         conductance/susceptance of branches at terminals, (index of terminal)
+     gb_mn_tot: casadi.SX
+        conductance/susceptance of branches at terminals, (index of terminal)
         * [:,0] g_mn, mutual conductance
         * [:,1] b_mn, mutual susceptance
-        * [:,2] b_mm, self conductance
-        * [:,3] b_mm, self susceptance
+        * [:,2] g_tot, self conductance + mutual conductance
+        * [:,3] b_tot, self susceptance + mutual susceptance
     Vnode: casadi.SX
         three vectors of node voltage expressions
         * Vnode[:,0], float, Vre vector of real node voltages
         * Vnode[:,1], float, Vim vector of imaginary node voltages
         * Vnode[:,2], float, Vre**2 + Vim**2, vector of imaginary node voltages
-        
+
     Returns
     -------
     tuple
         * P, active power
         * Q, reactive power"""
-    Vterm = Vnode[terms.index_of_node,:]
-    Vother = Vnode[terms.index_of_other_node,:]
-    gb_mn_mm_ = gb_mn_mm[terms.index]
-    g_mn = gb_mn_mm_[:,0]
-    b_mn = gb_mn_mm_[:,1]
-    return _power_into_branch(
-        g_mn + gb_mn_mm_[:,2], 
-        b_mn + gb_mn_mm_[:,3],
-        g_mn,
-        b_mn,
-        Vterm[:,2],
-        Vterm[:,0],
-        Vterm[:,1],
-        Vother[:,0],
-        Vother[:,1])
-    
+    if len(terms):
+        Vterm = Vnode[terms.index_of_node,:]
+        Vother = Vnode[terms.index_of_other_node,:]
+        gb_mn_tot_ = gb_mn_tot[terms.index, :]
+        return _power_into_branch(
+            gb_mn_tot_[:,2], gb_mn_tot_[:,3], gb_mn_tot_[:,0], gb_mn_tot_[:,1],
+            Vterm[:,2], Vterm[:,0], Vterm[:,1], Vother[:,0], Vother[:,1])
+    return casadi.SX(0,1), casadi.SX(0,1)
+
 def _current_into_branch(
         g_tot, b_tot, g_mn, b_mn, Vre, Vim, Vre_other, Vim_other):
     """Computes real and imaginary current flowing into a branch.
@@ -1223,6 +1295,153 @@ def _current_into_branch(
     Ire = g_tot * Vre - b_tot * Vim - g_mn * Vre_other + b_mn * Vim_other
     Iim = b_tot * Vre + g_tot * Vim - b_mn * Vre_other - g_mn * Vim_other
     return Ire, Iim
+
+def current_into_branch(terms, gb_mn_tot, Vnode):
+    """Computes real and imaginary current flowing into given subset of branch
+    terminals from branch admittances and voltages at branch terminals. Assumes
+    PI-equivalient circuit.
+
+    Parameters
+    ----------
+    terms: pandas.DataFrame (index of terminal)
+        * .index_of_node, int,
+           index of power flow calculation node connected to terminal
+        * .index_of_other_node, int
+           index of power flow calculation node connected to other terminal
+           of same branch like terminal
+     gb_mn_tot: casadi.SX
+        conductance/susceptance of branches at terminals, (index of terminal)
+        * [:,0] g_mn, mutual conductance
+        * [:,1] b_mn, mutual susceptance
+        * [:,2] g_tot, self conductance + mutual conductance
+        * [:,3] b_tot, self susceptance + mutual susceptance
+    Vnode: casadi.SX
+        vectors of node voltage expressions
+        * Vnode[:,0], float, Vre vector of real node voltages
+        * Vnode[:,1], float, Vim vector of imaginary node voltages
+
+    Returns
+    -------
+    tuple
+        * Ire
+        * Iim"""
+    if len(terms):
+        Vterm = Vnode[terms.index_of_node,:]
+        Vother = Vnode[terms.index_of_other_node,:]
+        gb_mn_tot_ = gb_mn_tot[terms.index, :]
+        return _current_into_branch(
+            gb_mn_tot_[:,2], gb_mn_tot_[:,3], gb_mn_tot_[:,0], gb_mn_tot_[:,1],
+            Vterm[:,0], Vterm[:,1], Vother[:,0], Vother[:,1])
+    return casadi.SX(0,1), casadi.SX(0,1)
+
+def get_branch_result_fn(expr, voltages_ri, tappositions):
+    """Returns a function with calculates active/reactive power for
+    given terminals or real/imaginary part for given terminals. The returned
+    function is intended to calculate values of a subset of all terminals
+    of the model.
     
+    Parameters
+    ----------
+    expr: dict
+        * 'Vnode_syms', casadi.SX, vectors, symbols of node voltages
+        * 'position_syms', casadi.SX, vector, symbols of tap positions
+        * 'gb_mn_tot', casadi.SX, vectors, conductance and susceptance of
+          branches connected to terminals
+    voltages_ri: casadi.DM
+        float, voltages at nodes first real parts then imaginary parts
+    tappositions: array_like
+        int
     
-    
+    Returns
+    -------
+    function
+        ('PQ'|'I', pandas.DataFrames) -> (casadi.DM)
+        (indicator, terminals) -> (power or current per terminal)"""
+    Vnode_syms = expr['Vnode_syms']
+    symbols = [
+        casadi.vertcat(Vnode_syms[:,0], Vnode_syms[:,1]), 
+        expr['position_syms']]
+    gb_mn_tot = expr['gb_mn_tot']
+    def get_branch_result(selector, branchterminals):
+        """Calculates either active and reactive power or real and imaginary
+        part of current flowing into given branchterminals.
+        
+        Parameters
+        ----------
+        selector: 'PQ'|'I'
+            selects which values to calculate 'PQ' - active and reactive power,
+            'I' - real and imaginary part of current
+        branchterminals: pandas.DataFrame (index of terminal)
+            * .index_of_node, int,
+               index of power flow calculation node connected to terminal
+            * .index_of_other_node, int
+               index of power flow calculation node connected to other terminal
+               of same branch like terminal
+        
+        Returns
+        -------
+        casadi.DM (shape is n,2)"""
+        assert selector=='PQ' or selector=='I',\
+            f'value of indicator must be "PQ" or "I" but is "{selector}"'
+        expr_fn = power_into_branch if selector=='PQ' else current_into_branch
+        expressions = expr_fn(branchterminals, gb_mn_tot, Vnode_syms)
+        get_results = casadi.Function(
+            f'get_{selector}_branch_results', 
+            symbols, 
+            expressions)
+        return get_results(voltages_ri, tappositions)
+    return get_branch_result
+
+def get_node_result(index_of_node, Vnode_ri):
+    """Returns absolute voltages for addressed nodes.
+
+    Parameters
+    ----------
+    index_of_node: array_like, int
+        addresses nodes
+    Vnode_ri: casadi.DM
+        * [index_of_node, Vre]
+
+    Returns
+    -------
+    casadi.SX"""
+    if len(index_of_node):
+        Vnode_ri_ = casadi.hcat(
+            casadi.vertsplit(Vnode_ri, Vnode_ri.size1()//2))[index_of_node,:]
+        Vsqr = casadi.power(Vnode_ri_, 2)
+        return (Vsqr[:, 0] + Vsqr[:, 1]).sqrt()
+    return casadi.DM(0,1)
+
+def value_of_voltages(vvalues):
+    """Extracts value of voltages from vvalues.
+
+    Parameters
+    ----------
+    vvalues: pandas.DataFrame
+        * index_of_node, int
+        * V, absolute value of voltage at node
+
+    Returns
+    -------
+    pandas.DataFrame
+        * V, float, absolute value of voltage"""
+    return vvalues[['V', 'index_of_node']].groupby('index_of_node').mean()
+
+# def voltage_at_node(index_of_node, Vnode):
+#     """Returns expression of absolute voltage at addressed nodes.
+
+#     Parameters
+#     ----------
+#     index_of_node: array_like, int
+#         addresses nodes
+#     Vnode: casadi.SX
+#         * Vnode[index_of_node, 2] => Vabs**2
+
+#     Returns
+#     -------
+#     casadi.SX"""
+#     return (
+#         Vnode[index_of_node, 2].sqrt()
+#         if len(index_of_node)
+#         else casadi.SX(0,1))
+
