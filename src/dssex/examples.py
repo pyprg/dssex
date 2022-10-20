@@ -21,7 +21,8 @@ Created on Sun Aug  8 08:36:10 2021
 """
 from egrid import make_model
 from egrid.builder import (
-    Slacknode, Branch, Branchtaps, Injection, PValue, QValue, Output, Vvalue, Defk, Link)
+    Slacknode, Branch, Branchtaps, Injection, PValue, QValue, IValue, Output, 
+    Vvalue, Defk, Link)
 from src.dssex.estim import calculate
 import src.dssex.present as pr
 
@@ -332,7 +333,7 @@ pr.print_measurements(result09)
 import casadi
 import numpy as np
 from src.dssex.estim2 import (calculate_power_flow, ri_to_complex, 
-  create_expressions)
+  create_expressions, get_branch_values_fn, get_node_values)
 from src.dssex.pfcnum import calculate_electric_data
 
 model10 = make_model(
@@ -343,9 +344,26 @@ model10 = make_model(
     Link(
         objid=('load_1', 'load_2', 'load_3', 'load_4', 'load_51'), 
         part='p', 
-        id='kp'))
-
-mymodel = model00
+        id='kp'),
+    PValue(
+        id_of_batch='a',
+        P=42.0),
+    IValue(
+        id_of_batch='a',
+        I=42.0),
+    Output(
+        id_of_batch='a',
+        id_of_device='line_2',
+        id_of_node='n1'),
+    Output(
+        id_of_batch='a',
+        id_of_device='line_3',
+        id_of_node='n2'),
+    Output(
+        id_of_batch='a',
+        id_of_device='line_7',
+        id_of_node='n6'))
+mymodel = model10
 expr = create_expressions(mymodel)
 success, voltages_ri = calculate_power_flow(mymodel, expr=expr)
 
@@ -355,18 +373,27 @@ if success:
     print(voltages_complex)
     e_data = calculate_electric_data(
         mymodel, 'interpolated', mymodel.branchtaps.position, voltages_complex)
-    
+    # pfc-result processing
+    get_branch_values = get_branch_values_fn(
+        expr, voltages_ri, mymodel.branchtaps.position)
+    PQ_branch = get_branch_values('PQ', mymodel.branchterminals)
+    I_branch = get_branch_values('I', mymodel.branchterminals)
+    Vnode_abs = get_node_values(mymodel.injections.index_of_node, voltages_ri)
 #%%
 from src.dssex.estim2 import (
-    get_branch_result_fn, get_node_result)
+    get_branch_expressions_fn_factory, get_value_diffs)
+from functools import partial
 
 
-get_branch_result = get_branch_result_fn(
-    expr, voltages_ri, mymodel.branchtaps.position)
+get_diffs = partial(
+    get_value_diffs, 
+    mymodel, 
+    get_branch_expressions_fn_factory(expr))
+selector = 'I'
+diffs = get_diffs(selector=selector)
 
-PQ_branch = get_branch_result('PQ', mymodel.branchterminals)
-I_branch = get_branch_result('I', mymodel.branchterminals)
-Vnode_abs = get_node_result(mymodel.injections.index_of_node, voltages_ri)
+print('\n', diffs.shape)
+print('\n', diffs)
     
 #%%
 from src.dssex.pfcnum import calculate_power_flow

@@ -516,7 +516,7 @@ def _select_type(vecs, factor_data):
         * casadi.SX / casadi.DM"""
     return (v[factor_data.index_of_symbol, 0] for v in vecs)
 
-_k_prev_default = casadi.DM.zeros(0,1)
+_DM_no_row = casadi.DM(0,1)
 
 Scalingdata = namedtuple(
     'Scalingdata',
@@ -564,7 +564,7 @@ def _make_DM_vector(array_like):
 
 def get_scaling_data(
         factor_step_groups, injection_factor_step_groups,
-        step=0, k_prev=_k_prev_default):
+        step=0, k_prev=_DM_no_row):
     """Prepares data of scaling factors per step.
 
     Parameters
@@ -1057,7 +1057,7 @@ def calculate_power_flow(model, expr=None, tappositions=None, Vinit=None):
     tuple
         * bool, success?
         * casadi.DM, float, voltage vector [real parts, imaginary parts]"""
-    expr_ = (create_expressions(model) if expr is None else expr)
+    expr_ = create_expressions(model) if expr is None else expr
     scaling_data = get_scaling_data_fn(model, count_of_steps=1)(step=0)
     Iinjection = current_into_injection(
         model.injections, 
@@ -1067,22 +1067,11 @@ def calculate_power_flow(model, expr=None, tappositions=None, Vinit=None):
     return _calculate_power_flow(
         model, scaling_data, expr_, Iinjection, tappositions, Vinit)
 
-def ri_to_complex(array_like):
-    """Converts a vector with separate real and imaginary parts into a
-    vector of complex values.
+##############
+# Estimation #
+##############
 
-    Parameters
-    ----------
-    array_like: casadi.DM (and other types?)
-
-    Returns
-    -------
-    numpy.array"""
-    return np.hstack(np.vsplit(array_like, 2)).view(dtype=np.complex128)
-
-#
-# Estimation
-#
+# power and current flow into branches
 
 def _power_into_branch(
         g_tot, b_tot, g_mn, b_mn, V_abs_sqr, Vre, Vim, Vre_other, Vim_other):
@@ -1212,19 +1201,13 @@ def _power_into_branch(
     Q = -V_abs_sqr * b_tot  + (A * b_mn - B * g_mn)
     return P, Q
 
-def power_into_branch(terms, gb_mn_tot, Vnode):
+def power_into_branch(gb_mn_tot, Vnode, terms):
     """Calculates active and reactive power flow for a subset of 
     branch terminals from admittances of branches and voltages at 
     branch terminals. Assumes PI-equivalent circuits.
 
     Parameters
     ----------
-    terms: pandas.DataFrame (index of terminal)
-        * .index_of_node, int,
-           index of power flow calculation node connected to terminal
-        * .index_of_other_node, int
-           index of power flow calculation node connected to other terminal
-           of same branch like terminal
      gb_mn_tot: casadi.SX
         conductance/susceptance of branches at terminals, (index of terminal)
         * [:,0] g_mn, mutual conductance
@@ -1236,6 +1219,12 @@ def power_into_branch(terms, gb_mn_tot, Vnode):
         * Vnode[:,0], float, Vre vector of real node voltages
         * Vnode[:,1], float, Vim vector of imaginary node voltages
         * Vnode[:,2], float, Vre**2 + Vim**2, vector of imaginary node voltages
+    terms: pandas.DataFrame (index of terminal)
+        * .index_of_node, int,
+           index of power flow calculation node connected to terminal
+        * .index_of_other_node, int
+           index of power flow calculation node connected to other terminal
+           of same branch like terminal
 
     Returns
     -------
@@ -1296,19 +1285,13 @@ def _current_into_branch(
     Iim = b_tot * Vre + g_tot * Vim - b_mn * Vre_other - g_mn * Vim_other
     return Ire, Iim
 
-def current_into_branch(terms, gb_mn_tot, Vnode):
+def current_into_branch(gb_mn_tot, Vnode, terms):
     """Computes real and imaginary current flowing into given subset of branch
     terminals from branch admittances and voltages at branch terminals. Assumes
     PI-equivalient circuit.
 
     Parameters
     ----------
-    terms: pandas.DataFrame (index of terminal)
-        * .index_of_node, int,
-           index of power flow calculation node connected to terminal
-        * .index_of_other_node, int
-           index of power flow calculation node connected to other terminal
-           of same branch like terminal
      gb_mn_tot: casadi.SX
         conductance/susceptance of branches at terminals, (index of terminal)
         * [:,0] g_mn, mutual conductance
@@ -1319,6 +1302,12 @@ def current_into_branch(terms, gb_mn_tot, Vnode):
         vectors of node voltage expressions
         * Vnode[:,0], float, Vre vector of real node voltages
         * Vnode[:,1], float, Vim vector of imaginary node voltages
+    terms: pandas.DataFrame (index of terminal)
+        * .index_of_node, int,
+           index of power flow calculation node connected to terminal
+        * .index_of_other_node, int
+           index of power flow calculation node connected to other terminal
+           of same branch like terminal
 
     Returns
     -------
@@ -1334,11 +1323,56 @@ def current_into_branch(terms, gb_mn_tot, Vnode):
             Vterm[:,0], Vterm[:,1], Vother[:,0], Vother[:,1])
     return casadi.SX(0,1), casadi.SX(0,1)
 
-def get_branch_result_fn(expr, voltages_ri, tappositions):
-    """Returns a function with calculates active/reactive power for
+def get_branch_expressions_fn_factory(expr):
+    """Returns a function returning a new funtion for expression building
+    function('PQ' | 'I') -> function(branchterminals) -> (casadi.SX).
+    
+    Parameters
+    ----------
+    expr: dict
+        * 'Vnode_syms', casadi.SX, vectors, symbols of node voltages
+        * 'gb_mn_tot', casadi.SX, vectors, conductance and susceptance of
+          branches connected to terminals
+        
+    Returns
+    -------
+    function
+        ('PQ'|'I') ->((pandas.DataFrames) -> (casadi.SX))
+        (indicator) -> ((branch terminals)->(power or current per terminal))"""
+    Vnode_syms = expr['Vnode_syms']
+    gb_mn_tot = expr['gb_mn_tot']
+    def get_branch_expressions(selector):
+        """Returns a function calculating either active and reactive power 
+        or real and imaginary part of current flowing 
+        into given branchterminals.
+        
+        Parameters
+        ----------
+        selector: 'PQ'|'I'
+            selects which values to calculate 'PQ' - active and reactive power,
+            'I' - real and imaginary part of current
+        
+        Returns
+        -------
+        function
+            (pandas.DataFrame) -> (casadi.SX with shape n,2)
+            branchterminals: pandas.DataFrame (index of terminal)
+                * .index_of_node, int,
+                   index of power flow calculation node connected to terminal
+                * .index_of_other_node, int
+                   index of power flow calculation node connected to 
+                   other terminal of same branch like terminal"""
+        assert selector=='PQ' or selector=='I',\
+            f'value of indicator must be "PQ" or "I" but is "{selector}"'
+        expr_fn = power_into_branch if selector=='PQ' else current_into_branch
+        return partial(expr_fn, gb_mn_tot, Vnode_syms)
+    return get_branch_expressions
+
+def get_branch_values_fn(expr, voltages_ri, tappositions):
+    """Returns a function which calculates active/reactive power for
     given terminals or real/imaginary part for given terminals. The returned
     function is intended to calculate values of a subset of all terminals
-    of the model.
+    of the model. Calculation will fail for branches with too high admittance.
     
     Parameters
     ----------
@@ -1357,12 +1391,12 @@ def get_branch_result_fn(expr, voltages_ri, tappositions):
     function
         ('PQ'|'I', pandas.DataFrames) -> (casadi.DM)
         (indicator, terminals) -> (power or current per terminal)"""
+    get_branch_expressions_fn = get_branch_expressions_fn_factory(expr)
     Vnode_syms = expr['Vnode_syms']
     symbols = [
         casadi.vertcat(Vnode_syms[:,0], Vnode_syms[:,1]), 
         expr['position_syms']]
-    gb_mn_tot = expr['gb_mn_tot']
-    def get_branch_result(selector, branchterminals):
+    def get_branch_values(selector, branchterminals):
         """Calculates either active and reactive power or real and imaginary
         part of current flowing into given branchterminals.
         
@@ -1381,18 +1415,215 @@ def get_branch_result_fn(expr, voltages_ri, tappositions):
         Returns
         -------
         casadi.DM (shape is n,2)"""
-        assert selector=='PQ' or selector=='I',\
-            f'value of indicator must be "PQ" or "I" but is "{selector}"'
-        expr_fn = power_into_branch if selector=='PQ' else current_into_branch
-        expressions = expr_fn(branchterminals, gb_mn_tot, Vnode_syms)
+        get_branch_expressions = get_branch_expressions_fn(selector)
         get_results = casadi.Function(
             f'get_{selector}_branch_results', 
             symbols, 
-            expressions)
+            get_branch_expressions(branchterminals))
         return get_results(voltages_ri, tappositions)
-    return get_branch_result
+    return get_branch_values
 
-def get_node_result(index_of_node, Vnode_ri):
+#
+# difference: measured - calculated
+#
+
+def _get_I_expressions(get_I_branch_exprs, branchterminals):
+    """Creates an expression for calculating magnitudes of current at 
+    given terminals.
+    
+    Parameters
+    ----------
+    get_I_branch_exprs: function
+        generates a tuple of vectors, one vector for expressions of 
+        real current flowing into a branch and one vector for imaginary current
+        (pandas.DataFrame) -> (tuple: casadi.SX, casadi.SX)
+        (branchterminals) -> (tuple: vector of Ire, vector of Iim)
+    branchterminals: pandas.DataFrame
+        terminals of batch
+    
+    Returns
+    -------
+    casadi.SX, shape (n,1)"""
+    # I = sqrt(Ire**2, Iim**2), vector
+    return casadi.sum2(
+        # Ire**2, Iim**2
+        casadi.power(
+            # Ire, Iim
+            casadi.hcat(get_I_branch_exprs(branchterminals)),
+            2)
+        # I = sqrt(Ire**2, Iim**2)
+        .sqrt())
+
+def _make_get_branch_expr(get_branch_expressions_fn, selector):
+    """Returns an expression building function for I/P/Q-values at 
+    terminals of branches.
+    
+    Parameters
+    ----------
+    get_branch_expressions_fn: function
+        factory function for creating another function using the selector
+        ('I'|'P'|'Q') -> function(
+                (pandas.DataFrame) -> (tuple: casadi.SX, casadi.SX))
+        the created function returns expression for I/P/Q flowing into
+        given terminals (pandas.DataFrame).
+    selector: 'I'|'P'|'Q'
+        selects the measurement entites to create differences for
+    
+    Returns
+    -------
+    function
+        (str, pandas.DataFrame) -> (casasdi.SX, shape 1,1)
+        (id_of_batch, branchterminals) -> (difference: measured-calculated)"""
+    assert selector in 'IPQ', \
+        f'selector needs to be one of "I", "P" or "Q" but is "{selector}"'
+    if selector=='I':
+        get_I_branch_exprs = get_branch_expressions_fn('I')
+        return partial(_get_I_expressions, get_I_branch_exprs)
+    get_PQ_branch_exprs = get_branch_expressions_fn('PQ')
+    if selector=='P':
+        return lambda branchterminals: get_PQ_branch_exprs(branchterminals)[0]
+    if selector=='Q':
+        return lambda branchterminals: get_PQ_branch_exprs(branchterminals)[1]
+    assert False, f'no processing implemented for selector "{selector}"'
+        
+def _get_values(model, selector):
+    """Helper for returning I/P/Q-values from model using a str 'I'|'P'|'Q'.
+    
+    Parametes
+    ---------
+    model: egrid.model.Model
+        model of electric network for calculation
+    selector: 'I'|'P'|'Q'
+        accesses model.ivalues | model.pvalues | model.qvalues
+        
+    Returns
+    -------
+    pandas.DataFrame
+        model.ivalues | model.pvalues | model.qvalues"""
+    assert selector in 'IPQ', \
+        f'selector needs to be one of "I", "P" or "Q" but is "{selector}"'
+    if selector=='I':
+        return model.ivalues
+    if selector=='P':
+        return model.pvalues
+    if selector=='Q':
+        return model.qvalues
+    assert False, f'no processing implemented for selector "{selector}"'
+
+def _make_get_value(values, selector):
+    """Helper, retrieves value from ivalues, pvalues or qvalues.
+    
+    Parameters
+    ----------
+    values: pandas.DataFrame
+    
+    selector: 'I'|'P'|'Q'
+    
+    Returns
+    -------
+    function
+        (str) -> (float)
+        (id_of_batch) -> (value)"""
+    vals = (
+        values[selector] 
+        if selector=='I' else values[selector] * values.direction)
+    return lambda id_of_batch: vals[id_of_batch]
+
+def _get_terminals_of_batches(branchoutputs, branchterminals):
+    """Returns id_of_batch and associated branch terminals.
+    
+    Parameters
+    ----------
+    branchoutputs: pandas.DataFrame
+        * .id_of_batch
+        * .index_of_term
+    branchterminals: pandas.DataFrame (index of terminal)
+    
+    Returns
+    -------
+    iterator
+        tuple
+            * str, id_of_batch
+            * pandas.DataFrame, terminals"""
+    termgroups = (
+         branchoutputs.loc[:, ['id_of_batch', 'index_of_term']]
+         .groupby('id_of_batch'))
+    return ((id_of_batch, branchterminals.loc[df.index_of_term])
+            for id_of_batch, df in termgroups)
+
+def get_batch_expressions(model, get_branch_expressions_fn, selector=''):
+    """Creates a vector (casadi.SX, shape n,1) expressing the difference
+    between measured and calculated values for absolute current, active power
+    or reactive power. The expressions are based on the batch definitions.
+    Intended use is retrieving values from power flow calculation result.
+    
+    Parametes
+    ---------
+    model: egrid.model.Model
+        model of electric network for calculation
+    get_branch_expressions_fn: function
+        factory function for creating another function using the selector
+        ('I'|'P'|'Q') -> function(
+                (pandas.DataFrame) -> (tuple: casadi.SX, casadi.SX))
+        the created function returns expression for I/P/Q flowing into
+        given terminals (pandas.DataFrame).
+    selector: 'I'|'P'|'Q'
+        addresses current magnitude, active power or reactive power
+    
+    Returns
+    -------
+    dict
+        id_of_batch => expression for I/P/Q-calculation"""
+    assert selector in 'IPQ', \
+        f'selector needs to be one of "I", "P" or "Q" but is "{selector}"'
+    values = _get_values(model, selector).set_index('id_of_batch')
+    branchoutputs = model.branchoutputs
+    is_relevant = branchoutputs.id_of_batch.isin(values.index)
+    get_branch_expr = _make_get_branch_expr(
+        get_branch_expressions_fn, selector)
+    return {id_of_batch: casadi.sum1(get_branch_expr(branchterminals))
+            for id_of_batch, branchterminals in 
+                _get_terminals_of_batches(
+                    branchoutputs.loc[is_relevant], model.branchterminals)}
+
+def get_value_diffs(model, get_branch_expressions_fn, selector=''):
+    """Creates a vector (casadi.SX, shape n,1) expressing the difference
+    between measured and calculated values for absolute current, active power
+    or reactive power. The expressions are based on the batch definitions.
+    Intended use is building the objective function or constraints.
+    
+    Parametes
+    ---------
+    model: egrid.model.Model
+        model of electric network for calculation
+    get_branch_expressions_fn: function
+        factory function for creating another function using the selector
+        ('I'|'P'|'Q') -> function(
+                (pandas.DataFrame) -> (tuple: casadi.SX, casadi.SX))
+        the created function returns expression for I/P/Q flowing into
+        given terminals (pandas.DataFrame).
+    selector: 'I'|'P'|'Q'
+        addresses current magnitude, active power or reactive power
+    
+    Returns
+    -------
+    casadi.SX
+        vector"""
+    assert selector in 'IPQ', \
+        f'selector needs to be one of "I", "P" or "Q" but is "{selector}"'
+    values = _get_values(model, selector).set_index('id_of_batch')
+    branchoutputs = model.branchoutputs
+    is_relevant = branchoutputs.id_of_batch.isin(values.index)
+    get_value = _make_get_value(values, selector)
+    get_branch_expr = _make_get_branch_expr(
+        get_branch_expressions_fn, selector)
+    return casadi.vcat(
+        [get_value(id_of_batch) - casadi.sum1(get_branch_expr(branchterminals))
+         for id_of_batch, branchterminals in 
+         _get_terminals_of_batches(
+             branchoutputs.loc[is_relevant], model.branchterminals)])
+
+def get_node_values(index_of_node, Vnode_ri):
     """Returns absolute voltages for addressed nodes.
 
     Parameters
@@ -1444,4 +1675,17 @@ def value_of_voltages(vvalues):
 #         Vnode[index_of_node, 2].sqrt()
 #         if len(index_of_node)
 #         else casadi.SX(0,1))
+
+def ri_to_complex(array_like):
+    """Converts a vector with separate real and imaginary parts into a
+    vector of complex values.
+
+    Parameters
+    ----------
+    array_like: casadi.DM (and other types?)
+
+    Returns
+    -------
+    numpy.array"""
+    return np.hstack(np.vsplit(array_like, 2)).view(dtype=np.complex128)
 
