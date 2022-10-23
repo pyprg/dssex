@@ -306,15 +306,15 @@ schema09 = """
                            |                                                                                           |
                            |                                                                                           |
                            |                                                                                           |
-                           |           y_lo=1e9-1e9j          y_lo=1e3-1e3j                       y_lo=1e3-1e3j        |
-                           |   I=10    y_tr=1e-6+1e-6j        y_tr=1e-6+1e-6j           V=.974    y_tr=1e-6+1e-6j      |
+                           |           y_lo=1k-1kj            y_lo=1e3-1e3j                       y_lo=1e3-1e3j        |
+                           |   I=10    y_tr=1µ+1µj            y_tr=1e-6+1e-6j           V=.974    y_tr=1e-6+1e-6j      |
     n0--> load_0_          n1(------- line_6 ----)n6(------- line_7 -------------------)n7(----- line_8 --------------)n5
            P10=8                                  |                                     |
                                                   |                                     |
-                                                  |                                     |
+                                                  |                               I=1   |
                                                   n6--> load_6_          _load_7 <------n7---((~)) Gen_7_
-                                                         P10=8             P10=8                    P10=-12
-                                                         Q10=8             Q10=4                    Q10=-10 
+                                                         P10=8             P10=8  P=2               P10=-12
+                                                         Q10=8             Q10=4  Q=3               Q10=-10 
     """
 model09 = make_model(
     schema09,
@@ -326,14 +326,15 @@ model09 = make_model(
         objid=('load_1', 'load_2', 'load_3', 'load_4', 'load_51'), 
         part='p', 
         id='kp'))
-result09 = [*calculate(model09, parameters_of_steps=[{'objectives': 'P'}])]
-pr.print_estim_results(result09)
-pr.print_measurements(result09)
+# result09 = [*calculate(model09, parameters_of_steps=[{'objectives': 'P'}])]
+# pr.print_estim_results(result09)
+# pr.print_measurements(result09)
 #%%
 import casadi
 import numpy as np
 from src.dssex.estim2 import (calculate_power_flow, ri_to_complex, 
-  create_expressions, get_branch_values_fn, get_node_values)
+  create_expressions, make_calculate, get_branch_flow_expressions, 
+  make_get_branch_expressions, get_node_values, vstack)
 from src.dssex.pfcnum import calculate_electric_data
 
 model10 = make_model(
@@ -353,16 +354,16 @@ model10 = make_model(
         I=42.0),
     Output(
         id_of_batch='a',
-        id_of_device='line_2',
-        id_of_node='n1'),
+        id_of_device='cap4',
+        id_of_node='n4'),
     Output(
         id_of_batch='a',
-        id_of_device='line_3',
-        id_of_node='n2'),
+        id_of_device='load_4',
+        id_of_node='n4'),
     Output(
         id_of_batch='a',
-        id_of_device='line_7',
-        id_of_node='n6'))
+        id_of_device='line_5',
+        id_of_node='n4'))
 mymodel = model10
 expr = create_expressions(mymodel)
 success, voltages_ri = calculate_power_flow(mymodel, expr=expr)
@@ -374,27 +375,50 @@ if success:
     e_data = calculate_electric_data(
         mymodel, 'interpolated', mymodel.branchtaps.position, voltages_complex)
     # pfc-result processing
-    get_branch_values = get_branch_values_fn(
-        expr, voltages_ri, mymodel.branchtaps.position)
-    PQ_branch = get_branch_values('PQ', mymodel.branchterminals)
-    I_branch = get_branch_values('I', mymodel.branchterminals)
+    _calculate = make_calculate(
+        (vstack(expr['Vnode_syms'][:,0:2]), expr['position_syms']),
+        (voltages_ri, mymodel.branchtaps.position))
+    branch_PQ_expr = get_branch_flow_expressions(
+        expr, 'PQ', mymodel.branchterminals)
+    PQ_branch = _calculate(casadi.vcat(branch_PQ_expr))
+    branch_I_expr = make_get_branch_expressions(expr, 'I')(mymodel.branchterminals)
+    I_branch = _calculate(branch_I_expr)
     Vnode_abs = get_node_values(mymodel.injections.index_of_node, voltages_ri)
 #%%
+import casadi
+import pandas as pd
 from src.dssex.estim2 import (
-    get_branch_expressions_fn_factory, get_value_diffs)
-from functools import partial
+    make_get_scaling_and_injection_data, 
+    vstack, make_calculate, 
+    calculate_power_flow2,
+    get_batch_expressions)
 
+expr = create_expressions(mymodel)
+get_scaling_and_injection_data = make_get_scaling_and_injection_data(
+    mymodel, expr['Vnode_syms'], vminsqr=0.8**2, count_of_steps=2)
+scaling_data, Iinj_data = get_scaling_and_injection_data(step=0)
+inj_to_node = casadi.SX(mymodel.mnodeinj)
+Inode = inj_to_node @ Iinj_data[:,0], inj_to_node @ Iinj_data[:,1]
+succ, Vnode_ri = calculate_power_flow2(mymodel, expr, scaling_data, Inode)
 
-get_diffs = partial(
-    get_value_diffs, 
-    mymodel, 
-    get_branch_expressions_fn_factory(expr))
-selector = 'I'
-diffs = get_diffs(selector=selector)
+_calculate = make_calculate(
+    (scaling_data.symbols, 
+     vstack(expr['Vnode_syms'][:,0:2]), 
+     expr['position_syms']),
+    (scaling_data.values, 
+     Vnode_ri, 
+     mymodel.branchtaps.position))
 
-print('\n', diffs.shape)
-print('\n', diffs)
-    
+batch_expressions = get_batch_expressions(mymodel, expr, Iinj_data, 'I')
+#print(batch_expressions)    
+batch_values = _calculate(casadi.vcat(batch_expressions.values()))
+
+batch_values = pd.DataFrame(
+    {'id_of_batch': batch_expressions.keys(),
+     'value': batch_values.toarray().reshape(-1)})
+print()
+print(batch_values.to_markdown())
+
 #%%
 from src.dssex.pfcnum import calculate_power_flow
 
