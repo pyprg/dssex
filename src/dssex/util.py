@@ -76,7 +76,7 @@ def get_y_terms(terms, flo, ftr):
     terms_with_other_taps = terms[terms.index_of_other_taps.notna()]
     idx_of_other_tap = terms_with_other_taps.index_of_other_taps
     y_lo[terms_with_other_taps.index] *= flo[idx_of_other_tap]
-    return y_lo, y_tr
+    return y_tr, y_lo
 
 def create_y(terms, count_of_nodes, flo, ftr):
     """Generates the branch-admittance matrix. 
@@ -276,7 +276,7 @@ def get_y_branches(model, terms, term_is_at_A, pos):
     terms: pandas.DataFrame
         
     term_is_at_A: numpy.array, bool, index of terminal
-       True if terminal with is at side A of a branch
+       True if terminal is at side A of a branch
     pos: pandas.Series
         int, positions of taps
         
@@ -326,7 +326,8 @@ def get_branch_results(model, Vnode, pos):
     Ybr = get_y_branches(model, terms, term_is_at_A, pos)
     Vbr = get_v_branches(terms[term_is_at_A], Vnode)
     Ibr = Ybr @ Vbr
-    Sbr = Vbr * Ibr.conjugate()
+    # converts from single phase calculation to 3-phase system
+    Sbr = 3 * Vbr * Ibr.conjugate()
     PQbr= Sbr.view(dtype=float).reshape(-1, 4)
     Sbr_loss = Sbr.sum(axis=1)
     dfbr = (
