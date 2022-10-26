@@ -58,14 +58,24 @@ model_devices = [
         positionmin=-16,
         positionneutral=0,
         positionmax=16,
-        position=3),
+        position=0),
     Injection(
         id='consumer_0',
         id_of_node='n_2',
         P10=30.0,
         Q10=10.0,
         Exp_v_p=2.0,
-        Exp_v_q=2.0)]
+        Exp_v_q=2.0),
+    PValue(
+        id_of_batch='line_1',
+        P=42.0),
+    IValue(
+        id_of_batch='line_1',
+        I=14.0),
+    Output(
+        id_of_batch='line_1',
+        id_of_device='line_1',
+        id_of_node='n_1')]
 model00 = make_model(model_devices)
 #%% calculate power flow
 results = [*calculate(model00)]
@@ -307,14 +317,14 @@ schema09 = """
                            |                                                                                           |
                            |                                                                                           |
                            |           y_lo=1k-1kj            y_lo=1e3-1e3j                       y_lo=1e3-1e3j        |
-                           |   I=10    y_tr=1µ+1µj            y_tr=1e-6+1e-6j           V=.974    y_tr=1e-6+1e-6j      |
+                           |   I=10    y_tr=1µ+1µj            y_tr=1e-6+1e-6j           V=.97     y_tr=1e-6+1e-6j      |
     n0--> load_0_          n1(------- line_6 ----)n6(------- line_7 -------------------)n7(----- line_8 --------------)n5
            P10=8                                  |                                     |
                                                   |                                     |
-                                                  |                               I=1   |
+                                                  |                                     |
                                                   n6--> load_6_          _load_7 <------n7---((~)) Gen_7_
-                                                         P10=8             P10=8  P=2               P10=-12
-                                                         Q10=8             Q10=4  Q=3               Q10=-10 
+                                                         P10=8             P10=8                    P10=-12
+                                                         Q10=8             Q10=4                    Q10=-10 
     """
 model09 = make_model(
     schema09,
@@ -349,21 +359,60 @@ model10 = make_model(
     PValue(
         id_of_batch='a',
         P=42.0),
+    PValue(
+        id_of_batch='cap_4',
+        P=42.0),
+    PValue(
+        id_of_batch='load_4',
+        P=42.0),
+    PValue(
+        id_of_batch='line_5',
+        P=42.0),
+    QValue(
+        id_of_batch='a',
+        Q=42.0),
+    QValue(
+        id_of_batch='cap_4',
+        Q=42.0),
+    QValue(
+        id_of_batch='load_4',
+        Q=42.0),
+    QValue(
+        id_of_batch='line_5',
+        Q=42.0),
     IValue(
         id_of_batch='a',
         I=42.0),
+    IValue(
+        id_of_batch='cap_4',
+        I=42.0),
+    IValue(
+        id_of_batch='load_4',
+        I=42.0),
+    IValue(
+        id_of_batch='line_5',
+        I=42.0),
     Output(
         id_of_batch='a',
-        id_of_device='cap4',
-        id_of_node='n4'),
+        id_of_device='cap_4'),
     Output(
         id_of_batch='a',
-        id_of_device='load_4',
-        id_of_node='n4'),
+        id_of_device='load_4'),
     Output(
         id_of_batch='a',
         id_of_device='line_5',
-        id_of_node='n4'))
+        id_of_node='n4'),
+    Output(
+        id_of_batch='cap_4',
+        id_of_device='cap_4'),
+    Output(
+        id_of_batch='load_4',
+        id_of_device='load_4'),
+    Output(
+        id_of_batch='line_5',
+        id_of_device='line_5',
+        id_of_node='n4')
+    )
 mymodel = model10
 expr = create_expressions(mymodel)
 success, voltages_ri = calculate_power_flow(mymodel, expr=expr)
@@ -393,6 +442,7 @@ from src.dssex.estim2 import (
     calculate_power_flow2,
     get_batch_expressions)
 
+mymodel = model10
 expr = create_expressions(mymodel)
 get_scaling_and_injection_data = make_get_scaling_and_injection_data(
     mymodel, expr['Vnode_syms'], vminsqr=0.8**2, count_of_steps=2)
@@ -409,16 +459,19 @@ _calculate = make_calculate(
      Vnode_ri, 
      mymodel.branchtaps.position))
 
-batch_expressions = get_batch_expressions(mymodel, expr, Iinj_data, 'I')
-#print(batch_expressions)    
-batch_values = _calculate(casadi.vcat(batch_expressions.values()))
-
+selector = 'Q'
+batch_expressions = get_batch_expressions(mymodel, expr, Iinj_data, selector)
+batch_values_ = _calculate(casadi.vcat(batch_expressions.values()))
 batch_values = pd.DataFrame(
     {'id_of_batch': batch_expressions.keys(),
-     'value': batch_values.toarray().reshape(-1)})
+     'value': (3. if selector in 'PQ' else 1.) * batch_values_.toarray().reshape(-1)})
 print()
+print(selector)
 print(batch_values.to_markdown())
 
+Vnode_complex = ri_to_complex(Vnode_ri)
+e_data = calculate_electric_data(
+    mymodel, 'interpolated', mymodel.branchtaps.position, Vnode_complex)
 #%%
 from src.dssex.pfcnum import calculate_power_flow
 

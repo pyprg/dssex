@@ -1060,49 +1060,23 @@ def get_injection_flow_expressions(ipqv, selector, injections):
         
     Returns
     -------
-    casadi.SX (shape n,1)"""
+    casadi.SX (shape n,2) for 'I', casadi.SX (shape n,1) for 'P' or 'Q'"""
     assert selector in 'IPQ', \
         f'selector needs to be one of "I", "P" or "Q" but is "{selector}"'
     if selector=='I':
-        return casadi.sum2(casadi.power(ipqv[injections.index, 0:2],2)).sqrt()
-    ipqv_ = ipqv[injections.index]
+        return ipqv[injections.index, 0:2]
+    ipqv_ = ipqv[injections.index, :]
     if selector=='P':
         # ipqv_[:,2] Pscaled
-        Porig = casadi.power(ipqv_[:,6], injections.Exp_v_p/2) * ipqv[:,2]
+        Porig = casadi.power(ipqv_[:,6], injections.Exp_v_p/2) * ipqv_[:,2]
         # ipqv_[:,3] Pip, active power interpolated
-        return casadi.if_else(ipqv_[:,7], ipqv[:,3], Porig)
+        return casadi.if_else(ipqv_[:,7], ipqv_[:,3], Porig)
     if selector=='Q':
         # ipqv_[:,4] Qscaled
-        Qorig = casadi.power(ipqv_[:,6], injections.Exp_v_q/2) * ipqv[:,4]
+        Qorig = casadi.power(ipqv_[:,6], injections.Exp_v_q/2) * ipqv_[:,4]
         # ipqv_[:,5] Qip, reactive power interpolated
-        return casadi.if_else(ipqv_[:,7], ipqv[:,5], Qorig)
+        return casadi.if_else(ipqv_[:,7], ipqv_[:,5], Qorig)
     assert False, f'no processing for selector "{selector}"'
-
-def make_get_injection_expressions(ipqv, selector):
-    """Returns an expression building function for I/P/Q-flow into injections.
-    
-    Parameters
-    ----------
-    ipqv: casadi.SX (n,8)
-        [:,0] Ire, current, real part
-        [:,1] Iim, current, imaginary part
-        [:,2] Pscaled, active power P10 multiplied by scaling factor kp
-        [:,3] Pip, active power interpolated
-        [:,4] Qscaled, reactive power Q10 multiplied by scaling factor kq
-        [:,5] Qip, reactive power interpolated
-        [:,6] Vabs_sqr, square of voltage magnitude
-        [:,7] interpolate?
-    selector: 'I'|'P'|'Q'
-        addresses current magnitude, active power or reactive power
-    
-    Returns
-    -------
-    function
-        (pandas.DataFrame) -> (casasdi.SX, shape n,1)
-        (injections) -> (expressions)"""
-    assert selector in 'IPQ', \
-        f'selector needs to be one of "I", "P" or "Q" but is "{selector}"'
-    return partial(get_injection_flow_expressions, ipqv, selector)
 
 # flow into branches
 
@@ -1311,12 +1285,10 @@ def _current_into_branch(
 
     Returns
     -------
-    tuple
-        * Ire
-        * Iim"""
+    casadi.SX, shape n,2"""
     Ire = g_tot * Vre - b_tot * Vim - g_mn * Vre_other + b_mn * Vim_other
     Iim = b_tot * Vre + g_tot * Vim - b_mn * Vre_other - g_mn * Vim_other
-    return Ire, Iim
+    return casadi.horzcat(Ire, Iim)
 
 def current_into_branch(gb_mn_tot, Vnode, terms):
     """Generates expressions for real and imaginary current flowing into 
@@ -1344,9 +1316,7 @@ def current_into_branch(gb_mn_tot, Vnode, terms):
 
     Returns
     -------
-    tuple
-        * casadi.SX, Ire
-        * casadi.SX, Iim"""
+    casadi.SX, (shape n,2 - 0:Ire, 1:Iim)"""
     if len(terms):
         Vterm = Vnode[terms.index_of_node,:]
         Vother = Vnode[terms.index_of_other_node,:]
@@ -1354,7 +1324,7 @@ def current_into_branch(gb_mn_tot, Vnode, terms):
         return _current_into_branch(
             gb_mn_tot_[:,2], gb_mn_tot_[:,3], gb_mn_tot_[:,0], gb_mn_tot_[:,1],
             Vterm[:,0], Vterm[:,1], Vother[:,0], Vother[:,1])
-    return casadi.SX(0,1), casadi.SX(0,1)
+    return casadi.SX(0,2)
 
 def get_branch_flow_expressions(expr, selector, branchterminals):
     """Creates expressions for calculation of Ire and Iim or P and Q
@@ -1381,24 +1351,24 @@ def get_branch_flow_expressions(expr, selector, branchterminals):
     return expr_fn(expr['gb_mn_tot'], expr['Vnode_syms'], branchterminals)
 
 def _get_I_expressions(Iri_exprs):
-    """Creates an expression for calculating magnitudes of current.
+    """Creates an expression for calculating the magnitudes of current from
+    real and imaginary parts.
     
     Parameters
     ----------
-    Iri_exprs: tuple
-        * Ire, casadi.SX
-        * Iim, casadi.SX
+    Iri_exprs: casadi.SX (shape n,2)
+        * Iri_exprs[:,0]Ire, real part of current
+        * Iri_exprs[:,1]Iim, imaginary part of current
     
     Returns
     -------
     casadi.SX, shape (n,1)"""
     # I = sqrt(Ire**2, Iim**2), vector
-    return casadi.sum2(
-        # Ire**2, Iim**2
-        casadi.power(
-            # Ire, Iim
-            casadi.hcat(Iri_exprs),
-            2)
+    return (
+        # Ire**2 + Iim**2
+        casadi.sum2(
+            # Ire**2, Iim**2
+            casadi.power(Iri_exprs, 2))
         # I = sqrt(Ire**2, Iim**2)
         .sqrt())
 
@@ -1419,15 +1389,14 @@ def make_get_branch_expressions(expr, selector):
     Returns
     -------
     function
-        (pandas.DataFrame) -> (casasdi.SX, shape n,1)
+        (pandas.DataFrame) -> (casasdi.SX, shape n,2/n,1)
         (branchterminals) -> (expressions)"""
     assert selector in 'IPQ', \
         f'selector needs to be one of "I", "P" or "Q" but is "{selector}"'
     if selector=='I':
         return (
-            lambda terminals: 
-                _get_I_expressions(
-                    get_branch_flow_expressions(expr, 'I', terminals)))    
+            lambda terminals:
+                get_branch_flow_expressions(expr, 'I', terminals))
     if selector=='P':
         return (
             lambda terminals: 
@@ -1470,7 +1439,8 @@ def _get_values(model, selector):
 
 def _make_get_value(values, selector):
     """Helper, creates a function retrieving a value from 
-    ivalues, pvalues, qvalues or vvalues.
+    ivalues, pvalues, qvalues or vvalues. Returns 'per-phase' values 
+    (one third of given P or Q).
     
     Parameters
     ----------
@@ -1485,11 +1455,11 @@ def _make_get_value(values, selector):
         (index) -> (value)"""
     vals = (
         values[selector] 
-        if selector in 'IV' else values[selector] * values.direction)
+        if selector in 'IV' else values[selector] * values.direction / 3.)
     return lambda idx: vals[idx]
 
 def _get_batch_expressions_br(model, expr, selector):
-    """Creates a vector (casadi.SX, shape n,1) expressing calculated branch
+    """Creates a vector (casadi.SX, shape n,2/n,1) expressing calculated branch
     values for absolute current, active power or reactive power. The 
     expressions are based on the batch definitions.
     
@@ -1554,9 +1524,10 @@ def _get_batch_expressions_inj(model, ipqv, selector):
     relevant_out = (
         injectionoutputs
         .loc[is_relevant, ['id_of_batch', 'index_of_injection']])
-    get_inj_expr = make_get_injection_expressions(ipqv, selector)
-    return {id_of_batch: get_inj_expr(injections)
-            for id_of_batch, injections in relevant_out.groupby('id_of_batch')} 
+    get_inj_expr = partial(get_injection_flow_expressions, ipqv, selector)
+    injections = model.injections
+    return {id_of_batch: get_inj_expr(injections.loc[df.index_of_injection])
+            for id_of_batch, df in relevant_out.groupby('id_of_batch')} 
 
 def get_batch_expressions(model, expr, ipqv, selector):
     """Creates a vector (casadi.SX, shape n,1) expressing calculated
@@ -1594,7 +1565,13 @@ def get_batch_expressions(model, expr, ipqv, selector):
     injectionexpr = _get_batch_expressions_inj(model, ipqv, selector)
     for id_of_batch, expr in injectionexpr.items():
         dd[id_of_batch] = casadi.sum1(casadi.vertcat(dd[id_of_batch], expr))
-    return dd
+    if selector in 'PQ':
+        return dd
+    if selector == 'I':
+        return {id_of_batch: _get_I_expressions(Iri_exprs)
+                for id_of_batch, Iri_exprs in dd.items()}
+    assert False, \
+        f'selector needs to be one of "I", "P" or "Q" but is "{selector}"'
 
 # def get_value_diffs(model, expr, selector=''):
 #     """Creates a vector (casadi.SX, shape n,1) expressing the difference
