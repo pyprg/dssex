@@ -516,7 +516,7 @@ def _select_type(vecs, factor_data):
         * casadi.SX / casadi.DM"""
     return (v[factor_data.index_of_symbol, 0] for v in vecs)
 
-_DM_no_row = casadi.DM(0,1)
+_DM_0r1c = casadi.DM(0,1)
 
 Scalingdata = namedtuple(
     'Scalingdata',
@@ -564,7 +564,7 @@ def _make_DM_vector(array_like):
 
 def get_scaling_data(
         factor_step_groups, injection_factor_step_groups,
-        step=0, k_prev=_DM_no_row):
+        step=0, k_prev=_DM_0r1c):
     """Prepares data of scaling factors per step.
 
     Parameters
@@ -765,10 +765,10 @@ def _current_into_injection(
         Ire, Iim, Pscaled, Pip, Qscaled, Qip, Vabs_sqr, interpolate)
 
 def _reset_slack_current(
-        slack_indices, Vre_slack_syms, Vim_slack_syms, Iinj_re, Iinj_im):
-    Iinj_re[slack_indices] = -Vre_slack_syms
-    Iinj_im[slack_indices] = -Vim_slack_syms
-    return casadi.vertcat(Iinj_re, Iinj_im)
+        slack_indices, Vre_slack_syms, Vim_slack_syms, Iinj_ri):
+    Iinj_ri[slack_indices,0] = -Vre_slack_syms # real(Iinj)
+    Iinj_ri[slack_indices,1] = -Vim_slack_syms # imag(Iinj)
+    return Iinj_ri
 
 def _create_gb_mn_tot(branchterminals, branchtaps, position_syms):
     """Creates g_mn, b_mn, g_mm, b_mm (mutual and self conductance
@@ -922,7 +922,7 @@ def make_get_scaling_and_injection_data(
     get_scaling_data = make_get_scaling_data(model, count_of_steps)
     injections = model.injections
     node_to_inj = casadi.SX(model.mnodeinj).T
-    def get_scaling_and_injection_data(step=0, k_prev=_DM_no_row):
+    def get_scaling_and_injection_data(step=0, k_prev=_DM_0r1c):
         assert step < count_of_steps, \
             f'index "step" ({step}) must be smaller than '\
             f'value of paramter "count_of_steps" ({count_of_steps})'
@@ -951,10 +951,9 @@ def calculate_power_flow2(
         * 'Y_by_V', casadi.SX, expression for Y @ V
     scaling_data: Scalingdata
         optional
-    Inode: tuple
-        casadi.SX (shape n,2)
-        * Ire, real part of current injected into node
-        * Iim, imaginary part of current injected into node
+    Inode: casadi.SX (shape n,2)
+        * Inode[:,0] - Ire, real part of current injected into node
+        * Inode[:,1] - Iim, imaginary part of current injected into node
     tappositions: array_like
         optional
         int, positions of taps
@@ -972,12 +971,13 @@ def calculate_power_flow2(
     parameter_syms=casadi.vertcat(
         *Vslack_syms, expr['position_syms'], scaling_data.symbols)
     slacks = model.slacks
-    Inode_ = _reset_slack_current(slacks.index_of_node, *Vslack_syms, *Inode)
-    variable_syms = casadi.vertcat(Vnode_syms[:,0], Vnode_syms[:,1])
+    Inode_ = _reset_slack_current(slacks.index_of_node, *Vslack_syms, Inode)
+    Inode_ri = vstack(Inode_, 2)
+    variable_syms = vstack(Vnode_syms, 2)
     fn_Iresidual = casadi.Function(
         'fn_Iresidual',
         [variable_syms, parameter_syms],
-        [expr['Y_by_V'] + Inode_])
+        [expr['Y_by_V'] + Inode_ri])
     rf = casadi.rootfinder('rf', 'nlpsol', fn_Iresidual, {'nlpsol':'ipopt'})
     count_of_pfcnodes = model.shape_of_Y[0]
     Vinit_ = (
@@ -1028,7 +1028,7 @@ def calculate_power_flow(
         model, const_expr['Vnode_syms'], vminsqr, count_of_steps=1)
     scaling_data, Iinj_data = get_scaling_and_injection_data(step=0)
     inj_to_node = casadi.SX(model.mnodeinj)
-    Inode = inj_to_node @ Iinj_data[:,0], inj_to_node @ Iinj_data[:,1]
+    Inode = inj_to_node @ Iinj_data[:,0:2] 
     return calculate_power_flow2(
         model, const_expr, scaling_data, Inode, tappositions, Vinit)
 
@@ -1414,8 +1414,8 @@ def make_get_branch_expressions(expr, selector):
 def _get_values(model, selector):
     """Helper for returning I/P/Q-values from model using a str 'I'|'P'|'Q'.
     
-    Parametes
-    ---------
+    Parameters
+    ----------
     model: egrid.model.Model
         model of electric network for calculation
     selector: 'I'|'P'|'Q'|'V'
@@ -1463,8 +1463,8 @@ def _get_batch_expressions_br(model, expr, selector):
     values for absolute current, active power or reactive power. The 
     expressions are based on the batch definitions.
     
-    Parametes
-    ---------
+    Parameters
+    ----------
     model: egrid.model.Model
         model of electric network for calculation
     expr: dict
@@ -1496,8 +1496,8 @@ def _get_batch_expressions_inj(model, ipqv, selector):
     values for absolute current, active power or reactive power. The 
     expressions are based on the batch definitions.
     
-    Parametes
-    ---------
+    Parameters
+    ----------
     model: egrid.model.Model
         model of electric network for calculation
     ipqv: casadi.SX (n,8)
@@ -1534,8 +1534,8 @@ def get_batch_expressions(model, expr, ipqv, selector):
     values for absolute current, active power or reactive power. The 
     expressions are based on the batch definitions.
     
-    Parametes
-    ---------
+    Parameters
+    ----------
     model: egrid.model.Model
         model of electric network for calculation
     expr: dict
@@ -1573,41 +1573,45 @@ def get_batch_expressions(model, expr, ipqv, selector):
     assert False, \
         f'selector needs to be one of "I", "P" or "Q" but is "{selector}"'
 
-# def get_value_diffs(model, expr, selector=''):
-#     """Creates a vector (casadi.SX, shape n,1) expressing the difference
-#     between measured and calculated values for absolute current, active power
-#     or reactive power. The expressions are based on the batch definitions.
-#     Intended use is building the objective function or constraints.
+def get_flow_diffs(model, expr, ipqv, selector):
+    """Creates a vector (casadi.SX, shape n,1) expressing the difference
+    between measured and calculated values for absolute current, active power
+    or reactive power. The expressions are based on the batch definitions.
+    Intended use is building the objective.
     
-#     Parametes
-#     ---------
-#     model: egrid.model.Model
-#         model of electric network for calculation
-#     expr: dict
-#         * 'Vnode_syms', casadi.SX, vectors, symbols of node voltages
-#         * 'position_syms', casadi.SX, vector, symbols of tap positions
-#         * 'gb_mn_tot', casadi.SX, vectors, conductance and susceptance of
-#           branches connected to terminals
-#     selector: 'I'|'P'|'Q'
-#         addresses current magnitude, active power or reactive power
+    Parameters
+    ----------
+    model: egrid.model.Model
+        model of electric network for calculation
+    expr: dict
+        * 'Vnode_syms', casadi.SX, vectors, symbols of node voltages
+        * 'position_syms', casadi.SX, vector, symbols of tap positions
+        * 'gb_mn_tot', casadi.SX, vectors, conductance and susceptance of
+          branches connected to terminals
+    ipqv: casadi.SX (n,8)
+        [:,0] Ire, current, real part
+        [:,1] Iim, current, imaginary part
+        [:,2] Pscaled, active power P10 multiplied by scaling factor kp
+        [:,3] Pip, active power interpolated
+        [:,4] Qscaled, reactive power Q10 multiplied by scaling factor kq
+        [:,5] Qip, reactive power interpolated
+        [:,6] Vabs_sqr, square of voltage magnitude
+        [:,7] interpolate?
+    selector: 'I'|'P'|'Q'
+        addresses current magnitude, active power or reactive power
     
-#     Returns
-#     -------
-#     casadi.SX
-#         vector"""
-#     assert selector in 'IPQ', \
-#         f'selector needs to be one of "I", "P" or "Q" but is "{selector}"'
-#     values = _get_values(model, selector).set_index('id_of_batch')
-#     branchoutputs = model.branchoutputs
-#     is_relevant = branchoutputs.id_of_batch.isin(values.index)
-#     relevant_out = (
-#         branchoutputs.loc[is_relevant, ['id_of_batch', 'index_of_term']])
-#     get_value = _make_get_value(values, selector)
-#     get_branch_expr = make_get_branch_expressions(expr, selector)
-#     return casadi.vcat(
-#         [get_value(id_of_batch) - casadi.sum1(get_branch_expr(branchterminals))
-#          for id_of_batch, branchterminals in 
-#          _get_terminals_of_batches(relevant_out, model.branchterminals)])
+    Returns
+    -------
+    casadi.SX
+        vector (shape n,1)"""
+    assert selector in 'IPQ', \
+        f'selector needs to be one of "I", "P" or "Q" but is "{selector}"'
+    values = _get_values(model, selector).set_index('id_of_batch')
+    get_value = _make_get_value(values, selector)
+    batchid_expr = get_batch_expressions(model, expr, ipqv, selector)
+    vals = casadi.vcat(list(map(get_value, batchid_expr.keys())))
+    exprs = casadi.vcat(batchid_expr.values())
+    return vals - exprs if exprs.size1() else casadi.SX(0,1)
 
 def get_node_values(index_of_node, Vnode_ri):
     """Returns absolute voltages for addressed nodes.
@@ -1662,19 +1666,23 @@ def value_of_voltages(vvalues):
 #         if len(index_of_node)
 #         else casadi.SX(0,1))
 
-def vstack(m):
+def vstack(m, column_count=-1):
     """Helper, stacks matrix m vertically.
     
     Parameters
     ----------
     m: casadi.DM
         shape (n,m)
+    column_count: int
+        first columns will be stacked vertically
     
     Returns
     -------
     casadi.DM shape (n*m,1)"""
-    return casadi.vertcat(*(m[:,idx] for idx in range(m.size2()))) \
-        if m.size1() else _DM_no_row
+    size2 = m.size2()
+    cc = min(column_count, size2) if -1 < column_count else size2
+    return casadi.vertcat(*(m[:,idx] for idx in range(cc))) \
+        if cc else _DM_0r1c
 
 def ri_to_complex(array_like):
     """Converts a vector with separate real and imaginary parts into a

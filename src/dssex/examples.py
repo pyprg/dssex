@@ -36,7 +36,7 @@ import src.dssex.present as pr
 #       |               |               |
 #                                      \|/ consumer
 #                                       '
-model_devices = [
+model_entities = [
     Slacknode(id_of_node='n_0', V=1.+0.j),
     Branch(
         id='line_0',
@@ -66,17 +66,78 @@ model_devices = [
         Q10=10.0,
         Exp_v_p=2.0,
         Exp_v_q=2.0),
+    # define a scaling factor
+    Defk(id='kp'),
+    # link the factor to the loads
+    Link(
+        objid=('consumer_0'), 
+        part='p', 
+        id='kp'),
     PValue(
-        id_of_batch='line_1',
+        id_of_batch='P_line_0',
         P=42.0),
-    IValue(
-        id_of_batch='line_1',
-        I=14.0),
     Output(
-        id_of_batch='line_1',
+        id_of_batch='P_line_0',
+        id_of_device='line_0',
+        id_of_node='n_0'),
+    PValue(
+        id_of_batch='P_line_1',
+        P=42.0),
+    Output(
+        id_of_batch='P_line_1',
         id_of_device='line_1',
         id_of_node='n_1')]
-model00 = make_model(model_devices)
+model00 = make_model(model_entities)
+#%%
+import casadi
+#import pandas as pd
+from src.dssex.estim2 import (
+    make_get_scaling_and_injection_data, 
+    vstack, make_calculate, 
+    calculate_power_flow2,
+    get_batch_expressions,
+    get_flow_diffs,
+    calculate_power_flow, ri_to_complex, 
+    create_expressions, get_branch_flow_expressions, 
+    make_get_branch_expressions, get_node_values)
+import numpy as np
+
+mymodel = model00
+expr = create_expressions(mymodel)
+get_scaling_and_injection_data = make_get_scaling_and_injection_data(
+    mymodel, expr['Vnode_syms'], vminsqr=0.8**2, count_of_steps=2)
+scaling_data, Iinj_data = get_scaling_and_injection_data(step=0)
+inj_to_node = casadi.SX(mymodel.mnodeinj)
+Inode = inj_to_node @ Iinj_data[:,0:2]
+
+succ, Vnode_ri = calculate_power_flow2(mymodel, expr, scaling_data, Inode)
+
+Vnode_syms = vstack(expr['Vnode_syms'], 2)
+_calculate = make_calculate(
+    (scaling_data.symbols, 
+     Vnode_syms, 
+     expr['position_syms']),
+    (scaling_data.values, 
+     Vnode_ri, 
+     mymodel.branchtaps.position))
+
+selector = 'P'
+batch_expressions = get_batch_expressions(mymodel, expr, Iinj_data, selector)
+flow_diffs = get_flow_diffs(mymodel, expr, Iinj_data, selector)
+fn_obj = casadi.power(flow_diffs, 2)
+
+vars_ = casadi.vertcat(Vnode_syms, scaling_data.kvars)
+params = casadi.vertcat(vstack(expr['Vslack_syms']), expr['position_syms'])
+
+Vslacks = mymodel.slacks.V
+values_of_parameters=casadi.vertcat(
+    np.real(Vslacks), np.imag(Vslacks),
+    mymodel.branchtaps.position)
+
+Inode = inj_to_node @ Iinj_data[:,0:2]
+
+succ, vri = calculate_power_flow(mymodel)
+
 #%% calculate power flow
 results = [*calculate(model00)]
 # print the result
@@ -440,9 +501,10 @@ from src.dssex.estim2 import (
     make_get_scaling_and_injection_data, 
     vstack, make_calculate, 
     calculate_power_flow2,
-    get_batch_expressions)
+    get_batch_expressions,
+    get_flow_diffs)
 
-mymodel = model10
+mymodel = model00
 expr = create_expressions(mymodel)
 get_scaling_and_injection_data = make_get_scaling_and_injection_data(
     mymodel, expr['Vnode_syms'], vminsqr=0.8**2, count_of_steps=2)
@@ -459,8 +521,14 @@ _calculate = make_calculate(
      Vnode_ri, 
      mymodel.branchtaps.position))
 
-selector = 'Q'
+selector = 'I'
 batch_expressions = get_batch_expressions(mymodel, expr, Iinj_data, selector)
+
+get_flow_diffs(mymodel, expr, Iinj_data, selector)
+
+#%%
+
+
 batch_values_ = _calculate(casadi.vcat(batch_expressions.values()))
 batch_values = pd.DataFrame(
     {'id_of_batch': batch_expressions.keys(),
