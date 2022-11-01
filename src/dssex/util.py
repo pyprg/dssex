@@ -425,7 +425,7 @@ def get_residual_current_fn(model, get_injected_power, tappositions=None):
     return partial(get_residual_current, model, get_injected_power, Y)
 
 def eval_residual_current(
-        model, get_injected_power, tappositions=None, V=None):
+        model, get_injected_power, tappositions=None, Vnode=None):
     """Convenience function for evaluation of a power flow calculation result.
     Calls function get_residual_current_fn and get_residual_current
     
@@ -445,7 +445,9 @@ def eval_residual_current(
     -------
     numpy.array
         complex, residual of node current"""
-    return get_residual_current_fn(model, get_injected_power)(V).reshape(-1, 1)
+    return (
+        get_residual_current_fn(model, get_injected_power)(Vnode)
+        .reshape(-1, 1))
 
 def max_ri(cx_array):
     """Calculates infinity norm from real and imaginary parts.
