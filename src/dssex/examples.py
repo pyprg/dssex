@@ -23,8 +23,9 @@ from egrid import make_model
 from egrid.builder import (
     Slacknode, Branch, Branchtaps, Injection, PValue, QValue, IValue, Output, 
     Vvalue, Defk, Link)
-from src.dssex.estim import calculate
 import src.dssex.present as pr
+from src.dssex.estim import calculate
+import src.dssex.pfcnum as pfc
 
 # Always use a decimal point for floats. Now and then processing ints
 # fails with casadi/pandas/numpy.
@@ -36,6 +37,58 @@ import src.dssex.present as pr
 #       |               |               |
 #                                      \|/ consumer
 #                                       '
+# model_entities = [
+#     Slacknode(id_of_node='n_0', V=1.+0.j),
+#     Branch(
+#         id='line_0',
+#         id_of_node_A='n_0',
+#         id_of_node_B='n_1',
+#         y_lo=1e3-1e3j,
+#         y_tr=1e-6+1e-6j),
+#     Branch(
+#         id='line_1',
+#         id_of_node_A='n_1',
+#         id_of_node_B='n_2',
+#         y_lo=1e3-1e3j,
+#         y_tr=1e-6+1e-6j),
+#     Branchtaps(
+#         id='tap_line1',
+#         id_of_node='n_1',
+#         id_of_branch='line_1',
+#         Vstep=10/16,
+#         positionmin=-16,
+#         positionneutral=0,
+#         positionmax=16,
+#         position=0),
+#     Injection(
+#         id='consumer_0',
+#         id_of_node='n_2',
+#         P10=30.0,
+#         Q10=10.0,
+#         Exp_v_p=2.0,
+#         Exp_v_q=2.0),
+#     # define a scaling factor
+#     Defk(id='kp'),
+#     # link the factor to the loads
+#     Link(
+#         objid=('consumer_0'), 
+#         part='p', 
+#         id='kp'),
+#     PValue(
+#         id_of_batch='P_line_0',
+#         P=42.0),
+#     Output(
+#         id_of_batch='P_line_0',
+#         id_of_device='line_0',
+#         id_of_node='n_0'),
+#     PValue(
+#         id_of_batch='P_line_1',
+#         P=42.0),
+#     Output(
+#         id_of_batch='P_line_1',
+#         id_of_device='line_1',
+#         id_of_node='n_1')]
+
 model_entities = [
     Slacknode(id_of_node='n_0', V=1.+0.j),
     Branch(
@@ -43,29 +96,37 @@ model_entities = [
         id_of_node_A='n_0',
         id_of_node_B='n_1',
         y_lo=1e3-1e3j,
-        y_tr=1e-6+1e-6j),
+        y_tr=1e-6+1e-6j
+        ),
     Branch(
         id='line_1',
         id_of_node_A='n_1',
         id_of_node_B='n_2',
         y_lo=1e3-1e3j,
         y_tr=1e-6+1e-6j),
-    Branchtaps(
-        id='tap_line1',
-        id_of_node='n_1',
-        id_of_branch='line_1',
-        Vstep=10/16,
-        positionmin=-16,
-        positionneutral=0,
-        positionmax=16,
-        position=0),
+    # Branchtaps(
+    #     id='tap_line1',
+    #     id_of_node='n_1',
+    #     id_of_branch='line_1',
+    #     Vstep=10/16,
+    #     positionmin=-16,
+    #     positionneutral=0,
+    #     positionmax=16,
+    #     position=0),
     Injection(
         id='consumer_0',
         id_of_node='n_2',
         P10=30.0,
         Q10=10.0,
+        Exp_v_p=0.0,
+        Exp_v_q=0.0),
+    Injection(
+        id='consumer_1',
+        id_of_node='n_2',
+        P10=30.0,
+        Q10=10.0,
         Exp_v_p=2.0,
-        Exp_v_q=2.0),
+        Exp_v_q=1.0),
     # define a scaling factor
     Defk(id='kp'),
     # link the factor to the loads
@@ -74,32 +135,38 @@ model_entities = [
         part='p', 
         id='kp'),
     PValue(
-        id_of_batch='P_line_0',
-        P=42.0),
+        id_of_batch='PQ_line_0',
+        P=40.0),
+    # QValue(
+    #     id_of_batch='PQ_line_0',
+    #     Q=10.0),
     Output(
-        id_of_batch='P_line_0',
+        id_of_batch='PQ_line_0',
         id_of_device='line_0',
         id_of_node='n_0'),
     PValue(
         id_of_batch='P_line_1',
-        P=42.0),
+        P=40.0),
     Output(
         id_of_batch='P_line_1',
         id_of_device='line_1',
-        id_of_node='n_1')]
+        id_of_node='n_1')
+    ]
+
 model00 = make_model(model_entities)
-#%%
+
 import casadi
-#import pandas as pd
 from src.dssex.estim2 import (
     make_get_scaling_and_injection_data, 
     vstack, make_calculate, 
     calculate_power_flow2,
     get_batch_expressions,
     get_flow_diffs,
-    calculate_power_flow, ri_to_complex, 
-    create_expressions, get_branch_flow_expressions, 
-    make_get_branch_expressions, get_node_values)
+    calculate_power_flow,
+    create_expressions,
+    get_scaling_factors,
+    get_k,
+    ri_to_complex)
 import numpy as np
 
 mymodel = model00
@@ -108,36 +175,81 @@ get_scaling_and_injection_data = make_get_scaling_and_injection_data(
     mymodel, expr['Vnode_syms'], vminsqr=0.8**2, count_of_steps=2)
 scaling_data, Iinj_data = get_scaling_and_injection_data(step=0)
 inj_to_node = casadi.SX(mymodel.mnodeinj)
-Inode = inj_to_node @ Iinj_data[:,0:2]
+Inode = inj_to_node @ Iinj_data[:,:2]
+# power flow calculation for initial voltages
+succ, Vnode_ri_vals = calculate_power_flow2(mymodel, expr, scaling_data, Inode)
+Vnode_cx_vals = ri_to_complex(Vnode_ri_vals)
+print(f'\nVnode_cx_vals:\n{Vnode_cx_vals}')
 
-succ, Vnode_ri = calculate_power_flow2(mymodel, expr, scaling_data, Inode)
-
-Vnode_syms = vstack(expr['Vnode_syms'], 2)
-_calculate = make_calculate(
-    (scaling_data.symbols, 
-     Vnode_syms, 
-     expr['position_syms']),
-    (scaling_data.values, 
-     Vnode_ri, 
-     mymodel.branchtaps.position))
-
+succ, vcx = pfc.calculate_power_flow(
+    1e-8, 10, mymodel, loadcurve='interpolated')
+print(f'\nvcx:\n{vcx}')
+#%%
 selector = 'P'
 batch_expressions = get_batch_expressions(mymodel, expr, Iinj_data, selector)
 flow_diffs = get_flow_diffs(mymodel, expr, Iinj_data, selector)
-fn_obj = casadi.power(flow_diffs, 2)
 
-vars_ = casadi.vertcat(Vnode_syms, scaling_data.kvars)
-params = casadi.vertcat(vstack(expr['Vslack_syms']), expr['position_syms'])
+# setup solver
+Vnode_ri_syms = vstack(expr['Vnode_syms'], 2)
+syms = casadi.vertcat(Vnode_ri_syms, scaling_data.kvars)
+objective = casadi.power(flow_diffs, 2)
+params = casadi.vertcat(
+    vstack(expr['Vslack_syms']), expr['position_syms'], scaling_data.kconsts)
+constraints = expr['Y_by_V'] + vstack(Inode) 
+nlp = {'x': syms, 'f': objective, 'g': constraints, 'p': params}
+#%%
+solver = casadi.nlpsol('solver', 'ipopt', nlp)
+# initial values
+ini = casadi.vertcat(Vnode_ri_vals, scaling_data.values_of_vars)
+# values of parameters
+#   Vslack must be negative as Vslack_result + Vslack_in_Inode = 0
+#   because the root is searched for with formula: Y * Vresult + Inode = 0
+Vslacks = -mymodel.slacks.V
+values_of_parameters = casadi.vertcat(
+    np.real(Vslacks), np.imag(Vslacks), 
+    mymodel.branchtaps.position,
+    scaling_data.values_of_consts)
+# calculate
+r = solver(x0=ini, lbg=0, ubg=0, p=values_of_parameters)
+succ = solver.stats()['success']
+print('\n',('SUCCESS' if succ else 'F A I L E D'))
+x = r['x']
+if succ:
+    count_of_v_ri = Vnode_ri_vals.size1()
+    voltages_ri = x[:count_of_v_ri].toarray()
+    voltages_cx = np.hstack(np.vsplit(voltages_ri,2)).view(dtype=np.complex128)
+    print(f'\nvoltages_cx:\n{voltages_cx}')
+    x_scaling = x[count_of_v_ri:]
+    scaling_factors = get_scaling_factors(scaling_data, x_scaling)
+    print(f'\nscaling_factors:\n{scaling_factors}')
+    k = get_k(scaling_data, x_scaling)
+    print(f'\nk:\n{k}')
 
-Vslacks = mymodel.slacks.V
-values_of_parameters=casadi.vertcat(
-    np.real(Vslacks), np.imag(Vslacks),
-    mymodel.branchtaps.position)
+    get_injected_power = pfc.get_calc_injected_power_fn(
+        0.8**2, mymodel.injections, pq_factors=k, loadcurve='interpolated')   
+    ed = pfc.calculate_electric_data(
+        mymodel, get_injected_power, mymodel.branchtaps.position, voltages_cx) 
 
-Inode = inj_to_node @ Iinj_data[:,0:2]
+#%%
+# calculate residual node current for solution of optimization
+_calculate = make_calculate(
+    (scaling_data.kvars, 
+     scaling_data.kconsts,
+     Vnode_ri_syms,
+     vstack(expr['Vslack_syms']),
+     expr['position_syms']),
+    (x_scaling, 
+     scaling_data.values_of_consts, 
+     voltages_ri,
+     casadi.vertcat(np.real(Vslacks), np.imag(Vslacks)),
+     mymodel.branchtaps.position))
+Inode_sol = _calculate(constraints).toarray().reshape(-1)
+print(f'\nInode_sol:\n{Inode_sol}')
 
-succ, vri = calculate_power_flow(mymodel)
-
+get_injected_power = pfc.get_calc_injected_power_fn(
+    0.8**2, mymodel.injections, pq_factors=k, loadcurve='interpolated')   
+ed2 = pfc.calculate_electric_data(
+    mymodel, get_injected_power, mymodel.branchtaps.position, voltages_cx) 
 #%% calculate power flow
 results = [*calculate(model00)]
 # print the result
@@ -155,7 +267,7 @@ model_scale_p = [
      Defk(step=0, id='kp'),
      # link the factor to an injection
      Link(step=0, objid='consumer_0', part='p', id='kp')]
-model01 = make_model(model_devices, model_PQ_measurements, model_scale_p)
+model01 = make_model(model_entities, model_PQ_measurements, model_scale_p)
 results01 = [*calculate(model01, parameters_of_steps=[{'objectives': 'P'}])]
 # print the result
 pr.print_estim_results(results01)
@@ -167,7 +279,7 @@ model_scale_q = [
      # link the factor to an injection
      Link(step=0, objid='consumer_0', part='q', id='kq')]
 model02 = make_model(
-    model_devices,
+    model_entities,
     model_PQ_measurements,
     model_scale_q)
 results02 = [*calculate(model02, parameters_of_steps=[{'objectives': 'Q'}])]
@@ -176,7 +288,7 @@ pr.print_estim_results(results02)
 pr.print_measurements(results02)
 #%% scale load with active power P and reactive power Q
 model03 = make_model(
-    model_devices,
+    model_entities,
     model_PQ_measurements,
     model_scale_p,
     model_scale_q)
@@ -403,10 +515,9 @@ model09 = make_model(
 #%%
 import casadi
 import numpy as np
-from src.dssex.estim2 import (calculate_power_flow, ri_to_complex, 
+from src.dssex.estim2 import (ri_to_complex, 
   create_expressions, make_calculate, get_branch_flow_expressions, 
   make_get_branch_expressions, get_node_values, vstack)
-from src.dssex.pfcnum import calculate_electric_data
 
 model10 = make_model(
     schema09,
@@ -482,7 +593,7 @@ print("\n","SUCCESS" if success else ">--F-A-I-L-E-D--<", "\n")
 if success:
     voltages_complex = ri_to_complex(voltages_ri)
     print(voltages_complex)
-    e_data = calculate_electric_data(
+    e_data = pfc.calculate_electric_data(
         mymodel, 'interpolated', mymodel.branchtaps.position, voltages_complex)
     # pfc-result processing
     _calculate = make_calculate(
@@ -538,7 +649,7 @@ print(selector)
 print(batch_values.to_markdown())
 
 Vnode_complex = ri_to_complex(Vnode_ri)
-e_data = calculate_electric_data(
+e_data = pfc.calculate_electric_data(
     mymodel, 'interpolated', mymodel.branchtaps.position, Vnode_complex)
 #%%
 from src.dssex.pfcnum import calculate_power_flow
