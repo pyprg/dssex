@@ -873,8 +873,8 @@ def _create_gb_mn_tot(branchterminals, branchtaps, position_syms):
     branchterminals: pandas.DataFrame (index of terminal)
         * .glo, mutual conductance, longitudinal
         * .blo, mutual susceptance, longitudinal
-        * .g_tr_half, half of self conductance, tranversal
-        * .b_tr_half, half of self susceptance, tranversal
+        * .g_tr_half, half of self conductance, transversal
+        * .b_tr_half, half of self susceptance, transversal
     branchtaps: pandas.DataFrame (index of taps)
         * .Vstep, float voltage diff per tap
         * .positionneutral, int
@@ -900,7 +900,7 @@ def _create_gb_mn_tot(branchterminals, branchtaps, position_syms):
     gb_mn_mm[:,3] += gb_mn_mm[:,1]
     return gb_mn_mm
 
-def create_expressions(model):
+def create_v_symbols_gb_expressions(model):
     """Creates symbols for node and slack voltages, tappositions,
     branch conductance/susceptance and an expression for Y @ V. The symbols
     and expressions are regarded constant over multiple calculation steps.
@@ -942,8 +942,8 @@ def create_expressions(model):
     return dict(
         Vnode_syms=Vnode_syms,
         Vslack_syms=casadi.horzcat(
-            casadi.SX.sym('Vre_slack', model.count_of_slacks),
-            casadi.SX.sym('Vim_slack', model.count_of_slacks)),
+            casadi.SX.sym('Vre_slack', count_of_slacks),
+            casadi.SX.sym('Vim_slack', count_of_slacks)),
         position_syms=position_syms,
         gb_mn_tot=gb_mn_tot,
         Y_by_V=multiply_Y_by_V(Vnode_syms, G, B))
@@ -1094,14 +1094,15 @@ def calculate_power_flow2(
     return rf.stats()['success'], voltages
 
 def calculate_power_flow(
-        model, expr=None, tappositions=None, Vinit=None, vminsqr=_VMINSQR):
+        model, v_syms_gb_ex=None, tappositions=None, Vinit=None, 
+        vminsqr=_VMINSQR):
     """Solves the power flow problem using a rootfinding algorithm.
 
     Parameters
     ----------
     model: egrid.model.Model
         data of electric grid
-    expr: dict
+    v_syms_gb_ex: dict
         optional
         * 'Vnode_syms', casadi.SX, expressions of node Voltages
         * 'Vre_slack_syms', casadi.SX, symbols of slack voltages, real part
@@ -1124,7 +1125,9 @@ def calculate_power_flow(
     tuple
         * bool, success?
         * casadi.DM, float, voltage vector [real parts, imaginary parts]"""
-    const_expr = create_expressions(model) if expr is None else expr
+    const_expr = (
+        create_v_symbols_gb_expressions(model) 
+        if v_syms_gb_ex is None else v_syms_gb_ex)
     get_scaling_and_injection_data = make_get_scaling_and_injection_data(
         model, const_expr['Vnode_syms'], vminsqr, count_of_steps=1)
     scaling_data, Iinj_data = get_scaling_and_injection_data(step=0)
@@ -1427,13 +1430,13 @@ def current_into_branch(gb_mn_tot, Vnode, terms):
             Vterm[:,0], Vterm[:,1], Vother[:,0], Vother[:,1])
     return casadi.SX(0,2)
 
-def get_branch_flow_expressions(expr, selector, branchterminals):
+def get_branch_flow_expressions(v_syms_gb_ex, selector, branchterminals):
     """Creates expressions for calculation of Ire and Iim or P and Q
     of branches.
     
     Parameters
     ----------
-    expr: dict
+    v_syms_gb_ex: dict
         * 'Vnode_syms', casadi.SX, vectors, symbols of node voltages
         * 'position_syms', casadi.SX, vector, symbols of tap positions
         * 'gb_mn_tot', casadi.SX, vectors, conductance and susceptance of
@@ -1449,7 +1452,8 @@ def get_branch_flow_expressions(expr, selector, branchterminals):
     assert selector=='PQ' or selector=='I',\
         f'value of indicator must be "PQ" or "I" but is "{selector}"'
     expr_fn = power_into_branch if selector=='PQ' else current_into_branch
-    return expr_fn(expr['gb_mn_tot'], expr['Vnode_syms'], branchterminals)
+    return expr_fn(
+        v_syms_gb_ex['gb_mn_tot'], v_syms_gb_ex['Vnode_syms'], branchterminals)
 
 def _get_I_expressions(Iri_exprs):
     """Creates an expression for calculating the magnitudes of current from
@@ -1473,13 +1477,13 @@ def _get_I_expressions(Iri_exprs):
         # I = sqrt(Ire**2, Iim**2)
         .sqrt())
 
-def make_get_branch_expressions(expr, selector):
+def make_get_branch_expressions(v_syms_gb_ex, selector):
     """Returns an expression building function for I/P/Q-values at 
     terminals of branches.
     
     Parameters
     ----------
-    expr: dict
+    v_syms_gb_ex: dict
         * 'Vnode_syms', casadi.SX, vectors, symbols of node voltages
         * 'position_syms', casadi.SX, vector, symbols of tap positions
         * 'gb_mn_tot', casadi.SX, vectors, conductance and susceptance of
@@ -1497,15 +1501,15 @@ def make_get_branch_expressions(expr, selector):
     if selector=='I':
         return (
             lambda terminals:
-                get_branch_flow_expressions(expr, 'I', terminals))
+                get_branch_flow_expressions(v_syms_gb_ex, 'I', terminals))
     if selector=='P':
         return (
             lambda terminals: 
-                get_branch_flow_expressions(expr, 'PQ', terminals)[0])
+                get_branch_flow_expressions(v_syms_gb_ex, 'PQ', terminals)[0])
     if selector=='Q':
         return (
             lambda terminals: 
-                get_branch_flow_expressions(expr, 'PQ', terminals)[1])
+                get_branch_flow_expressions(v_syms_gb_ex, 'PQ', terminals)[1])
     assert False, f'no processing implemented for selector "{selector}"'
 
 #
@@ -1559,7 +1563,7 @@ def _make_get_value(values, selector):
         if selector in 'IV' else values[selector] * values.direction / 3.)
     return lambda idx: vals[idx]
 
-def _get_batch_expressions_br(model, expr, selector):
+def _get_batch_expressions_br(model, v_syms_gb_ex, selector):
     """Creates a vector (casadi.SX, shape n,2/n,1) expressing calculated branch
     values for absolute current, active power or reactive power. The 
     expressions are based on the batch definitions.
@@ -1568,7 +1572,7 @@ def _get_batch_expressions_br(model, expr, selector):
     ----------
     model: egrid.model.Model
         model of electric network for calculation
-    expr: dict
+    v_syms_gb_ex: dict
         * 'Vnode_syms', casadi.SX, vectors, symbols of node voltages
         * 'position_syms', casadi.SX, vector, symbols of tap positions
         * 'gb_mn_tot', casadi.SX, vectors, conductance and susceptance of
@@ -1587,7 +1591,7 @@ def _get_batch_expressions_br(model, expr, selector):
     is_relevant = branchoutputs.id_of_batch.isin(ids_of_batches)
     relevant_out = (
         branchoutputs.loc[is_relevant, ['id_of_batch', 'index_of_term']])
-    get_branch_expr = make_get_branch_expressions(expr, selector)
+    get_branch_expr = make_get_branch_expressions(v_syms_gb_ex, selector)
     branchterminals = model.branchterminals
     return {id_of_batch:get_branch_expr(branchterminals.loc[df.index_of_term])
             for id_of_batch, df in relevant_out.groupby('id_of_batch')}
@@ -1630,7 +1634,7 @@ def _get_batch_expressions_inj(model, ipqv, selector):
     return {id_of_batch: get_inj_expr(injections.loc[df.index_of_injection])
             for id_of_batch, df in relevant_out.groupby('id_of_batch')} 
 
-def get_batch_expressions(model, expr, ipqv, selector):
+def get_batch_expressions(model, v_syms_gb_ex, ipqv, selector):
     """Creates a vector (casadi.SX, shape n,1) expressing calculated
     values for absolute current, active power or reactive power. The 
     expressions are based on the batch definitions.
@@ -1639,7 +1643,7 @@ def get_batch_expressions(model, expr, ipqv, selector):
     ----------
     model: egrid.model.Model
         model of electric network for calculation
-    expr: dict
+    v_syms_gb_ex: dict
         * 'Vnode_syms', casadi.SX, vectors, symbols of node voltages
         * 'position_syms', casadi.SX, vector, symbols of tap positions
         * 'gb_mn_tot', casadi.SX, vectors, conductance and susceptance of
@@ -1662,7 +1666,7 @@ def get_batch_expressions(model, expr, ipqv, selector):
         id_of_batch => expression for I/P/Q-calculation"""
     from collections import defaultdict
     dd = defaultdict(casadi.SX)
-    dd.update(_get_batch_expressions_br(model, expr, selector))
+    dd.update(_get_batch_expressions_br(model, v_syms_gb_ex, selector))
     injectionexpr = _get_batch_expressions_inj(model, ipqv, selector)
     for id_of_batch, expr in injectionexpr.items():
         dd[id_of_batch] = casadi.sum1(casadi.vertcat(dd[id_of_batch], expr))
@@ -1674,7 +1678,7 @@ def get_batch_expressions(model, expr, ipqv, selector):
     assert False, \
         f'selector needs to be one of "I", "P" or "Q" but is "{selector}"'
 
-def get_flow_diffs(model, expr, ipqv, selector):
+def get_given_values_expressions(model, v_syms_gb_ex, ipqv, selector):
     """Creates a vector (casadi.SX, shape n,1) expressing the difference
     between measured and calculated values for absolute current, active power
     or reactive power. The expressions are based on the batch definitions.
@@ -1684,7 +1688,7 @@ def get_flow_diffs(model, expr, ipqv, selector):
     ----------
     model: egrid.model.Model
         model of electric network for calculation
-    expr: dict
+    v_syms_gb_ex: dict
         * 'Vnode_syms', casadi.SX, vectors, symbols of node voltages
         * 'position_syms', casadi.SX, vector, symbols of tap positions
         * 'gb_mn_tot', casadi.SX, vectors, conductance and susceptance of
@@ -1709,10 +1713,64 @@ def get_flow_diffs(model, expr, ipqv, selector):
         f'selector needs to be one of "I", "P" or "Q" but is "{selector}"'
     values = _get_values(model, selector).set_index('id_of_batch')
     get_value = _make_get_value(values, selector)
-    batchid_expr = get_batch_expressions(model, expr, ipqv, selector)
-    vals = casadi.vcat(list(map(get_value, batchid_expr.keys())))
+    batchid_expr = get_batch_expressions(model, v_syms_gb_ex, ipqv, selector)
+    batchids = batchid_expr.keys()
+    vals = list(map(get_value, batchids))
     exprs = casadi.vcat(batchid_expr.values())
-    return vals - exprs if exprs.size1() else casadi.SX(0,1)
+    return (
+        batchids, 
+        vals, # given values
+        exprs if exprs.size1() else casadi.SX(0,1))
+
+def get_diff_expressions(model, v_syms_gb_ex, ipqv, selectors):
+    """Creates a vector (casadi.SX, shape n,1) expressing the difference
+    between measured and calculated values for absolute current, active power
+    or reactive power. The expressions are based on the batch definitions.
+    Intended use is building the objective.
+    
+    Parameters
+    ----------
+    model: egrid.model.Model
+        model of electric network for calculation
+    v_syms_gb_ex: dict
+        * 'Vnode_syms', casadi.SX, vectors, symbols of node voltages
+        * 'position_syms', casadi.SX, vector, symbols of tap positions
+        * 'gb_mn_tot', casadi.SX, vectors, conductance and susceptance of
+          branches connected to terminals
+    ipqv: casadi.SX (n,8)
+        [:,0] Ire, current, real part
+        [:,1] Iim, current, imaginary part
+        [:,2] Pscaled, active power P10 multiplied by scaling factor kp
+        [:,3] Qscaled, reactive power Q10 multiplied by scaling factor kq
+        [:,4] Pip, active power interpolated
+        [:,5] Qip, reactive power interpolated
+        [:,6] Vabs_sqr, square of voltage magnitude
+        [:,7] interpolate?
+    selectors: str
+        string of characters 'I'|'P'|'Q'
+        addresses current magnitude, active power or reactive power,
+        case insensitiv, other characters are ignored
+    
+    Returns
+    -------
+    tuple
+        * selectors, list of string
+        * id_of_batch, list of string
+        * value, casadi.DM, vector (shape n,1)
+        * expression, casadi.SX, vector (shape n,1)"""
+    _selectors = []
+    _ids = []
+    _vals = []
+    _exprs = casadi.SX(0, 1)
+    for sel in selectors.upper():
+        if sel in 'IPQ':
+            ids, vals, exprs = get_given_values_expressions(
+                model, v_syms_gb_ex, ipqv, sel)
+            _selectors.extend([sel]*len(ids))
+            _ids.extend(ids)
+            _vals.extend(vals)
+            _exprs = casadi.vertcat(_exprs, exprs)
+    return _selectors, _ids, _vals, _exprs
 
 def get_node_values(index_of_node, Vnode_ri):
     """Returns absolute voltages for addressed nodes.
@@ -1720,9 +1778,10 @@ def get_node_values(index_of_node, Vnode_ri):
     Parameters
     ----------
     index_of_node: array_like, int
-        addresses nodes
+        node indices for subset slicing
     Vnode_ri: casadi.DM
-        * [index_of_node, Vre]
+        * Vnode_ri[index_of_node] - Vre
+        * Vnode_ri[size/2 + index_of_node] - Vim
 
     Returns
     -------
@@ -1805,7 +1864,7 @@ def make_calculate(symbols, values):
     Parameters
     ----------
     symbols: tuple
-        casadi.SX
+        casadi.SX, symbols which might be used in expressions to evaluate
     values: tuple
         array_like, values of symbols
     
@@ -1827,4 +1886,52 @@ def make_calculate(symbols, values):
         fn = casadi.Function('fn', list(symbols), [expressions])
         return fn(*values)
     return _calculate
+
+def get_calculate_from_result(model, v_syms_gb_ex, scaling_data, x):
+    """Creates a function wich calculates the values of casadi.SX expressions
+    using the result of the nlp-solver.
+    
+    Parameters
+    ----------
+    model: egrid.model.Model
+        model of electric network for calculation
+    v_syms_gb_ex: dict
+        * 'Vnode_syms', casadi.SX, vectors, symbols of node voltages
+        * 'position_syms', casadi.SX, vector, symbols of tap positions
+        * 'gb_mn_tot', casadi.SX, vectors, conductance and susceptance of
+          branches connected to terminals
+    scaling_data: Scalingdata
+        calculation step specific symbols
+    x: casadi.SX
+        result vector calculated by solver
+    
+    Returns
+    -------
+    """
+    Vnode_ri_syms = vstack(v_syms_gb_ex['Vnode_syms'], 2)
+    count_of_v_ri = Vnode_ri_syms.size1()
+    voltages_ri = x[:count_of_v_ri].toarray()
+    x_scaling = x[count_of_v_ri:]
+    Vslacks_neg = -model.slacks.V
+    return make_calculate(
+        (scaling_data.kvars, 
+         scaling_data.kconsts,
+         vstack(v_syms_gb_ex['Vnode_syms'], 2),
+         vstack(v_syms_gb_ex['Vslack_syms'], 2),
+         v_syms_gb_ex['position_syms']),
+        (x_scaling,
+         scaling_data.values_of_consts,
+         voltages_ri,
+         casadi.vertcat(np.real(Vslacks_neg), np.imag(Vslacks_neg)),
+         model.branchtaps.position))
+
+
+
+
+
+
+
+
+
+
 
