@@ -1394,33 +1394,6 @@ def get_estimation_data(model, count_of_steps, vminsqr=_VMINSQR):
     -------
     function (int) -> (Estimation_data)"""
     pfc_nodes = get_pfc_nodes(model.nodes)
-
-    # >>first part of new implementation approach (without selecting of Pandas)
-    count_of_pfcnodes = len(pfc_nodes)
-    # voltage per node-index
-    Vnode = create_Vvars(count_of_pfcnodes)
-    from scipy.sparse import coo_matrix
-    count_of_branchterms = len(model.branchterminals)
-    shape = count_of_branchterms, count_of_pfcnodes
-    node_to_termidx = casadi.SX(coo_matrix(
-        ([1.]*count_of_branchterms, 
-         (model.branchterminals.index, 
-          model.branchterminals.index_of_node)), 
-        shape=shape, dtype=float))
-    node_to_othertermidx = casadi.SX(coo_matrix(
-        ([1.]*count_of_branchterms, 
-         (model.branchterminals.index, 
-          model.branchterminals.index_of_other_node)), 
-        shape=shape, dtype=float))
-    # voltage at terminals
-    Vterm_re = node_to_termidx @ Vnode.re
-    Votherterm_re = node_to_othertermidx @ Vnode.re
-    Vterm_im = node_to_termidx @ Vnode.im
-    Votherterm_im = node_to_othertermidx @ Vnode.im
-    Vterm_sqr = node_to_termidx @ Vnode.sqr
-    Votherterm_sqr = node_to_othertermidx @ Vnode.sqr
-    # <<end of first part of new implementation approach
-    
     Vsymbols = _create_v_symbols(pfc_nodes)
     branch_terminal_data, branch_taps = _get_branch_estimation_data(
         model, Vsymbols)
@@ -1450,7 +1423,6 @@ def get_estimation_data(model, count_of_steps, vminsqr=_VMINSQR):
             load_scaling_factors_step = load_scaling_factors.loc[step]
         except:
             load_scaling_factors_step = None
-            
         kvars = _query_load_scaling_factors_of_type(
             'var', load_scaling_factors_step)
         kvars.rename(
@@ -1464,7 +1436,6 @@ def get_estimation_data(model, count_of_steps, vminsqr=_VMINSQR):
             columns={'id': 'id_of_k', 'min': 'kmin', 'max': 'kmax'},
             inplace=True)
         kconsts.set_index('id_of_k', inplace=True)
-        
         try:
             kpq = (
                 injection_factors.loc[step, ['index_of_injection', 'kp', 'kq']]

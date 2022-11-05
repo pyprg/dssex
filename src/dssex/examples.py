@@ -196,8 +196,6 @@ Vnode_ri_syms = vstack(v_syms_gb_ex['Vnode_syms'], 2)
 syms = casadi.vertcat(Vnode_ri_syms, scaling_data.kvars)
 objective = casadi.sumsqr(qu_ids_vals_exprs[2] - qu_ids_vals_exprs[3])
 
-
-
 params = casadi.vertcat(
     vstack(v_syms_gb_ex['Vslack_syms']), 
     v_syms_gb_ex['position_syms'], 
@@ -223,8 +221,9 @@ print('\n',('SUCCESS' if succ else 'F A I L E D'))
 x = r['x']
 if succ:
     count_of_v_ri = Vnode_ri_vals.size1()
-    voltages_ri = x[:count_of_v_ri].toarray()
-    voltages_cx = np.hstack(np.vsplit(voltages_ri,2)).view(dtype=np.complex128)
+    voltages_ri1 = x[:count_of_v_ri].toarray()
+    voltages_ri2 = np.hstack(np.vsplit(voltages_ri1,2))
+    voltages_cx = voltages_ri2.view(dtype=np.complex128)
     print(f'\nvoltages_cx:\n{voltages_cx}')
     x_scaling = x[count_of_v_ri:]
     scaling_factors = get_scaling_factors(scaling_data, x_scaling)
@@ -236,6 +235,20 @@ if succ:
         0.8**2, mymodel.injections, pq_factors=k, loadcurve='interpolated')   
     ed = pfc.calculate_electric_data(
         mymodel, get_injected_power, mymodel.branchtaps.position, voltages_cx) 
+#%%
+from src.dssex.estim2 import (_current_into_injection_n)
+
+
+Vabs_sqr_ = np.sum(np.power(voltages_ri2, 2), axis=1).reshape(-1, 1)
+V_ = np.hstack([voltages_ri2, Vabs_sqr_])
+
+Iinj_ri2 = _current_into_injection_n(
+    mymodel.injections, 
+    mymodel.mnodeinj.T,
+    V_,
+    k)
+
+
 
 #%%
 # calculate residual node current for solution of optimization

@@ -89,9 +89,11 @@ def get_polynomial_coefficients(x1, exp, dydx_0=1.):
     -------
     numpy.array
         float, shape(n,3)"""
-    return np.vstack([
-        get_coefficients(x1, y1, dydx_0, dx) 
-        for y1, dx in zip(np.power(x1, exp), calc_dx(x1, exp))])
+    if len(exp):
+        return np.vstack([
+            get_coefficients(x1, y1, dydx_0, dx) 
+            for y1, dx in zip(np.power(x1, exp), calc_dx(x1, exp))])
+    return np.ndarray(shape=(0,3), dtype=float)
 
 def polynome(x1, exp, x):
     """Function for checking the polynome.
@@ -125,10 +127,7 @@ def interpolate(x1, exp, x):
         exponent of original function
     x: float
         value to calculate y for"""
-    if x < x1:
-        return polynome(x1, exp, x)
-    else:
-        return x**exp
+    return polynome(x1, exp, x) if x < x1 else x**exp
 
 def add_interpol_coeff_to_injections(injections, vminsqr):
     """Adds polynomial coefficients to injections for linear interpolation

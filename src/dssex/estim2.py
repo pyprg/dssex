@@ -711,21 +711,29 @@ def make_get_scaling_data(model, count_of_steps=1):
 # injected node current
 #
 
-def _calculate_injected_current(Vri, Vabs_sqr, Exp_v, PQscaled):
-    """Creates expression for real and imaginary parts of injected current.
+# Vri = np.array([[1.,0.], [0.9, 0.1]])
+# Vabs_sqr = np.power(Vri, 2).sum(axis=1).reshape(-1,1)
+# Exp_v = np.array([[1.,0.], [2., 1.]])
+# f = np.power(Vabs_sqr, Exp_v/2 - 1)
+# PQscaled = np.array([[10, 5],[100, 50]])
+
+# numeric
+
+def _calculate_injected_current_n(Vri, Vabs_sqr, Exp_v, PQscaled):
+    """Calculates values of injected current.
     
     Parameters
     ----------
-    Vri: casadi.SX, shape n,2
+    Vri: numpy.array, shape n,2
         voltage at terminals of injections
         Vri[:,0] - real part of voltage
         Vri[:,1] - imaginary part of voltage
-    Vabs_sqr: casadi.SX, shape n,2
+    Vabs_sqr: numpy.array, shape n,1
         square of voltage magnitude at terminals of injections
         Vri[:,0]**2 + Vri[:,1]**2
     Exp_v: numpy.array, shape n,2
         voltage exponents of active and reactive power
-    PQscaled: casadi.SX, shape n,2
+    PQscaled: numpy.array, shape n,2
         active and reactive power at nominal voltage multiplied 
         by scaling factors
         PQscaled[:,0] - active power
@@ -733,19 +741,149 @@ def _calculate_injected_current(Vri, Vabs_sqr, Exp_v, PQscaled):
     
     Returns
     -------
-    casadi.SX, shape n,2
+    numpy.array, shape n,2
         [:,0] - real part of injected current
         [:,1] - imaginary part of injected current"""
-    ypq = casadi.power(Vabs_sqr, (Exp_v/2)-1) * PQscaled
-    Ire = casadi.sum2(ypq * Vri)
-    Iim = -ypq[:,1]*Vri[:,0] + ypq[:,0]*Vri[:,1]
-    return casadi.horzcat(Ire, Iim)
+    ypq = np.power(Vabs_sqr.reshape(-1, 1), Exp_v/2 - 1) * PQscaled
+    Ire = np.sum(ypq * Vri, axis=1).reshape(-1, 1)
+    Iim = (-ypq[:,1]*Vri[:,0] + ypq[:,0]*Vri[:,1]).reshape(-1, 1)
+    return np.hstack([Ire, Iim])
 
-def _current_into_injection(
-        injections, node_to_inj, Vnode, scaling_data, vminsqr=_VMINSQR):
-    """Creates expressions for current flowing into injections.
-    Also returns intermediate expressions used for calculation of
-    current magnitude, active/reactive power flow.
+def _interpolate_injected_power_n(Vabs_sqr, Exp_v, PQscaled, vminsqr):
+    """Interpolates values of injected power.
+    
+    Parameters
+    ----------
+    Vri: numpy.array, shape n,2
+        voltage at terminals of injections
+        Vri[:,0] - real part of voltage
+        Vri[:,1] - imaginary part of voltage
+    Vabs_sqr: numpy.array, shape n,1
+        square of voltage magnitude at terminals of injections
+        Vri[:,0]**2 + Vri[:,1]**2
+    Exp_v: numpy.array, shape n,2
+        voltage exponents of active and reactive power
+    PQscaled: numpy.array, shape n,2
+        active and reactive power at nominal voltage multiplied 
+        by scaling factors
+        PQscaled[:,0] - active power
+        PQscaled[:,1] - reactive power
+    
+    Returns
+    -------
+    numpy.array, shape n,2
+        [:,0] - injected active power
+        [:,1] - injected reactive power"""
+    # interpolated P and Q
+    Vinj_abs = np.sqrt(Vabs_sqr)
+    Vinj_abs_cub = Vabs_sqr * Vinj_abs
+    #   active power P
+    cp = get_polynomial_coefficients(vminsqr, Exp_v[:,0])
+    Pip = (
+        (cp[:,0]*Vinj_abs_cub + cp[:,1]*Vabs_sqr + cp[:,2]*Vinj_abs) 
+        * PQscaled[:,0]).reshape(-1,1)
+    #   reactive power Q
+    cq = get_polynomial_coefficients(vminsqr, Exp_v[:,1])
+    Qip = (
+        (cq[:,0]*Vinj_abs_cub + cq[:,1]*Vabs_sqr + cq[:,2]*Vinj_abs) 
+        * PQscaled[:,1]).reshape(-1,1)
+    return np.hstack([Pip, Qip])
+
+def _interpolate_injected_current_n(Vinj, Vabs_sqr, Sinj):
+    """Interpolates values of injected current in an interval.
+    
+    Parameters
+    ----------
+    Vinj: numpy.array, shape n,2
+        voltage at terminals of injections
+        Vinj[:,0] - real part of voltage
+        Vinj[:,1] - imaginary part of voltage
+    Vabs_sqr: numpy.array, shape n,1
+        square of voltage magnitude at terminals of injections
+        Vinj[:,0]**2 + Vinj[:,1]**2
+    Sinj: numpy.array, shape n,2
+        injected active and reactive power 
+        Sinj[:,0] - active power
+        Sinj[:,1] - reactive power
+    
+    Returns
+    -------
+    numpy.array, shape n,2
+        [:,0] - real part of injected current
+        [:,1] - imaginary part of injected current"""
+    Pip = Sinj[:,0]
+    Qip = Sinj[:,1]
+    Vre = Vinj[:, 0]
+    Vim = Vinj[:, 1]
+    calculate = _EPSILON < Vabs_sqr
+    Ire = np.where(calculate, (Pip * Vre + Qip * Vim) / Vabs_sqr, 0.0)
+    Iim = np.where(calculate, (-Qip * Vre + Pip * Vim) / Vabs_sqr, 0.0)
+    return np.hstack([Ire.reshape(-1, 1), Iim.reshape(-1, 1)])
+
+def _current_into_injection_n(
+        injections, node_to_inj, Vnode, kpq, vminsqr=_VMINSQR):
+    """Numerically calculates magnitudes of injected currents flowing 
+    into injections.
+    This function is intended for calculation of currents for selected
+    injections only.
+    
+    Parameters
+    ----------
+    injections: pandas.DataFrame (int index_of_injection)
+        subset of the injections of the model
+        * .P10, float, rated active power at voltage of 1.0 pu
+        * .Q10, float, rated reactive power at voltage of 1.0 pu
+        * .Exp_v_p, float, voltage exponent of active power
+        * .Exp_v_q, float, voltage exponent of reactive power
+    node_to_inj: casadi.SX
+        the matrix converts node to injection values, matrix for all
+        injecions of the model
+        injection_values = node_to_inj @ node_values
+    Vnode: numpy.array
+        three vectors of node voltages, all voltages of the model
+        * Vnode[:,0], float, Vre vector of real node voltages
+        * Vnode[:,1], float, Vim vector of imaginary node voltages
+        * Vnode[:,2], float, Vre**2 + Vim**2
+    kpq: numpy.array (shape n,2)
+        vector of injection scaling factors for active and reactive power,
+        factors for all injections of model
+    vminsqr: float
+        square of voltage, upper limit interpolation interval [0...vminsqr]
+    
+    Returns
+    -------
+    numpy.array, shape n,2
+        [:,0] - real part of injected current
+        [:,1] - imaginary part of injected current"""
+    # voltages at injections
+    count_of_injections = len(injections)
+    idx_of_injections = injections.index
+    Iri = np.ndarray(shape=(count_of_injections,2), dtype=float)
+    Vinj = node_to_inj[idx_of_injections] @ Vnode
+    Vabs_sqr = Vinj[:, 2]
+    # assumes P10 and Q10 are sums of 3 per-phase-values
+    PQscaled = (
+        kpq[idx_of_injections] 
+        * (injections[['P10', 'Q10']].to_numpy() / 3))
+    Exp_v = injections[['Exp_v_p', 'Exp_v_p']].to_numpy()
+    interpolate = Vabs_sqr < vminsqr
+    # interpolated power
+    Vabs_sqr_ip = Vabs_sqr[interpolate]
+    Sinj_ip = _interpolate_injected_power_n(
+        Vabs_sqr_ip, Exp_v[interpolate], PQscaled[interpolate], vminsqr)
+    # interpolated current
+    Iri[interpolate] = _interpolate_injected_current_n(
+        Vinj[interpolate,:2], Vabs_sqr_ip, Sinj_ip)
+    # current according to given load curve
+    orig = ~interpolate
+    Iri[orig] = _calculate_injected_current_n(
+        Vinj[orig,:2], Vabs_sqr[orig], Exp_v[orig], PQscaled[orig])
+    return Iri
+
+# expressions
+
+def _calculate_injected_current(Vri, Vabs_sqr, Exp_v, PQscaled):
+    """Creates expression for real and imaginary parts of injected current.
     Injected power is calculated this way
     (P = |V|**Exvp * P10, Q = |V|**Exvq * Q10; with |V| - magnitude of V):
     ::
@@ -780,7 +918,7 @@ def _current_into_injection(
         I_inj_ri = --------------- |                |
                    Vre**2 + Vim**2 | -Q Vre + P Vim |
                                    +-              -+
-
+                                   
     How to calculate injected real and imaginary current from voltage:
     ::
         Ire =  (Vre ** 2 + Vim ** 2) ** (Expvp / 2 - 1) * P_10 * Vre
@@ -788,6 +926,39 @@ def _current_into_injection(
 
         Iim = -(Vre ** 2 + Vim ** 2) ** (Expvq / 2 - 1) * Q_10 * Vre
              + (Vre ** 2 + Vim ** 2) ** (Expvp / 2 - 1) * P_10 * Vim
+
+    Parameters
+    ----------
+    Vri: casadi.SX, shape n,2
+        voltage at terminals of injections
+        Vri[:,0] - real part of voltage
+        Vri[:,1] - imaginary part of voltage
+    Vabs_sqr: casadi.SX, shape n,1
+        square of voltage magnitude at terminals of injections
+        Vri[:,0]**2 + Vri[:,1]**2
+    Exp_v: numpy.array, shape n,2
+        voltage exponents of active and reactive power
+    PQscaled: casadi.SX, shape n,2
+        active and reactive power at nominal voltage multiplied 
+        by scaling factors
+        PQscaled[:,0] - active power
+        PQscaled[:,1] - reactive power
+    
+    Returns
+    -------
+    casadi.SX, shape n,2
+        [:,0] - real part of injected current
+        [:,1] - imaginary part of injected current"""
+    ypq = casadi.power(Vabs_sqr, (Exp_v/2)-1) * PQscaled
+    Ire = casadi.sum2(ypq * Vri)
+    Iim = -ypq[:,1]*Vri[:,0] + ypq[:,0]*Vri[:,1]
+    return casadi.horzcat(Ire, Iim)
+
+def _current_into_injection(
+        injections, node_to_inj, Vnode, scaling_data, vminsqr=_VMINSQR):
+    """Creates expressions for current flowing into injections.
+    Also returns intermediate expressions used for calculation of
+    current magnitude, active/reactive power flow.
     
     Parameters
     ----------
@@ -1517,7 +1688,8 @@ def make_get_branch_expressions(v_syms_gb_ex, selector):
 #
         
 def _get_values(model, selector):
-    """Helper for returning I/P/Q-values from model using a str 'I'|'P'|'Q'.
+    """Helper for returning I/P/Q/V-values from model using a 
+    string 'I'|'P'|'Q'|'V'.
     
     Parameters
     ----------
@@ -1888,7 +2060,7 @@ def make_calculate(symbols, values):
     return _calculate
 
 def get_calculate_from_result(model, v_syms_gb_ex, scaling_data, x):
-    """Creates a function wich calculates the values of casadi.SX expressions
+    """Creates a function which calculates the values of casadi.SX expressions
     using the result of the nlp-solver.
     
     Parameters
@@ -1903,7 +2075,7 @@ def get_calculate_from_result(model, v_syms_gb_ex, scaling_data, x):
     scaling_data: Scalingdata
         calculation step specific symbols
     x: casadi.SX
-        result vector calculated by solver
+        result vector calculated by nlp-solver
     
     Returns
     -------

@@ -524,6 +524,10 @@ def calculate_power_flow(
         iter_counter += 1;
     return False, np.hstack(np.vsplit(V, 2)).view(dtype=np.complex128)
 
+#
+# result processing
+#
+
 def calculate_electric_data(model, power_fn, tappositions, Vnode):
     """Calculates and arranges electric data of injections and branches
     for a given voltage vector which is typically the result of a power
