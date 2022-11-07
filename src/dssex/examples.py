@@ -236,9 +236,41 @@ if succ:
     ed = pfc.calculate_electric_data(
         mymodel, get_injected_power, mymodel.branchtaps.position, voltages_cx) 
 #%%
+from src.dssex.injections import make_calculate_coefficients
+
+
+# x is constant -> cm is constant
+_vminsqr = 0.8**2
+
+Vinj_abs = np.array(
+    [[.8], 
+     [.7], 
+     [0.6], 
+     [0.5]])
+Vinj_abs_sqr = Vinj_abs * Vinj_abs
+Vinj_abs_cub = Vinj_abs_sqr * Vinj_abs
+Vvector = np.hstack([Vinj_abs_cub, Vinj_abs_sqr, Vinj_abs])
+
+
+exp = np.array(
+    [[0., 0.], 
+      [1., 1.], 
+      [2., 2.], 
+      [0., 0.]])
+
+# exp = np.array(
+#     [[0.], 
+#      [1.], 
+#      [2.], 
+#      [0.]])
+
+calculate_coefficients = make_calculate_coefficients(_vminsqr)
+c = calculate_coefficients(exp)
+f_pq = np.expand_dims(Vvector,axis=1) @ c
+print(f_pq)
+
+#%%
 from src.dssex.estim2 import (_current_into_injection_n)
-
-
 Vabs_sqr_ = np.sum(np.power(voltages_ri2, 2), axis=1).reshape(-1, 1)
 V_ = np.hstack([voltages_ri2, Vabs_sqr_])
 
@@ -247,8 +279,6 @@ Iinj_ri2 = _current_into_injection_n(
     mymodel.mnodeinj.T,
     V_,
     k)
-
-
 
 #%%
 # calculate residual node current for solution of optimization

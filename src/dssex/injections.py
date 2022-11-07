@@ -24,6 +24,82 @@ import numpy as np
 from functools import lru_cache
 from numpy.linalg import solve
 
+def get_coefficients_matrix(x1_sqr):
+    """Creates a matrix for the calculation of coefficients for a cubic
+    function interpolation
+    ::
+        f(x) = Ax³ + Bx² + Cx; f(0)=0
+    The returned matrix M is used for the calculation of the coefficents 
+    A, B and C.
+    ::
+        M x coefficients = V
+        with V = [y, dy/dx_0, dy/dx_1]
+             dy/dx_0 derivative at x=0
+             dy/dx_1 derivative at x=x1
+    
+    Parameters
+    ----------
+    x1_sqr: float
+        square of x1 (== x1 * x1)
+    
+    Returns
+    -------
+    numpy.array (shape 3,3)"""
+    x1 = np.sqrt(x1_sqr)
+    x1_cub = x1_sqr*x1
+    return np.array([
+        [   x1_cub, x1_sqr, x1],  # f(x1)
+        [       0.,     0., 1.],  # df(x0)/dx
+        [3.*x1_sqr,  2.*x1, 1.]]) # df(x1)/dx
+
+def make_calculate_coefficients(x1_sqr):
+    """Creates a factory function for the calculation of coefficients for 
+    cubic polynomials.
+    (numpy.array<float> shape r,c) -> (numpy.array<float> (shape r,3,c)).
+    The returned function creates an array of shape (3,1) for each scalar.
+    
+    Parameters
+    ----------
+    x1_sqr: float
+    
+    Returns
+    -------
+    function
+        (float) -> (numpy.array<float> (shape 3,1))
+        (exponent) -> (3_coefficients_for_interpolated_function)"""
+    m = get_coefficients_matrix(x1_sqr)
+    @lru_cache(maxsize=200)
+    def calculate_coefficients(exp):
+        """Calculates three coefficients for a cubic polynomial.
+        ::
+            p(x) = Ax³ + Bx² + Cx
+        
+        The following parameters of the function are given.
+        ::
+            f(x) = x**exp function used for calculation of value and
+                            derivative in x1 (x1 is upper limit of the 
+                            interpolation interval [0...x1])
+            p(x1) = y1
+            dp(x1)/dx = exp * x1**(exp-1)
+            p(0) = 0
+            dp(0)/dx = 1
+        
+        Parameters
+        ----------
+        exp: float
+            exponent for function x**exp
+        
+        Returns
+        -------
+        numpy.array (3,1)"""
+        y = np.power(x1_sqr, exp/2) # == x1**exp
+        dydx = exp * np.power(x1_sqr, (exp-1)/2) # == exp*x1**exp-1
+        return solve(m, np.array([y, 1, dydx]).reshape(-1,1))
+    # creates a NumPy ufunc which calculates 3 coefficients for each float
+    #   scalar of an array
+    g = np.frompyfunc(calculate_coefficients, 1, 1)
+    return lambda exp: np.apply_along_axis(np.hstack, 1, g(exp))
+
 @lru_cache(maxsize=200)
 def get_coefficients(x, y, dydx_0, dydx):
     """Calculates the coefficients A, B, C of the polynomial

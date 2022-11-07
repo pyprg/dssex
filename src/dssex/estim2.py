@@ -711,13 +711,28 @@ def make_get_scaling_data(model, count_of_steps=1):
 # injected node current
 #
 
-# Vri = np.array([[1.,0.], [0.9, 0.1]])
-# Vabs_sqr = np.power(Vri, 2).sum(axis=1).reshape(-1,1)
-# Exp_v = np.array([[1.,0.], [2., 1.]])
-# f = np.power(Vabs_sqr, Exp_v/2 - 1)
-# PQscaled = np.array([[10, 5],[100, 50]])
-
 # numeric
+
+def _calculate_injected_power_n(Vabs_sqr, Exp_v, PQscaled):
+    """Numerically calculates injected active or reactive power or both.
+
+    Parameters
+    ----------
+    Vabs_sqr: numpy.array, shape n,1
+        square of voltage magnitude at terminals of injections
+    Exp_v: numpy array (n,1 or n,2)
+        voltage exponents for active or reactive powre or both
+    PQscaled: numpy array (n,1 or n,2)
+        active or reactive power or both, dimension must match dimension of 
+        Exp_v
+    
+    Para"""
+    assert Exp_v.shape == PQscaled.shape, \
+        f'shapes of Exp_v and PQscaled must match ' \
+        f'but do not {Exp_v.shape}!={PQscaled.shape}'
+    return (
+        (np.power(Vabs_sqr.reshape(-1, 1), Exp_v/2) * PQscaled)
+        .reshape(Exp_v.shape))
 
 def _calculate_injected_current_n(Vri, Vabs_sqr, Exp_v, PQscaled):
     """Calculates values of injected current.
@@ -994,40 +1009,41 @@ def _current_into_injection(
         [:,7] interpolate?"""
     # voltages at injections
     Vinj = node_to_inj @ Vnode
-    Vabs_sqr = Vinj[:, 2]
-    Vinj_abs = casadi.sqrt(Vabs_sqr)
+    Vinj_abs_sqr = Vinj[:, 2]
+    Vinj_abs = casadi.sqrt(Vinj_abs_sqr)
     # assumes P10 and Q10 are sums of 3 per-phase-values
     PQscaled = scaling_data.kpq * (injections[['P10', 'Q10']].to_numpy() / 3) 
     # voltage exponents
     Exp_v = injections[['Exp_v_p', 'Exp_v_p']].to_numpy()
     # interpolated P and Q
-    Vinj_abs_cub = Vabs_sqr * Vinj_abs
+    Vinj_abs_cub = Vinj_abs_sqr * Vinj_abs
     #   active power P
     cp = get_polynomial_coefficients(vminsqr, Exp_v[:,0])
     Pip = (
-        (cp[:,0]*Vinj_abs_cub + cp[:,1]*Vabs_sqr + cp[:,2]*Vinj_abs) 
+        (cp[:,0]*Vinj_abs_cub + cp[:,1]*Vinj_abs_sqr + cp[:,2]*Vinj_abs) 
         * PQscaled[:,0])
     #   reactive power Q
     cq = get_polynomial_coefficients(vminsqr, Exp_v[:,1])
     Qip = (
-        (cq[:,0]*Vinj_abs_cub + cq[:,1]*Vabs_sqr + cq[:,2]*Vinj_abs) 
+        (cq[:,0]*Vinj_abs_cub + cq[:,1]*Vinj_abs_sqr + cq[:,2]*Vinj_abs) 
         * PQscaled[:,1])
     # current according to given load curve
-    I_orig = _calculate_injected_current(Vinj[:,:2], Vabs_sqr, Exp_v, PQscaled)
+    I_orig = _calculate_injected_current(
+        Vinj[:,:2], Vinj_abs_sqr, Exp_v, PQscaled)
     # interpolated current
-    calculate = _EPSILON < Vabs_sqr
+    calculate = _EPSILON < Vinj_abs_sqr
     Vre = Vinj[:, 0]
     Vim = Vinj[:, 1]
     Ire_ip = casadi.if_else(
-        calculate, (Pip * Vre + Qip * Vim) / Vabs_sqr, 0.0)
+        calculate, (Pip * Vre + Qip * Vim) / Vinj_abs_sqr, 0.0)
     Iim_ip = casadi.if_else(
-        calculate, (-Qip * Vre + Pip * Vim) / Vabs_sqr, 0.0)
+        calculate, (-Qip * Vre + Pip * Vim) / Vinj_abs_sqr, 0.0)
     # compose current expressions
-    interpolate = Vabs_sqr < vminsqr
+    interpolate = Vinj_abs_sqr < vminsqr
     Ire = casadi.if_else(interpolate, Ire_ip, I_orig[:,0])
     Iim = casadi.if_else(interpolate, Iim_ip, I_orig[:,1])
     return casadi.horzcat(
-        Ire, Iim, PQscaled, Pip, Qip, Vabs_sqr, interpolate)
+        Ire, Iim, PQscaled, Pip, Qip, Vinj_abs_sqr, interpolate)
 
 def _reset_slack_current(
         slack_indices, Vre_slack_syms, Vim_slack_syms, Iinj_ri):
