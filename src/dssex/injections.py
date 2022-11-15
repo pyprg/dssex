@@ -97,42 +97,37 @@ def make_calculate_coefficients(x1_sqr):
         return solve(m, np.array([y, 1, dydx]).reshape(-1,1))
     # creates a NumPy ufunc which calculates 3 coefficients for each float
     #   scalar of an array
-    g = np.frompyfunc(calculate_coefficients, 1, 1)
-    return lambda exp: np.apply_along_axis(np.hstack, 1, g(exp))
+    calc_coeffs = np.frompyfunc(calculate_coefficients, 1, 1)
+    return lambda exp: (
+        np.apply_along_axis(np.hstack, 1, calc_coeffs(exp))
+        if exp.shape[0] else np.ndarray(exp.shape, dtype=float))
 
-@lru_cache(maxsize=200)
-def get_coefficients(x, y, dydx_0, dydx):
-    """Calculates the coefficients A, B, C of the polynomial
+def calculate_cubic_coefficients(x1_sqr, exp):
+    """Calculates three coefficients for a cubic polynomial.
     ::
-        f(x) = Ax³ + Bx² + Cx
-        with
-            f(0) = 0, 
-            df(0)/dx = dydx_0,
-            f(x) = y
-            df(x)/dx = dydx
-            
+        p(x) = Ax³ + Bx² + Cx
+    
+    The following parameters of the function are given.
+    ::
+        f(x) = x**exp function used for calculation of value and
+                        derivative in x1 (x1 is upper limit of the 
+                        interpolation interval [0...x1])
+        p(x1) = y1
+        dp(x1)/dx = exp * x1**(exp-1)
+        p(0) = 0
+        dp(0)/dx = 1
+    
     Parameters
     ----------
-    x: float
-        x of point
-    y: float
-        value at x
-    dydx_0: float 
-        dy / dx at 0
-    dydx: float 
-        dy / dx at x
-
+    x1_sqr: float
+    
+    exp: float
+        exponent for function x**exp
+    
     Returns
     -------
-    numpy.ndarray (shape=(3,))
-        float, float, float (A, B, C)"""
-    x_sqr = x * x
-    x_cub = x * x_sqr
-    cm = np.array([
-        [   x_cub, x_sqr,  x],  # f(x1)
-        [      0.,    0., 1.],  # df(x0)/dx
-        [3.*x_sqr,  2.*x, 1.]]) # df(x1)/dx
-    return solve(cm, np.array([y, dydx_0, dydx]))
+    numpy.array (3,1)"""
+    return make_calculate_coefficients(x1_sqr)(exp)
 
 def calc_dx(x, exp):
     """Calculates the derivative of exponential power function at x.
@@ -149,13 +144,13 @@ def calc_dx(x, exp):
     float"""
     return exp * np.power(x, exp-1)
 
-def get_polynomial_coefficients(x1, exp, dydx_0=1.):
+def get_polynomial_coefficients(x1_sqr, exp, dydx_0=1.):
     """Calculates coefficients of polynomials for interpolation.
     
     Parameters
     ----------
-    x1: float
-        upper limit of interpolation range
+    x1_sqr: float
+        upper limit of interpolation range, squared
     exp: numpy.array
         float, exponents of function 'load over voltage'
     dydx_0: float
@@ -166,8 +161,10 @@ def get_polynomial_coefficients(x1, exp, dydx_0=1.):
     numpy.array
         float, shape(n,3)"""
     if len(exp):
+        x1 = np.sqrt(x1_sqr)
+        cm = get_coefficients_matrix(x1_sqr)
         return np.vstack([
-            get_coefficients(x1, y1, dydx_0, dx) 
+            solve(cm, np.array([y1, dydx_0, dx]))
             for y1, dx in zip(np.power(x1, exp), calc_dx(x1, exp))])
     return np.ndarray(shape=(0,3), dtype=float)
 
@@ -182,12 +179,10 @@ def polynome(x1, exp, x):
         exponent of original function
     x: float
         value to calculate y for"""
-    xsqr = x*x
-    coeffs = get_coefficients(
-        x1, 
-        x1**exp, 1., 
-        calc_dx(x1, exp))
-    return (coeffs[0] * xsqr * x) + (coeffs[1] * xsqr) + (coeffs[2] * x)
+    x_sqr = x*x
+    cm = get_coefficients_matrix(x_sqr)
+    coeffs = solve(cm, np.array([x1**exp, 1, calc_dx(x1, exp)]))
+    return (coeffs[0] * x_sqr * x) + (coeffs[1] * x_sqr) + (coeffs[2] * x)
 
 def interpolate(x1, exp, x):
     """Function for checking the interpolation concept.

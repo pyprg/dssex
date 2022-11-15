@@ -55,7 +55,7 @@ import src.dssex.pfcnum as pfc
 #         id='tap_line1',
 #         id_of_node='n_1',
 #         id_of_branch='line_1',
-#         Vstep=10/16,
+#         Vstep=.1/16,
 #         positionmin=-16,
 #         positionneutral=0,
 #         positionmax=16,
@@ -108,11 +108,11 @@ model_entities = [
         id='tap_line1',
         id_of_node='n_1',
         id_of_branch='line_1',
-        Vstep=10/16,
+        Vstep=.1/16,
         positionmin=-16,
         positionneutral=0,
         positionmax=16,
-        position=0),
+        position=2),
     Injection(
         id='consumer_0',
         id_of_node='n_2',
@@ -169,6 +169,7 @@ from src.dssex.estim2 import (
     ri_to_complex,
     get_calculate_from_result)
 import numpy as np
+import numpy.ma as ma
 
 mymodel = model00
 v_syms_gb_ex = create_v_symbols_gb_expressions(mymodel)
@@ -236,7 +237,7 @@ if succ:
     ed = pfc.calculate_electric_data(
         mymodel, get_injected_power, mymodel.branchtaps.position, voltages_cx) 
 #%%
-from src.dssex.injections import make_calculate_coefficients
+from src.dssex.injections import calculate_cubic_coefficients
 
 
 # x is constant -> cm is constant
@@ -264,9 +265,8 @@ exp = np.array(
 #      [2.], 
 #      [0.]])
 
-calculate_coefficients = make_calculate_coefficients(_vminsqr)
-c = calculate_coefficients(exp)
-f_pq = np.expand_dims(Vvector,axis=1) @ c
+c = calculate_cubic_coefficients(_vminsqr, exp)
+f_pq = (np.expand_dims(Vvector,axis=1) @ c).reshape(exp.shape)
 print(f_pq)
 
 #%%
@@ -280,6 +280,102 @@ Iinj_ri2 = _current_into_injection_n(
     V_,
     k)
 
+#%%
+def _create_gb_n(branchterminals):
+    """Creates a numpy array of branch-susceptances and branch-conductances.
+    
+    Parameters
+    ----------
+    branchterminals: pandas.DataFrame (index_of_terminal)
+        * .g_lo, float, longitudinal conductance
+        * .b_lo, float, longitudinal susceptance
+        * .g_tr_half, float, transversal conductance
+        * .b_tr_half, float, transversal susceptance
+    
+    Returns
+    -------
+    numpy.array (shape n,4)
+        float
+        * [:,0] g_mn, mutual conductance
+        * [:,1] b_mn, mutual susceptance
+        * [:,2] g_mm, self conductance
+        * [:,3] b_mn, self susceptance"""
+    return (
+        branchterminals
+        .loc[:,['g_lo', 'b_lo', 'g_tr_half', 'b_tr_half']]
+        .to_numpy())
+
+def get_tap_factor_n(branchtaps, positions):
+    """Calculates longitudinal factors of branches.
+
+    Parameters
+    ----------
+    branchtaps: pandas.DataFrame (index of taps)
+        * .Vstep, float voltage diff per tap
+        * .positionneutral, int
+    position: array_like
+        int, vector of positions for branch-terminals with taps
+
+    Returns
+    -------
+    numpy.array (shape n,1)"""
+    return ((1 - branchtaps.Vstep * (positions - branchtaps.positionneutral))
+           .to_numpy()
+           .reshape(-1,1))
+
+def create_gb_n(branchtaps, positions, branchterminals):
+    """Creates a numpy array of branch-susceptances and branch-conductances.
+    The intended use is calculating a subset of terminal values. 
+    Arguments 'branchtaps' and 'positions' will be selected
+    accordingly, hence, it is appropriate to pass the complete branchtaps 
+    and positions.
+
+    Parameters
+    ----------
+    branchtaps: pandas.DataFrame (index_of_taps)
+        * .index_of_term, int
+        * .index_of_other_term, int
+        * .Vstep, float voltage diff per tap
+        * .positionneutral, int
+        * .position, int (if argument positions is None)
+    position: array_like (optional, accepts None)
+        int, vector of positions for branch-terminals with taps
+    branchterminals: pandas.DataFrame (index_of_terminal)
+        * .g_lo, float, longitudinal conductance
+        * .b_lo, float, longitudinal susceptance
+        * .g_tr_half, float, transversal conductance
+        * .b_tr_half, float, transversal susceptance
+
+    Returns
+    -------
+    numpy.array (shape n,4)
+        gb_mn_tot[:,0] - g_mn
+        gb_mn_tot[:,1] - b_mn
+        gb_mn_tot[:,2] - g_tot
+        gb_mn_tot[:,3] - b_tot"""
+    index_of_branch_terminals = branchterminals.index
+    taps_at_term = branchtaps.index_of_term.isin(index_of_branch_terminals)
+    idx_of_term = branchtaps[taps_at_term].index_of_term.to_numpy()
+    positions_ = branchtaps.position if positions is None else positions
+    flo = get_tap_factor_n(branchtaps, positions_)
+    taps_at_other_term = (
+        branchtaps.index_of_other_term.isin(index_of_branch_terminals))
+    idx_of_other_term = (
+        branchtaps[taps_at_other_term].index_of_other_term.to_numpy())
+    # g_lo, b_lo, g_trans, b_trans
+    gb_mn_mm = _create_gb_n(branchterminals)
+    flo_at_terms = flo[taps_at_term]
+    # longitudinal and transversal
+    gb_mn_mm[idx_of_term] *= flo_at_terms
+    # transversal
+    gb_mn_mm[idx_of_term, 2:] *= flo_at_terms
+    # longitudinal
+    gb_mn_mm[idx_of_other_term, :2] *= flo[taps_at_other_term]
+    # gb_mn_mm -> gb_mn_tot
+    gb_mn_mm[:, 2:] += gb_mn_mm[:, :2] 
+    return gb_mn_mm
+
+gb_mn_tot = create_gb_n(mymodel.branchtaps, None, mymodel.branchterminals)
 #%%
 # calculate residual node current for solution of optimization
 calculate_from_result = get_calculate_from_result(

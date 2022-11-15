@@ -27,7 +27,7 @@ from scipy.sparse import coo_matrix
 from egrid.builder import DEFAULT_FACTOR_ID, defk, Loadfactor
 from itertools import chain
 from collections import namedtuple
-from src.dssex.injections import get_polynomial_coefficients
+from src.dssex.injections import calculate_cubic_coefficients
 # square of voltage magnitude, minimum value for load curve,
 #   if value is below _VMINSQR the load curves for P and Q converge
 #   towards a linear load curve which is 0 when V=0; P(V=0)=0, Q(V=0)=0
@@ -713,26 +713,117 @@ def make_get_scaling_data(model, count_of_steps=1):
 
 # numeric
 
-def _calculate_injected_power_n(Vabs_sqr, Exp_v, PQscaled):
+def _calculate_injected_power_n(Vinj_abs_sqr, Exp_v, PQ):
     """Numerically calculates injected active or reactive power or both.
 
     Parameters
     ----------
-    Vabs_sqr: numpy.array, shape n,1
+    Vinj_abs_sqr: numpy.array, shape n,1
         square of voltage magnitude at terminals of injections
     Exp_v: numpy array (n,1 or n,2)
         voltage exponents for active or reactive powre or both
-    PQscaled: numpy array (n,1 or n,2)
+    PQ: numpy array (n,1 or n,2)
         active or reactive power or both, dimension must match dimension of 
         Exp_v
     
     Para"""
-    assert Exp_v.shape == PQscaled.shape, \
-        f'shapes of Exp_v and PQscaled must match ' \
-        f'but do not {Exp_v.shape}!={PQscaled.shape}'
+    assert Exp_v.shape == PQ.shape, \
+        f'shapes of Exp_v and PQ must match ' \
+        f'but do not {Exp_v.shape}!={PQ.shape}'
     return (
-        (np.power(Vabs_sqr.reshape(-1, 1), Exp_v/2) * PQscaled)
+        (np.power(Vinj_abs_sqr.reshape(-1, 1), Exp_v/2) * PQ)
         .reshape(Exp_v.shape))
+
+def _interpolate_injected_power_n(Vinj_abs_sqr, Exp_v, PQ, vminsqr):
+    """Interpolates values of injected power.
+    
+    Parameters
+    ----------
+    Vri: numpy.array, shape n,2
+        voltage at terminals of injections
+        Vri[:,0] - real part of voltage
+        Vri[:,1] - imaginary part of voltage
+    Vinj_abs_sqr: numpy.array, shape n,1
+        square of voltage magnitude at terminals of injections
+        Vri[:,0]**2 + Vri[:,1]**2
+    Exp_v: numpy.array, shape n,1 or n,2
+        voltage exponents of active and or reactive power
+    PQ: numpy.array, shape n,1 or n,2
+        active and or reactive power
+    
+    Returns
+    -------
+    numpy.array, shape n,1 or n,2"""
+    # interpolated P and Q
+    assert Vinj_abs_sqr.shape[0] == Exp_v.shape[0] == PQ.shape[0], \
+        'Vinj_abs_sqr, Exp_v and PQ must have equal number of rows'
+    assert Exp_v.shape == PQ.shape, \
+        f'shapes of Exp_v and PQ must match ' \
+        f'but do not {Exp_v.shape}!={PQ.shape}'
+    if Vinj_abs_sqr.shape[0]:
+        c = calculate_cubic_coefficients(vminsqr, Exp_v)
+        Vinj_abs_sqr_ = Vinj_abs_sqr.reshape(-1, 1)
+        Vinj_abs = np.sqrt(Vinj_abs_sqr_)
+        Vvector = np.hstack([Vinj_abs_sqr_*Vinj_abs, Vinj_abs_sqr_, Vinj_abs])
+        f_pq = (np.expand_dims(Vvector,axis=1) @ c).reshape(Exp_v.shape)
+        return f_pq * PQ
+    else:
+        return np.ndarray(Exp_v.shape, dtype=float)
+
+def _calculated_injected_power_n(
+        injections, node_to_inj, Vnode, kpq, vminsqr=_VMINSQR):
+    """Numerically calculates magnitudes of injected currents flowing 
+    into injections.
+    This function is intended for calculation of currents for selected
+    injections only.
+    
+    Parameters
+    ----------
+    injections: pandas.DataFrame (int index_of_injection)
+        subset of the injections of the model
+        * .P10, float, rated active power at voltage of 1.0 pu
+        * .Q10, float, rated reactive power at voltage of 1.0 pu
+        * .Exp_v_p, float, voltage exponent of active power
+        * .Exp_v_q, float, voltage exponent of reactive power
+    node_to_inj: casadi.SX
+        the matrix converts node to injection values, matrix for all
+        injecions of the model
+        injection_values = node_to_inj @ node_values
+    Vnode: numpy.array
+        three vectors of node voltages, all voltages of the model
+        * Vnode[:,0], float, Vre vector of real node voltages
+        * Vnode[:,1], float, Vim vector of imaginary node voltages
+        * Vnode[:,2], float, Vre**2 + Vim**2
+    kpq: numpy.array (shape n,2)
+        vector of injection scaling factors for active and reactive power,
+        factors for all injections of model
+    vminsqr: float
+        square of voltage, upper limit interpolation interval [0...vminsqr]
+    
+    Returns
+    -------
+    numpy.array, shape n,2
+        [:,0] - real part of injected current
+        [:,1] - imaginary part of injected current"""
+    # voltages at injections
+    count_of_injections = len(injections)
+    idx_of_injections = injections.index
+    Iri = np.ndarray(shape=(count_of_injections,2), dtype=float)
+    Vinj = node_to_inj[idx_of_injections] @ Vnode
+    Vabs_sqr = Vinj[:, 2]
+    # assumes P10 and Q10 are sums of 3 per-phase-values
+    PQscaled = (
+        kpq[idx_of_injections] 
+        * (injections[['P10', 'Q10']].to_numpy() / 3))
+    Exp_v = injections[['Exp_v_p', 'Exp_v_p']].to_numpy()
+    interpolate = Vabs_sqr < vminsqr
+    # interpolated power
+    Vabs_sqr_ip = Vabs_sqr[interpolate]
+    PQinj_ip = _interpolate_injected_power_n(
+        Vabs_sqr_ip, Exp_v[interpolate], PQscaled[interpolate], vminsqr)
+
+    #except
+
 
 def _calculate_injected_current_n(Vri, Vabs_sqr, Exp_v, PQscaled):
     """Calculates values of injected current.
@@ -764,47 +855,7 @@ def _calculate_injected_current_n(Vri, Vabs_sqr, Exp_v, PQscaled):
     Iim = (-ypq[:,1]*Vri[:,0] + ypq[:,0]*Vri[:,1]).reshape(-1, 1)
     return np.hstack([Ire, Iim])
 
-def _interpolate_injected_power_n(Vabs_sqr, Exp_v, PQscaled, vminsqr):
-    """Interpolates values of injected power.
-    
-    Parameters
-    ----------
-    Vri: numpy.array, shape n,2
-        voltage at terminals of injections
-        Vri[:,0] - real part of voltage
-        Vri[:,1] - imaginary part of voltage
-    Vabs_sqr: numpy.array, shape n,1
-        square of voltage magnitude at terminals of injections
-        Vri[:,0]**2 + Vri[:,1]**2
-    Exp_v: numpy.array, shape n,2
-        voltage exponents of active and reactive power
-    PQscaled: numpy.array, shape n,2
-        active and reactive power at nominal voltage multiplied 
-        by scaling factors
-        PQscaled[:,0] - active power
-        PQscaled[:,1] - reactive power
-    
-    Returns
-    -------
-    numpy.array, shape n,2
-        [:,0] - injected active power
-        [:,1] - injected reactive power"""
-    # interpolated P and Q
-    Vinj_abs = np.sqrt(Vabs_sqr)
-    Vinj_abs_cub = Vabs_sqr * Vinj_abs
-    #   active power P
-    cp = get_polynomial_coefficients(vminsqr, Exp_v[:,0])
-    Pip = (
-        (cp[:,0]*Vinj_abs_cub + cp[:,1]*Vabs_sqr + cp[:,2]*Vinj_abs) 
-        * PQscaled[:,0]).reshape(-1,1)
-    #   reactive power Q
-    cq = get_polynomial_coefficients(vminsqr, Exp_v[:,1])
-    Qip = (
-        (cq[:,0]*Vinj_abs_cub + cq[:,1]*Vabs_sqr + cq[:,2]*Vinj_abs) 
-        * PQscaled[:,1]).reshape(-1,1)
-    return np.hstack([Pip, Qip])
-
-def _interpolate_injected_current_n(Vinj, Vabs_sqr, Sinj):
+def _interpolate_injected_current_n(Vinj, Vabs_sqr, PQinj):
     """Interpolates values of injected current in an interval.
     
     Parameters
@@ -816,7 +867,7 @@ def _interpolate_injected_current_n(Vinj, Vabs_sqr, Sinj):
     Vabs_sqr: numpy.array, shape n,1
         square of voltage magnitude at terminals of injections
         Vinj[:,0]**2 + Vinj[:,1]**2
-    Sinj: numpy.array, shape n,2
+    PQinj: numpy.array, shape n,2
         injected active and reactive power 
         Sinj[:,0] - active power
         Sinj[:,1] - reactive power
@@ -826,8 +877,8 @@ def _interpolate_injected_current_n(Vinj, Vabs_sqr, Sinj):
     numpy.array, shape n,2
         [:,0] - real part of injected current
         [:,1] - imaginary part of injected current"""
-    Pip = Sinj[:,0]
-    Qip = Sinj[:,1]
+    Pip = PQinj[:,0]
+    Qip = PQinj[:,1]
     Vre = Vinj[:, 0]
     Vim = Vinj[:, 1]
     calculate = _EPSILON < Vabs_sqr
@@ -884,11 +935,11 @@ def _current_into_injection_n(
     interpolate = Vabs_sqr < vminsqr
     # interpolated power
     Vabs_sqr_ip = Vabs_sqr[interpolate]
-    Sinj_ip = _interpolate_injected_power_n(
+    PQinj_ip = _interpolate_injected_power_n(
         Vabs_sqr_ip, Exp_v[interpolate], PQscaled[interpolate], vminsqr)
     # interpolated current
     Iri[interpolate] = _interpolate_injected_current_n(
-        Vinj[interpolate,:2], Vabs_sqr_ip, Sinj_ip)
+        Vinj[interpolate,:2], Vabs_sqr_ip, PQinj_ip)
     # current according to given load curve
     orig = ~interpolate
     Iri[orig] = _calculate_injected_current_n(
@@ -1016,17 +1067,11 @@ def _current_into_injection(
     # voltage exponents
     Exp_v = injections[['Exp_v_p', 'Exp_v_p']].to_numpy()
     # interpolated P and Q
-    Vinj_abs_cub = Vinj_abs_sqr * Vinj_abs
-    #   active power P
-    cp = get_polynomial_coefficients(vminsqr, Exp_v[:,0])
-    Pip = (
-        (cp[:,0]*Vinj_abs_cub + cp[:,1]*Vinj_abs_sqr + cp[:,2]*Vinj_abs) 
-        * PQscaled[:,0])
-    #   reactive power Q
-    cq = get_polynomial_coefficients(vminsqr, Exp_v[:,1])
-    Qip = (
-        (cq[:,0]*Vinj_abs_cub + cq[:,1]*Vinj_abs_sqr + cq[:,2]*Vinj_abs) 
-        * PQscaled[:,1])
+    cpq = calculate_cubic_coefficients(vminsqr, Exp_v)
+    V_321 = casadi.vertcat(
+        (Vinj_abs_sqr * Vinj_abs).T, Vinj_abs_sqr.T, Vinj_abs.T)
+    Pip = (casadi.SX(cpq[:,:,0]) @ V_321) * PQscaled[:,0]
+    Qip = (casadi.SX(cpq[:,:,1]) @ V_321) * PQscaled[:,1]
     # current according to given load curve
     I_orig = _calculate_injected_current(
         Vinj[:,:2], Vinj_abs_sqr, Exp_v, PQscaled)
@@ -1500,7 +1545,7 @@ def _power_into_branch(
     return P, Q
 
 def power_into_branch(gb_mn_tot, Vnode, terms):
-    """Calculates active and reactive power flow for a subset of 
+    """Creates expressions of active and reactive power flow for a subset of 
     branch terminals from admittances of branches and voltages at 
     branch terminals. Assumes PI-equivalent circuits.
 
@@ -1961,7 +2006,7 @@ def get_diff_expressions(model, v_syms_gb_ex, ipqv, selectors):
     return _selectors, _ids, _vals, _exprs
 
 def get_node_values(index_of_node, Vnode_ri):
-    """Returns absolute voltages for addressed nodes.
+    """Returns expression of absolute voltages for addressed nodes.
 
     Parameters
     ----------
