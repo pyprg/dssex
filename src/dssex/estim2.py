@@ -81,8 +81,8 @@ def create_V_symbols(count_of_nodes):
     return casadi.horzcat(Vre, Vim, Vre.constpow(2)+Vim.constpow(2))
 
 def get_tap_factors(branchtaps, position_syms):
-    """Creates expressions for longitudinal and transversal factors
-    of branches.
+    """Creates expressions for off-diagonal factors of branches.
+    Diagonal factors are just the square of the off-diagonal factors.
 
     Parameters
     ----------
@@ -94,20 +94,17 @@ def get_tap_factors(branchtaps, position_syms):
 
     Returns
     -------
-    casadi.SX
-        * [:,0] longitudinal factors
-        * [:,1] transversal factors"""
+    casadi.SX"""
     if position_syms.size1():
-        # longitudinal factor
-        flo = (1
+        return (
+            1
             - casadi.SX(branchtaps.Vstep)
               * (position_syms - branchtaps.positionneutral))
     else:
-        flo = casadi.SX(0, 1)
-    return casadi.horzcat(flo, casadi.constpow(flo, 2))
+        return casadi.SX(0, 1)
 
 def _mult_gb_by_tapfactors(
-        gb_mn_mm, flo_ftr, index_of_term, index_of_other_term):
+        gb_mn_tot, foffd, index_of_term, index_of_other_term):
     """Multiplies conductance and susceptance of branch terminals in order
     to consider positions of taps.
 
@@ -115,14 +112,12 @@ def _mult_gb_by_tapfactors(
     ----------
     gb_mn_mm: casadi.SX
         matrix of 4 column vectors, one row for each branch terminal
-        gb_mn_mm[:,0] - g_mn
-        gb_mn_mm[:,1] - b_mn
-        gb_mn_mm[:,2] - g_mm
-        gb_mn_mm[:,3] - b_mm
-    flo_ftr: casadi.SX
-        matrix of 2 column vectors, one row for each tap position
-        flo_ftr[:,0] - longitudinal factor
-        flo_ftr[:,1] - transversal factor
+        gb_mn_tot[:,0] - g_mn
+        gb_mn_tot[:,1] - b_mn
+        gb_mn_tot[:,2] - g_tot
+        gb_mn_tot[:,3] - b_tot
+    foffd: casadi.SX
+        vector - off-diagonal factor
     index_of_term: array_like
         taps -> index of terminal
     index_of_other_term: array_like
@@ -131,19 +126,18 @@ def _mult_gb_by_tapfactors(
     Returns
     -------
     casadi.SX
-        gb_mn_mm[:,0] - g_mn
-        gb_mn_mm[:,1] - b_mn
-        gb_mn_mm[:,2] - g_mm
-        gb_mn_mm[:,3] - b_mm"""
-    assert flo_ftr.size1(), "factors required"
+        gb_mn_tot[:,0] - g_mn
+        gb_mn_tot[:,1] - b_mn
+        gb_mn_tot[:,2] - g_tot
+        gb_mn_tot[:,3] - b_tot"""
+    assert foffd.size1(), "factors required"
     assert len(index_of_term), "indices of terminals required"
     assert len(index_of_other_term), "indices of other terminals required"
-    flo = flo_ftr[:, 0]
-    gb_mn_mm[index_of_term, :2] *= flo
-    gb_mn_mm[index_of_other_term, :2] *= flo
+    gb_mn_tot[index_of_term, :2] *= foffd
+    gb_mn_tot[index_of_other_term, :2] *= foffd
     # transversal factor
-    gb_mn_mm[index_of_term, 2:] *= flo_ftr[:, 1]
-    return gb_mn_mm
+    gb_mn_tot[index_of_term, 2:] *= (foffd*foffd)
+    return gb_mn_tot
 
 def _create_gb_expressions(terms):
     g_mn = casadi.SX(terms.g_lo)
@@ -700,7 +694,8 @@ def make_get_scaling_data(model, count_of_steps=1):
                 column vector, symbols for constants of scaling factors
             values_of_consts: casadi.DM
                 column vector, values for consts"""
-    assert 0 < count_of_steps, "count_of_steps must be an int greater than 0"
+    assert 0 < count_of_steps, \
+        "count_of_steps must be an integer greater than 0"
     factors, injection_factors = get_factors(model, count_of_steps)
     return partial(
         get_scaling_data,
@@ -726,13 +721,15 @@ def _calculate_injected_power_n(Vinj_abs_sqr, Exp_v, PQ):
         active or reactive power or both, dimension must match dimension of 
         Exp_v
     
-    Para"""
+    Returns
+    -------
+    numpy.array (shape PQ.shape)"""
     assert Exp_v.shape == PQ.shape, \
         f'shapes of Exp_v and PQ must match ' \
         f'but do not {Exp_v.shape}!={PQ.shape}'
     return (
         (np.power(Vinj_abs_sqr.reshape(-1, 1), Exp_v/2) * PQ)
-        .reshape(Exp_v.shape))
+        .reshape(PQ.shape))
 
 def _interpolate_injected_power_n(Vinj_abs_sqr, Exp_v, PQ, vminsqr):
     """Interpolates values of injected power.
@@ -1070,8 +1067,14 @@ def _current_into_injection(
     cpq = calculate_cubic_coefficients(vminsqr, Exp_v)
     V_321 = casadi.vertcat(
         (Vinj_abs_sqr * Vinj_abs).T, Vinj_abs_sqr.T, Vinj_abs.T)
-    Pip = (casadi.SX(cpq[:,:,0]) @ V_321) * PQscaled[:,0]
-    Qip = (casadi.SX(cpq[:,:,1]) @ V_321) * PQscaled[:,1]
+    Pip_ = casadi.vcat(
+        [(casadi.SX(cpq[row_index,:,0].reshape(1,-1)) @ V_321[:,row_index])
+         for row_index in range(V_321.size2())])
+    Qip_ = casadi.vcat(
+        [(casadi.SX(cpq[row_index,:,1].reshape(1,-1)) @ V_321[:,row_index])
+         for row_index in range(V_321.size2())])
+    Pip = Pip_ * PQscaled[:,0]
+    Qip = Qip_ * PQscaled[:,1]
     # current according to given load curve
     I_orig = _calculate_injected_current(
         Vinj[:,:2], Vinj_abs_sqr, Exp_v, PQscaled)
@@ -1120,17 +1123,19 @@ def _create_gb_mn_tot(branchterminals, branchtaps, position_syms):
         * [:,1] b_mn, mutual susceptance
         * [:,2] g_tot, self conductance + mutual conductance
         * [:,3] b_tot, self susceptance + mutual susceptance"""
-    gb_mn_mm = _create_gb_expressions(branchterminals)
+    # greate gb_mn_mm
+    gb_mn_tot = _create_gb_expressions(branchterminals)
+    # create gb_mn_tot
+    gb_mn_tot[:,2] += gb_mn_tot[:,0]
+    gb_mn_tot[:,3] += gb_mn_tot[:,1]
     if position_syms.size1():
-        flo_ftr = get_tap_factors(branchtaps, position_syms)
-        gb_mn_mm = _mult_gb_by_tapfactors(
-            gb_mn_mm,
-            flo_ftr,
+        foffd = get_tap_factors(branchtaps, position_syms)
+        return _mult_gb_by_tapfactors(
+            gb_mn_tot,
+            foffd,
             branchtaps.index_of_term,
             branchtaps.index_of_other_term)
-    gb_mn_mm[:,2] += gb_mn_mm[:,0]
-    gb_mn_mm[:,3] += gb_mn_mm[:,1]
-    return gb_mn_mm
+    return gb_mn_tot
 
 def create_v_symbols_gb_expressions(model):
     """Creates symbols for node and slack voltages, tappositions,

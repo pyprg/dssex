@@ -28,8 +28,8 @@ from scipy.sparse import coo_matrix, diags, vstack
 from functools import partial
 
 def get_tap_factors(branchtaps, pos):
-    """Creates factors for tap positions, values for longitudinal and
-    transversal factors of branches.
+    """Creates factors for tap positions, values for off-diagonal and
+    diagonal factors of branches.
     
     Parameters
     ----------
@@ -42,14 +42,14 @@ def get_tap_factors(branchtaps, pos):
     Returns
     -------
     tuple
-        * numpy array, float, longitudinal factors
-        * numpy array, float, transversal factors"""
+        * numpy array, float, off-diagonal factors
+        * numpy array, float, diagonal factors"""
     # factor longitudinal
-    flo = (1 - branchtaps.Vstep.to_numpy() * (
+    foffd = (1 - branchtaps.Vstep.to_numpy() * (
         pos - branchtaps.positionneutral.to_numpy()))
-    return flo, np.power(flo, 2)
+    return foffd
 
-def get_y_terms(terms, flo, ftr):
+def get_y_terms(terms, foffd):
     """Multiplies admittances of branches with factors retrieved
     from tap positions.
     
@@ -57,28 +57,28 @@ def get_y_terms(terms, flo, ftr):
     ----------
     terms: pandas.DataFrame
     
-    flo: pandas.Series, float
-        factor for longitudinal admittance
-    ftr: pandas.Series, float
-        factor transversal admittance
+    foffd: pandas.Series, float
+        factor for off-diagonal admittance -y_mn
     
     Returns
     -------
     tuple
-        * numpy.array, complex, y_tr, transversal admittance
-        * numpy.array, complex, y_lo, longitudinal admittance"""
+        * numpy.array, complex, y_lo, longitudinal admittance, y_mn
+        * numpy.array, complex, y_tot, diagonal admittance y_mm"""
     terms_with_taps = terms[terms.index_of_taps.notna()]
     idx_of_tap = terms_with_taps.index_of_taps
     y_tr = terms.y_tr_half.to_numpy()
-    y_tr[terms_with_taps.index] *= ftr[idx_of_tap]   
     y_lo = terms.y_lo.to_numpy()
-    y_lo[terms_with_taps.index] *= flo[idx_of_tap]
+    y_tot = y_tr + y_lo
+    foffd_of_tap = foffd[idx_of_tap] 
+    y_lo[terms_with_taps.index] *= foffd_of_tap   
+    y_tot[terms_with_taps.index] *= (foffd_of_tap*foffd_of_tap)
     terms_with_other_taps = terms[terms.index_of_other_taps.notna()]
     idx_of_other_tap = terms_with_other_taps.index_of_other_taps
-    y_lo[terms_with_other_taps.index] *= flo[idx_of_other_tap]
-    return y_tr, y_lo
+    y_lo[terms_with_other_taps.index] *= foffd[idx_of_other_tap]
+    return y_lo, y_tot
 
-def create_y(terms, count_of_nodes, flo, ftr):
+def create_y(terms, count_of_nodes, foffd):
     """Generates the branch-admittance matrix. 
     
     Parameters
@@ -87,10 +87,9 @@ def create_y(terms, count_of_nodes, flo, ftr):
     
     count_of_nodes: int
         number of power flow calculation nodes
-    flo: array_like
-        double, longitudinal taps factor, sparse for terminals with taps
-    ftr: array_like
-        transversal taps factor, sparse for terminals with taps
+    foffd: array_like
+        double, off-diagonal factor for y_mn and y_nm admittances, 
+        sparse for terminals with taps
     
     Returns
     -------
@@ -101,8 +100,8 @@ def create_y(terms, count_of_nodes, flo, ftr):
     row = np.concatenate([index_of_node, index_of_node])
     col = np.concatenate([index_of_node, index_of_other_node])
     rowcol = row, col
-    y_lo, y_tr = get_y_terms(terms, flo, ftr)
-    yvals = np.concatenate([(y_tr + y_lo), -y_lo])
+    y_lo, y_tot = get_y_terms(terms, foffd)
+    yvals = np.concatenate([y_tot, -y_lo])
     shape = count_of_nodes, count_of_nodes
     return coo_matrix((yvals, rowcol), shape=shape, dtype=np.complex128)
 
@@ -122,11 +121,11 @@ def create_y_matrix(model, pos):
     Returns
     -------
     scipy.sparse.matrix"""
-    flo, ftr = get_tap_factors(model.branchtaps, pos)
+    foffd = get_tap_factors(model.branchtaps, pos)
     count_of_nodes = model.shape_of_Y[0]
     terms = (
         model.branchterminals[~model.branchterminals.is_bridge].reset_index())
-    Y = create_y(terms, count_of_nodes, flo, ftr)
+    Y = create_y(terms, count_of_nodes, foffd)
     count_of_slacks = model.count_of_slacks
     diag = diags(
         [1.+0.j] * count_of_slacks, 
@@ -237,28 +236,28 @@ def get_crossrefs(terms, count_of_nodes):
         dtype=np.int8).tocsc()
     return mtermnode, mtermothernode
 
-def get_branch_admittance_matrices(y_tr, y_lo, term_is_at_A):
+def get_branch_admittance_matrices(y_lo, y_tot, term_is_at_A):
     """Creates a 2x2 branch-admittance matrix for each branch.
     
     Parameters
     ----------
-    y_tr: numpy.array, complex
-        transversal admittance according to pi-equivalent circuit, per branch
     y_lo: numpy.array, complex
-        longitudinal admittance according to pi-equivalent circuit, per branch
+        y_mn admittance, per branch
+    y_tot: numpy.array, complex
+        (y_mn + y_mm) admittance, per branch
     term_is_at_A: numpy.array, bool, index of terminal
-        True if terminal with is at side A of a branch
+        True if terminal is at side A of a branch
         
     Returns
     -------
     numpy.darray, complex, shape=(:, 2, 2)"""
-    y_tr_A = y_tr[term_is_at_A]
-    y_tr_B = y_tr[~term_is_at_A]
+    y_tot_A = y_tot[term_is_at_A]
+    y_tot_B = y_tot[~term_is_at_A]
     y_lo_AB = y_lo[term_is_at_A]
-    y_11 = y_tr_A + y_lo_AB
+    y_11 = y_tot_A
     y_12 = -y_lo_AB
     y_21 = -y_lo_AB
-    y_22 = y_tr_B + y_lo_AB
+    y_22 = y_tot_B
     return (np.hstack([
          y_11.reshape(-1, 1), 
          y_12.reshape(-1, 1), 
@@ -283,9 +282,9 @@ def get_y_branches(model, terms, term_is_at_A, pos):
     Returns
     -------
     numpy.array, complex, shape=(:, 2, 2)"""
-    flo, ftr = get_tap_factors(model.branchtaps, pos)
-    y_tr, y_lo = get_y_terms(terms, flo, ftr)
-    return get_branch_admittance_matrices(y_tr, y_lo, term_is_at_A)
+    foffd = get_tap_factors(model.branchtaps, pos)
+    y_lo, y_tot = get_y_terms(terms, foffd)
+    return get_branch_admittance_matrices(y_lo, y_tot, term_is_at_A)
 
 def get_v_branches(terms, voltages):
     """Creates a voltage vector 2x1 per branch.
@@ -469,7 +468,6 @@ def max_ri(cx_array):
 
 def create_y_matrix2(model, pos):
     """Generates admittance matrix of branches without rows for slacks. 
-    Should return a symmetric matrix.
     
     Parameters
     ----------
@@ -481,11 +479,11 @@ def create_y_matrix2(model, pos):
     Returns
     -------
     scipy.sparse.matrix"""
-    flo, ftr = get_tap_factors(model.branchtaps, pos)
+    foffd = get_tap_factors(model.branchtaps, pos)
     count_of_nodes = model.shape_of_Y[0]
     terms = (
         model.branchterminals[~model.branchterminals.is_bridge].reset_index())
-    Y = create_y(terms, count_of_nodes, flo, ftr)
+    Y = create_y(terms, count_of_nodes, foffd)
     count_of_slacks = model.count_of_slacks
     return Y.tocsc()[count_of_slacks:, :]
 

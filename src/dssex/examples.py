@@ -112,7 +112,7 @@ model_entities = [
         positionmin=-16,
         positionneutral=0,
         positionmax=16,
-        position=2),
+        position=0),
     Injection(
         id='consumer_0',
         id_of_node='n_2',
@@ -131,9 +131,10 @@ model_entities = [
     Defk(id='kp'),
     # link the factor to the loads
     Link(
-        objid=('consumer_0'), 
+        objid=('consumer_0', 'consumer_1'), 
         part='p', 
         id='kp'),
+    # measurement
     PValue(
         id_of_batch='PQ_line_0',
         P=40.0),
@@ -144,13 +145,14 @@ model_entities = [
         id_of_batch='PQ_line_0',
         id_of_device='line_0',
         id_of_node='n_0'),
-    PValue(
-        id_of_batch='P_line_1',
-        P=40.0),
-    Output(
-        id_of_batch='P_line_1',
-        id_of_device='line_1',
-        id_of_node='n_1')
+    # # measurement
+    # PValue(
+    #     id_of_batch='P_line_1',
+    #     P=40.0),
+    # Output(
+    #     id_of_batch='P_line_1',
+    #     id_of_device='line_1',
+    #     id_of_node='n_1')
     ]
 
 model00 = make_model(model_entities)
@@ -183,7 +185,7 @@ succ, Vnode_ri_vals = calculate_power_flow2(
     mymodel, v_syms_gb_ex, scaling_data, Inode)
 Vnode_cx_vals = ri_to_complex(Vnode_ri_vals)
 print(f'\nVnode_cx_vals:\n{Vnode_cx_vals}')
-
+#%%
 succ, vcx = pfc.calculate_power_flow(
     1e-8, 10, mymodel, loadcurve='interpolated')
 print(f'\nvcx:\n{vcx}')
@@ -231,7 +233,6 @@ if succ:
     print(f'\nscaling_factors:\n{scaling_factors}')
     k = get_k(scaling_data, x_scaling)
     print(f'\nk:\n{k}')
-
     get_injected_power = pfc.get_calc_injected_power_fn(
         0.8**2, mymodel.injections, pq_factors=k, loadcurve='interpolated')   
     ed = pfc.calculate_electric_data(
@@ -281,7 +282,7 @@ Iinj_ri2 = _current_into_injection_n(
     k)
 
 #%%
-def _create_gb_n(branchterminals):
+def _create_gb_of_terminals_n(branchterminals):
     """Creates a numpy array of branch-susceptances and branch-conductances.
     
     Parameters
@@ -305,7 +306,7 @@ def _create_gb_n(branchterminals):
         .loc[:,['g_lo', 'b_lo', 'g_tr_half', 'b_tr_half']]
         .to_numpy())
 
-def get_tap_factor_n(branchtaps, positions):
+def calculate_factors_of_positions_n(branchtaps, positions):
     """Calculates longitudinal factors of branches.
 
     Parameters
@@ -323,8 +324,9 @@ def get_tap_factor_n(branchtaps, positions):
            .to_numpy()
            .reshape(-1,1))
 
-def create_gb_n(branchtaps, positions, branchterminals):
-    """Creates a numpy array of branch-susceptances and branch-conductances.
+def create_gb_of_terminals_n(branchterminals, branchtaps, positions=None):
+    """Creates a vectors (as a numpy array) of branch-susceptances and 
+    branch-conductances.
     The intended use is calculating a subset of terminal values. 
     Arguments 'branchtaps' and 'positions' will be selected
     accordingly, hence, it is appropriate to pass the complete branchtaps 
@@ -332,6 +334,11 @@ def create_gb_n(branchtaps, positions, branchterminals):
 
     Parameters
     ----------
+    branchterminals: pandas.DataFrame (index_of_terminal)
+        * .g_lo, float, longitudinal conductance
+        * .b_lo, float, longitudinal susceptance
+        * .g_tr_half, float, transversal conductance
+        * .b_tr_half, float, transversal susceptance
     branchtaps: pandas.DataFrame (index_of_taps)
         * .index_of_term, int
         * .index_of_other_term, int
@@ -340,11 +347,6 @@ def create_gb_n(branchtaps, positions, branchterminals):
         * .position, int (if argument positions is None)
     position: array_like (optional, accepts None)
         int, vector of positions for branch-terminals with taps
-    branchterminals: pandas.DataFrame (index_of_terminal)
-        * .g_lo, float, longitudinal conductance
-        * .b_lo, float, longitudinal susceptance
-        * .g_tr_half, float, transversal conductance
-        * .b_tr_half, float, transversal susceptance
 
     Returns
     -------
@@ -357,13 +359,13 @@ def create_gb_n(branchtaps, positions, branchterminals):
     taps_at_term = branchtaps.index_of_term.isin(index_of_branch_terminals)
     idx_of_term = branchtaps[taps_at_term].index_of_term.to_numpy()
     positions_ = branchtaps.position if positions is None else positions
-    flo = get_tap_factor_n(branchtaps, positions_)
+    flo = calculate_factors_of_positions_n(branchtaps, positions_)
     taps_at_other_term = (
         branchtaps.index_of_other_term.isin(index_of_branch_terminals))
     idx_of_other_term = (
         branchtaps[taps_at_other_term].index_of_other_term.to_numpy())
     # g_lo, b_lo, g_trans, b_trans
-    gb_mn_mm = _create_gb_n(branchterminals)
+    gb_mn_mm = _create_gb_of_terminals_n(branchterminals)
     flo_at_terms = flo[taps_at_term]
     # longitudinal and transversal
     gb_mn_mm[idx_of_term] *= flo_at_terms
@@ -375,12 +377,13 @@ def create_gb_n(branchtaps, positions, branchterminals):
     gb_mn_mm[:, 2:] += gb_mn_mm[:, :2] 
     return gb_mn_mm
 
-gb_mn_tot = create_gb_n(mymodel.branchtaps, None, mymodel.branchterminals)
+gb_mn_tot = create_gb_of_terminals_n(
+    mymodel.branchterminals, mymodel.branchtaps)
 #%%
 # calculate residual node current for solution of optimization
+# symbolic
 calculate_from_result = get_calculate_from_result(
     mymodel, v_syms_gb_ex, scaling_data, x)
-
 vals_calc = (
     calculate_from_result(qu_ids_vals_exprs[3])
     .toarray()
@@ -393,10 +396,9 @@ val_calc = pd.DataFrame(
      'calculated': vals_calc})
 is_power = val_calc.qu.isin(('P','Q'))
 val_calc.loc[is_power, ['given', 'calculated']] *= 3
-
 Inode_sol = calculate_from_result(constraints).toarray().reshape(-1)
 print(f'\nInode_sol:\n{Inode_sol}')
-
+# numeric
 get_injected_power = pfc.get_calc_injected_power_fn(
     0.8**2, mymodel.injections, pq_factors=k, loadcurve='interpolated')   
 ed2 = pfc.calculate_electric_data(

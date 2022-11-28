@@ -39,7 +39,7 @@ _VMINSQR = 0.8**2
 _zeros = np.zeros((0, 1), dtype=np.longdouble)
 _power_props = itemgetter('P10', 'Q10', 'Exp_v_p', 'Exp_v_q')
 
-def get_gb_terms(terms, flo, ftr):
+def get_gb_terms(terms, foffd):
     """Multiplies conductance/susceptance of branches with factors retrieved
     from tap positions.
     
@@ -47,35 +47,38 @@ def get_gb_terms(terms, flo, ftr):
     ----------
     terms: pandas.DataFrame
     
-    flo: pandas.Series, float
-        factor for longitudinal admittance
-    ftr: pandas.Series, float
-        factor transversal admittance
+    foffd: pandas.Series, float
+        tap-factor for off-diagonal admittance y_mn
     
     Returns
     -------
     tuple
         * numpy.array, float, g_lo
-        * numpy.array, float, g_tr
+        * numpy.array, float, g_tot
         * numpy.array, float, b_lo
-        * numpy.array, float, b_tr"""
+        * numpy.array, float, b_tot"""
     terms_with_taps = terms[terms.index_of_taps.notna()]
     idx_of_tap = terms_with_taps.index_of_taps
-    g_tr = terms.g_tr_half.to_numpy()
-    b_tr = terms.b_tr_half.to_numpy()
-    g_tr[terms_with_taps.index] *= ftr[idx_of_tap]   
-    b_tr[terms_with_taps.index] *= ftr[idx_of_tap]    
     g_lo = terms.g_lo.to_numpy()
     b_lo = terms.b_lo.to_numpy()
-    g_lo[terms_with_taps.index] *= flo[idx_of_tap]
-    b_lo[terms_with_taps.index] *= flo[idx_of_tap]
+    g_tot = terms.g_tr_half.to_numpy() + g_lo
+    b_tot = terms.b_tr_half.to_numpy() + b_lo
+    foffd_of_tap = foffd[idx_of_tap]
+    fdiag_of_tap = foffd_of_tap * foffd_of_tap
+    g_tot[terms_with_taps.index] *= fdiag_of_tap   
+    b_tot[terms_with_taps.index] *= fdiag_of_tap    
+    g_lo = terms.g_lo.to_numpy()
+    b_lo = terms.b_lo.to_numpy()
+    g_lo[terms_with_taps.index] *= foffd_of_tap
+    b_lo[terms_with_taps.index] *= foffd_of_tap
     terms_with_other_taps = terms[terms.index_of_other_taps.notna()]
     idx_of_other_tap = terms_with_other_taps.index_of_other_taps
-    g_lo[terms_with_other_taps.index] *= flo[idx_of_other_tap]
-    b_lo[terms_with_other_taps.index] *= flo[idx_of_other_tap]
-    return g_lo, g_tr, b_lo, b_tr
+    foffd_of_other_tap = foffd[idx_of_other_tap]
+    g_lo[terms_with_other_taps.index] *= foffd_of_other_tap
+    b_lo[terms_with_other_taps.index] *= foffd_of_other_tap
+    return g_lo, g_tot, b_lo, b_tot
 
-def create_gb(terms, count_of_nodes, flo, ftr):
+def create_gb(terms, count_of_nodes, foffd):
     """Generates a conductance-susceptance matrix of branches equivalent to
     branch-admittance matrix. M[n,n] of slack nodes is set to 1, other
     values of slack nodes are zero.
@@ -101,9 +104,9 @@ def create_gb(terms, count_of_nodes, flo, ftr):
     row = np.concatenate([index_of_node, index_of_node])
     col = np.concatenate([index_of_node, index_of_other_node])
     rowcol = row, col
-    g_lo, g_tr, b_lo, b_tr = get_gb_terms(terms, flo, ftr)
-    gvals = np.concatenate([(g_tr + g_lo), -g_lo])
-    bvals = np.concatenate([(b_tr + b_lo), -b_lo])
+    g_lo, g_tot, b_lo, b_tot = get_gb_terms(terms, foffd)
+    gvals = np.concatenate([g_tot, -g_lo])
+    bvals = np.concatenate([b_tot, -b_lo])
     shape = count_of_nodes, count_of_nodes
     g = coo_matrix((gvals, rowcol), shape=shape, dtype=float)
     b = coo_matrix((bvals, rowcol), shape=shape, dtype=float)
@@ -125,11 +128,11 @@ def create_gb_matrix(model, pos):
     Returns
     -------
     scipy   sparse   matrix"""
-    flo, ftr = get_tap_factors(model.branchtaps, pos)
+    foffd = get_tap_factors(model.branchtaps, pos)
     count_of_nodes = model.shape_of_Y[0]
     terms = (
         model.branchterminals[~model.branchterminals.is_bridge].reset_index())
-    G, B = create_gb(terms, count_of_nodes, flo, ftr)
+    G, B = create_gb(terms, count_of_nodes, foffd)
     count_of_slacks = model.count_of_slacks
     diag = diags(
         [1.] * count_of_slacks, 
