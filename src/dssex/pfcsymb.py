@@ -7,7 +7,7 @@ Created on Sat Mar 26 11:49:05 2022
 import casadi
 import numpy as np
 from collections import namedtuple
-from injections import get_polynomial_coefficients
+from src.dssex.injections import get_polynomial_coefficients
 
 # square of voltage magnitude, minimum value for load curve, 
 #   if value is below _VMINSQR the load curves for P and Q converge

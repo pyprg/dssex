@@ -386,8 +386,8 @@ def get_residual_current(model, get_injected_power, Y, Vnode):
     get_injected_power: function 
         (numpy.array<float>) -> (numpy.array<float>, numpy.array<float>)
         (square_of_absolute_node-voltage) -> (active power P, reactive power Q)
-    tappositions: array_like, int
-        positions of taps
+    Y: scipy.sparse.matrix, complex
+        branch admittance matrix
     Vnode: array_like, complex
         node voltage vector
     

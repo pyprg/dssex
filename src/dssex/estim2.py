@@ -133,9 +133,10 @@ def _mult_gb_by_tapfactors(
     assert foffd.size1(), "factors required"
     assert len(index_of_term), "indices of terminals required"
     assert len(index_of_other_term), "indices of other terminals required"
+    # mn
     gb_mn_tot[index_of_term, :2] *= foffd
     gb_mn_tot[index_of_other_term, :2] *= foffd
-    # transversal factor
+    # tot
     gb_mn_tot[index_of_term, 2:] *= (foffd*foffd)
     return gb_mn_tot
 
@@ -435,8 +436,8 @@ def get_factors(model, count_of_steps=1):
 
     Parameters
     ----------
-    model:
-
+    model: egrid.model.Model
+        data of electric grid
     count_of_steps: int
         number of optimization steps (default is 1)
 
@@ -520,8 +521,8 @@ Symbols of variables and constants for scaling factors.
 Parameters
 ----------
 kpq: casadi.SX
-    two column vector, symbols for scaling factors of active and reactive power 
-    per injection
+    two column vectors, symbols for scaling factors of active and 
+    reactive power per injection
 kvars: casadi.SX
     column vector, symbols for variables of scaling factors
 values_of_vars: casadi.DM
@@ -1142,7 +1143,7 @@ def create_v_symbols_gb_expressions(model):
     branch conductance/susceptance and an expression for Y @ V. The symbols
     and expressions are regarded constant over multiple calculation steps.
     Diagonal of slack rows are set to 1 for conductance and 0 for susceptance,
-    other values of slack rows are set to 0.
+    other values of slack rows are set to 0 in matrix 'Y @ V'.
 
     Parameters
     ----------
@@ -1192,7 +1193,7 @@ def create_v_symbols_gb_expressions(model):
 def make_get_scaling_and_injection_data(
         model, Vnode_syms, vminsqr, count_of_steps):
     """Returns a function creating scaling_data and injection_data
-    for a given step, in particular expressions which are specific 
+    for a given step, in general expressions which are specific 
     for the given step.
 
     Parameters
@@ -1263,6 +1264,45 @@ def make_get_scaling_and_injection_data(
             injections, node_to_inj, Vnode_syms, scaling_data, vminsqr)
         return scaling_data, Iinj_data
     return get_scaling_and_injection_data
+
+def get_estimation_data(model, count_of_steps, vminsqr=_VMINSQR):
+    """Prepares data for estimation. Creates symbols and expressions.
+
+    Parameters
+    ----------
+    model : egrid.model.Model
+        data of electric grid
+    count_of_steps : int
+        number of estimation steps
+    vminsqr : float, optional
+        minimum voltage at loads for original load curve, squared
+
+    Returns
+    -------
+    dict
+        * 'Vnode_syms', casadi.SX, expressions of node Voltages
+        * 'Vslack_syms', casadi.SX, symbols of slack voltages, 
+           Vslack_syms[:,0] real part, Vslack_syms[:,1] imaginary part
+        * 'position_syms', casadi.SX, symbols of tap positions
+        * 'gb_mn_tot', conductance g / susceptance b per branch terminal
+            * gb_mn_tot[:,0] g_mn, mutual conductance
+            * gb_mn_tot[:,1] b_mn, mutual susceptance
+            * gb_mn_tot[:,2] g_tot, self conductance + mutual conductance
+            * gb_mn_tot[:,3] b_tot, self susceptance + mutual susceptance
+        * 'Y_by_V', casadi.SX, expression for Y @ V
+        * 'get_scaling_and_injection_data', function
+          (int, casadi.DM) -> (tuple - Scalingdata, casadi.SX)
+          which is a function
+          (index_of_step, scaling_factors_of_previous_step) 
+            -> (tuple - Scalingdata, injection_data)
+        * 'inj_to_node', casadi.SX, matrix, mapping from
+          injections to power flow calculation nodes"""
+    ed = create_v_symbols_gb_expressions(model)
+    ed['get_scaling_and_injection_data'] = (
+        make_get_scaling_and_injection_data(
+            model, ed['Vnode_syms'], vminsqr, count_of_steps))
+    ed['inj_to_node'] = casadi.SX(model.mnodeinj)
+    return ed
 
 def calculate_power_flow2(
         model, expr, scaling_data, Inode, tappositions=None, Vinit=None):
@@ -1760,7 +1800,7 @@ def _get_values(model, selector):
     Parameters
     ----------
     model: egrid.model.Model
-        model of electric network for calculation
+        data of electric grid
     selector: 'I'|'P'|'Q'|'V'
         accesses model.ivalues | model.pvalues | model.qvalues | model.vvalues
         
@@ -1976,6 +2016,7 @@ def get_diff_expressions(model, v_syms_gb_ex, ipqv, selectors):
         * 'gb_mn_tot', casadi.SX, vectors, conductance and susceptance of
           branches connected to terminals
     ipqv: casadi.SX (n,8)
+        data of P, Q, I, and V at injections
         [:,0] Ire, current, real part
         [:,1] Iim, current, imaginary part
         [:,2] Pscaled, active power P10 multiplied by scaling factor kp
@@ -2064,6 +2105,80 @@ def value_of_voltages(vvalues):
 #         if len(index_of_node)
 #         else casadi.SX(0,1))
 
+def get_optimize(model, ed):
+    """Preapares the optimization function.
+
+    Parameters
+    ----------
+    model: egrid.model.Model
+        data of electric grid
+    ed : dict
+        estimation data
+        * 'Vnode_syms', casadi.SX (shape n,2)
+        * 'Vslack_syms', casadi.SX (shape n,2)
+        * 'position_syms', casadi.SX (shape n,1)
+
+    Returns
+    -------
+    function"""
+    # setup solver
+    Vnode_ri_syms = vstack(ed['Vnode_syms'], 2)
+    # values of parameters
+    #   Vslack must be negative as Vslack_result + Vslack_in_Inode = 0
+    #   because the root is searched for with formula: Y * Vresult + Inode = 0
+    Vslacks_neg = -model.slacks.V
+    params_ = casadi.vertcat(
+        vstack(ed['Vslack_syms']), 
+        ed['position_syms'])
+    values_of_parameters_ = casadi.vertcat(
+        np.real(Vslacks_neg), np.imag(Vslacks_neg), 
+        model.branchtaps.position)
+    def optimize(Vnode_ri_ini, scaling_data, Inode, diff_data):
+        """Solves an optimization task
+
+        Parameters
+        ----------
+        Vnode_ri_ini: casadi.DM (shape 2n,1)
+            float, initial node voltages with separated real and imaginary
+            parts, first real then imaginary
+        scaling_data: Scalingdata
+            * .kvars, casadi.SX, column vector, symbols for variables 
+              of scaling factors
+            * .kconsts, casadi.SX, column vector, symbols for constants 
+              of scaling factors
+            * .values_of_vars, casadi.DM, column vector, initial values 
+              for kvars
+            * .values_of_consts, casadi.DM, column vector, values for consts
+        Inode: casadi.SX (shape n,2)
+            expressions for injected node current
+        diff_data: tuple
+            data for objective function
+            * symbols for quantities, list of values 'P'|'Q'|'I'|'V'
+            * ids of batches, list of str
+            * values, list of floats
+            * casadi.SX, expressions of differences (shape n,1)
+
+        Returns
+        -------
+        bool
+            success?
+        casadi.DM
+            result vector of optimization"""
+        syms = casadi.vertcat(Vnode_ri_syms, scaling_data.kvars)
+        objective = casadi.sumsqr(diff_data[2] - diff_data[3])
+        params = casadi.vertcat(params_, scaling_data.kconsts)
+        values_of_parameters = casadi.vertcat(
+            values_of_parameters_, scaling_data.values_of_consts)
+        constraints = ed['Y_by_V'] + vstack(Inode) 
+        nlp = {'x': syms, 'f': objective, 'g': constraints, 'p': params}
+        solver = casadi.nlpsol('solver', 'ipopt', nlp)
+        # initial values
+        ini = casadi.vertcat(Vnode_ri_ini, scaling_data.values_of_vars)
+        # calculate
+        r = solver(x0=ini, lbg=0, ubg=0, p=values_of_parameters)
+        return solver.stats()['success'], r['x']
+    return optimize
+
 def vstack(m, column_count=0):
     """Helper, stacks columns of matrix m vertically which creates
     a vector.
@@ -2097,7 +2212,7 @@ def ri_to_complex(array_like):
     return np.hstack(np.vsplit(array_like, 2)).view(dtype=np.complex128)
 
 def make_calculate(symbols, values):
-    """Helper, returns a function which calculates expressions.
+    """Helper, returns a function which evaluates expressions numerically.
     
     Parameters
     ----------
@@ -2125,7 +2240,7 @@ def make_calculate(symbols, values):
         return fn(*values)
     return _calculate
 
-def get_calculate_from_result(model, v_syms_gb_ex, scaling_data, x):
+def get_calculate_from_result(model, ed, scaling_data, x):
     """Creates a function which calculates the values of casadi.SX expressions
     using the result of the nlp-solver.
     
@@ -2133,11 +2248,10 @@ def get_calculate_from_result(model, v_syms_gb_ex, scaling_data, x):
     ----------
     model: egrid.model.Model
         model of electric network for calculation
-    v_syms_gb_ex: dict
+    ed: dict
         * 'Vnode_syms', casadi.SX, vectors, symbols of node voltages
         * 'position_syms', casadi.SX, vector, symbols of tap positions
-        * 'gb_mn_tot', casadi.SX, vectors, conductance and susceptance of
-          branches connected to terminals
+        * 'Vslack_syms', symbols of slack voltages
     scaling_data: Scalingdata
         calculation step specific symbols
     x: casadi.SX
@@ -2145,8 +2259,10 @@ def get_calculate_from_result(model, v_syms_gb_ex, scaling_data, x):
     
     Returns
     -------
-    """
-    Vnode_ri_syms = vstack(v_syms_gb_ex['Vnode_syms'], 2)
+    function
+        (casadi.SX) -> (casadi.DM)
+        (expressions) -> (values)"""
+    Vnode_ri_syms = vstack(ed['Vnode_syms'], 2)
     count_of_v_ri = Vnode_ri_syms.size1()
     voltages_ri = x[:count_of_v_ri].toarray()
     x_scaling = x[count_of_v_ri:]
@@ -2154,9 +2270,9 @@ def get_calculate_from_result(model, v_syms_gb_ex, scaling_data, x):
     return make_calculate(
         (scaling_data.kvars, 
          scaling_data.kconsts,
-         vstack(v_syms_gb_ex['Vnode_syms'], 2),
-         vstack(v_syms_gb_ex['Vslack_syms'], 2),
-         v_syms_gb_ex['position_syms']),
+         Vnode_ri_syms,
+         vstack(ed['Vslack_syms'], 2),
+         ed['position_syms']),
         (x_scaling,
          scaling_data.values_of_consts,
          voltages_ri,

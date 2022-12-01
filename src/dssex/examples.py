@@ -112,7 +112,7 @@ model_entities = [
         positionmin=-16,
         positionneutral=0,
         positionmax=16,
-        position=0),
+        position=-16),
     Injection(
         id='consumer_0',
         id_of_node='n_2',
@@ -125,8 +125,8 @@ model_entities = [
         id_of_node='n_2',
         P10=30.0,
         Q10=10.0,
-        Exp_v_p=2.0,
-        Exp_v_q=1.0),
+        Exp_v_p=0.0,
+        Exp_v_q=0.0),
     # define a scaling factor
     Defk(id='kp'),
     # link the factor to the loads
@@ -159,7 +159,8 @@ model00 = make_model(model_entities)
 
 import casadi
 from src.dssex.estim2 import (
-    make_get_scaling_and_injection_data, 
+    get_estimation_data,
+    get_optimize,
     vstack, 
     calculate_power_flow2,
     get_batch_expressions,
@@ -171,57 +172,28 @@ from src.dssex.estim2 import (
     ri_to_complex,
     get_calculate_from_result)
 import numpy as np
-import numpy.ma as ma
 
 mymodel = model00
-v_syms_gb_ex = create_v_symbols_gb_expressions(mymodel)
-get_scaling_and_injection_data = make_get_scaling_and_injection_data(
-    mymodel, v_syms_gb_ex['Vnode_syms'], vminsqr=0.8**2, count_of_steps=2)
-scaling_data, Iinj_data = get_scaling_and_injection_data(step=0)
-inj_to_node = casadi.SX(mymodel.mnodeinj)
-Inode = inj_to_node @ Iinj_data[:,:2]
+
+ed = get_estimation_data(mymodel, 2)
+scaling_data, Iinj_data = ed['get_scaling_and_injection_data'](step=0)
+Inode = ed['inj_to_node'] @ Iinj_data[:,:2]
 # power flow calculation for initial voltages
-succ, Vnode_ri_vals = calculate_power_flow2(
-    mymodel, v_syms_gb_ex, scaling_data, Inode)
+succ, Vnode_ri_vals = calculate_power_flow2(mymodel, ed, scaling_data, Inode)
 Vnode_cx_vals = ri_to_complex(Vnode_ri_vals)
-print(f'\nVnode_cx_vals:\n{Vnode_cx_vals}')
-#%%
+print(f'\nVnode_cx_vals (symbolic):\n{Vnode_cx_vals}')
 succ, vcx = pfc.calculate_power_flow(
-    1e-8, 10, mymodel, loadcurve='interpolated')
-print(f'\nvcx:\n{vcx}')
-
-selector = 'P'
-qu_ids_vals_exprs = get_diff_expressions(
-    mymodel, v_syms_gb_ex, Iinj_data, selector)
+    1e-12, 10, mymodel, loadcurve='interpolated')
+print(f'\nvcx (numeric):\n{vcx}')
 #%%
-# setup solver
-Vnode_ri_syms = vstack(v_syms_gb_ex['Vnode_syms'], 2)
-syms = casadi.vertcat(Vnode_ri_syms, scaling_data.kvars)
-objective = casadi.sumsqr(qu_ids_vals_exprs[2] - qu_ids_vals_exprs[3])
-
-params = casadi.vertcat(
-    vstack(v_syms_gb_ex['Vslack_syms']), 
-    v_syms_gb_ex['position_syms'], 
-    scaling_data.kconsts)
-constraints = v_syms_gb_ex['Y_by_V'] + vstack(Inode) 
-nlp = {'x': syms, 'f': objective, 'g': constraints, 'p': params}
-
-solver = casadi.nlpsol('solver', 'ipopt', nlp)
-# initial values
-ini = casadi.vertcat(Vnode_ri_vals, scaling_data.values_of_vars)
-# values of parameters
-#   Vslack must be negative as Vslack_result + Vslack_in_Inode = 0
-#   because the root is searched for with formula: Y * Vresult + Inode = 0
-Vslacks_neg = -mymodel.slacks.V
-values_of_parameters = casadi.vertcat(
-    np.real(Vslacks_neg), np.imag(Vslacks_neg), 
-    mymodel.branchtaps.position,
-    scaling_data.values_of_consts)
-# calculate
-r = solver(x0=ini, lbg=0, ubg=0, p=values_of_parameters)
-succ = solver.stats()['success']
+selector = 'P'
+diff_data = get_diff_expressions(mymodel, ed, Iinj_data, selector)
+#%%
+optimize = get_optimize(mymodel, ed)
+succ, x = optimize(Vnode_ri_vals, scaling_data, Inode, diff_data)
 print('\n',('SUCCESS' if succ else 'F A I L E D'))
-x = r['x']
+
+
 if succ:
     count_of_v_ri = Vnode_ri_vals.size1()
     voltages_ri1 = x[:count_of_v_ri].toarray()
@@ -235,7 +207,7 @@ if succ:
     print(f'\nk:\n{k}')
     get_injected_power = pfc.get_calc_injected_power_fn(
         0.8**2, mymodel.injections, pq_factors=k, loadcurve='interpolated')   
-    ed = pfc.calculate_electric_data(
+    result_data = pfc.calculate_electric_data(
         mymodel, get_injected_power, mymodel.branchtaps.position, voltages_cx) 
 #%%
 from src.dssex.injections import calculate_cubic_coefficients
@@ -383,20 +355,20 @@ gb_mn_tot = create_gb_of_terminals_n(
 # calculate residual node current for solution of optimization
 # symbolic
 calculate_from_result = get_calculate_from_result(
-    mymodel, v_syms_gb_ex, scaling_data, x)
+    mymodel, ed, scaling_data, x)
 vals_calc = (
-    calculate_from_result(qu_ids_vals_exprs[3])
+    calculate_from_result(diff_data[3])
     .toarray()
     .reshape(-1))
 import pandas as pd
 val_calc = pd.DataFrame(
-    {'qu': qu_ids_vals_exprs[0],
-     'id': qu_ids_vals_exprs[1],
-     'given': qu_ids_vals_exprs[2],
+    {'qu': diff_data[0],
+     'id': diff_data[1],
+     'given': diff_data[2],
      'calculated': vals_calc})
 is_power = val_calc.qu.isin(('P','Q'))
 val_calc.loc[is_power, ['given', 'calculated']] *= 3
-Inode_sol = calculate_from_result(constraints).toarray().reshape(-1)
+Inode_sol = calculate_from_result(ed['Y_by_V'] + vstack(Inode)).toarray().reshape(-1)
 print(f'\nInode_sol:\n{Inode_sol}')
 # numeric
 get_injected_power = pfc.get_calc_injected_power_fn(

@@ -27,7 +27,7 @@ from operator import itemgetter
 from scipy.sparse import \
     csc_array, coo_matrix, bmat, diags, csc_matrix, vstack#, hstack
 from scipy.sparse.linalg import splu
-from injections import get_polynomial_coefficients
+from src.dssex.injections import get_polynomial_coefficients
 from src.dssex.util import get_tap_factors
 from src.dssex.util import get_results as util_get_results
 
@@ -477,7 +477,7 @@ def calculate_power_flow(
     max_iter: int
         limit of iteration count
     model: egrid.model.Model
-        
+        data of electric grid
     Vslack: array_like, complex
         vector of voltages at slacks, default model.slacks.V
     tappositions: array_like, int
