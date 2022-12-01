@@ -311,8 +311,8 @@ def _get_interpolated_injected_power_fn(vminsqr, injections, pq_factors=None):
             * active power P
             * reactive power Q"""
         Vinj_abs_sqr2 = np.array(Vinj_abs_sqr).reshape(-1)
-        Pres = np.array(P10)
-        Qres = np.array(Q10)
+        Pres = np.array(P10, dtype=float)
+        Qres = np.array(Q10, dtype=float)
         interpolate = np.array(Vinj_abs_sqr2 < vminsqr).reshape(-1)
         # original
         Vsqr_orig = Vinj_abs_sqr2[~interpolate]

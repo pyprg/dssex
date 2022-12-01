@@ -579,10 +579,18 @@ def get_scaling_data(
     factors = factor_step_groups.get_group(step)
     # a symbol for each factor
     symbols = create_symbols_with_ids(factors.id)
-    injections_factors = (
-        injection_factor_step_groups
-        .get_group(step)
-        .sort_values(by='index_of_injection'))
+    try:
+        injections_factors = (
+            injection_factor_step_groups
+            .get_group(step)
+            .sort_values(by='index_of_injection'))
+    except KeyError as e:
+        injections_factors = pd.DataFrame(
+            [],
+            columns=[
+                'step', 'injid', 'id_p', 'id_q', 
+                'kp', 'kq', 'index_of_injection'])
+        pass
     values = _get_values_of_symbols(factors, k_prev)
     symbols_values = partial(_select_type, [symbols, values])
     factors_var = factors[factors.type=='var']
@@ -600,7 +608,8 @@ def get_scaling_data(
         # kp/kq used in expression building
         #   (columns of injections_factors.kp/kq store an index)
         kpq=casadi.horzcat(
-            symbols[injections_factors.kp], symbols[injections_factors.kq]),
+            symbols[injections_factors.kp].reshape((-1,1)), 
+            symbols[injections_factors.kq].reshape((-1,1))),
         # kvars, variables for solver preparation
         kvars=symbols_of_vars,
         # initial values, argument in solver call
@@ -1074,11 +1083,16 @@ def _current_into_injection(
     Qip_ = casadi.vcat(
         [(casadi.SX(cpq[row_index,:,1].reshape(1,-1)) @ V_321[:,row_index])
          for row_index in range(V_321.size2())])
-    Pip = Pip_ * PQscaled[:,0]
-    Qip = Qip_ * PQscaled[:,1]
-    # current according to given load curve
-    I_orig = _calculate_injected_current(
-        Vinj[:,:2], Vinj_abs_sqr, Exp_v, PQscaled)
+    if PQscaled.size1():
+        Pip = Pip_ * PQscaled[:,0]
+        Qip = Qip_ * PQscaled[:,1]
+        # current according to given load curve
+        I_orig = _calculate_injected_current(
+            Vinj[:,:2], Vinj_abs_sqr, Exp_v, PQscaled)
+    else:
+        Pip = casadi.SX(0,1)
+        Qip = casadi.SX(0,1)
+        I_orig = casadi.SX(0,2)
     # interpolated current
     calculate = _EPSILON < Vinj_abs_sqr
     Vre = Vinj[:, 0]

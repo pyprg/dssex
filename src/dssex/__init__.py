@@ -24,7 +24,7 @@ from .estim import calculate
 
 DEFAULT_NETWORK = """
         n0<-------------cable------------>n1--((~)) motor
-         slack=True      y_mn=1e3-1e3j               P10=42"""
+          slack=True      y_mn=1e3-1e3j               P10=42"""
 
 def calculate_power_flow(*args):
     """Calculates the power flow of given network model.
@@ -33,7 +33,7 @@ def calculate_power_flow(*args):
     (the default input if no args are given)
     ::
         n0<-------------cable------------>n1--((~)) motor
-         slack=True      y_mn=1e3-1e3j               P10=42
+          slack=True      y_mn=1e3-1e3j               P10=42
 
     Parameters
     ----------
@@ -69,7 +69,7 @@ def print_power_flow(*args):
     (the default input if no args are given)
     ::
         n0<-------------cable------------>n1--((~)) motor
-         slack=True      y_mn=1e3-1e3j               P10=42
+          slack=True      y_mn=1e3-1e3j               P10=42
 
     Parameters
     ----------
@@ -79,7 +79,7 @@ def print_power_flow(*args):
             PQValue | IValue | Vvalue | Branchtaps | Defk | Link) | str"""
     from pandas import DataFrame
     if not args:
-       args = [DEFAULT_NETWORK]
+        args = [DEFAULT_NETWORK]
     res = calculate_power_flow(*args)
     for arg in args:
         if isinstance(arg, str):
