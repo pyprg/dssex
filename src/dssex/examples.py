@@ -175,11 +175,14 @@ import numpy as np
 
 mymodel = model00
 
-ed = get_estimation_data(mymodel, 2)
+ed = get_estimation_data(mymodel, count_of_steps=2)
 scaling_data, Iinj_data = ed['get_scaling_and_injection_data'](step=0)
 Inode = ed['inj_to_node'] @ Iinj_data[:,:2]
 # power flow calculation for initial voltages
 succ, Vnode_ri_vals = calculate_power_flow2(mymodel, ed, scaling_data, Inode)
+
+
+
 Vnode_cx_vals = ri_to_complex(Vnode_ri_vals)
 print(f'\nVnode_cx_vals (symbolic):\n{Vnode_cx_vals}')
 succ, vcx = pfc.calculate_power_flow(
@@ -191,8 +194,10 @@ diff_data = get_diff_expressions(mymodel, ed, Iinj_data, selector)
 #%%
 optimize = get_optimize(mymodel, ed)
 succ, x = optimize(Vnode_ri_vals, scaling_data, Inode, diff_data)
-print('\n',('SUCCESS' if succ else 'F A I L E D'))
 
+
+
+print('\n',('SUCCESS' if succ else 'F A I L E D'))
 
 if succ:
     count_of_v_ri = Vnode_ri_vals.size1()
@@ -209,38 +214,6 @@ if succ:
         0.8**2, mymodel.injections, pq_factors=k, loadcurve='interpolated')   
     result_data = pfc.calculate_electric_data(
         mymodel, get_injected_power, mymodel.branchtaps.position, voltages_cx) 
-#%%
-from src.dssex.injections import calculate_cubic_coefficients
-
-
-# x is constant -> cm is constant
-_vminsqr = 0.8**2
-
-Vinj_abs = np.array(
-    [[.8], 
-     [.7], 
-     [0.6], 
-     [0.5]])
-Vinj_abs_sqr = Vinj_abs * Vinj_abs
-Vinj_abs_cub = Vinj_abs_sqr * Vinj_abs
-Vvector = np.hstack([Vinj_abs_cub, Vinj_abs_sqr, Vinj_abs])
-
-
-exp = np.array(
-    [[0., 0.], 
-      [1., 1.], 
-      [2., 2.], 
-      [0., 0.]])
-
-# exp = np.array(
-#     [[0.], 
-#      [1.], 
-#      [2.], 
-#      [0.]])
-
-c = calculate_cubic_coefficients(_vminsqr, exp)
-f_pq = (np.expand_dims(Vvector,axis=1) @ c).reshape(exp.shape)
-print(f_pq)
 
 #%%
 from src.dssex.estim2 import (_current_into_injection_n)
