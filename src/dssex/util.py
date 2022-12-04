@@ -443,9 +443,9 @@ def eval_residual_current(
     Returns
     -------
     numpy.array
-        complex, residual of node current"""
+        complex, residual node current"""
     return (
-        get_residual_current_fn(model, get_injected_power)(Vnode)
+        get_residual_current_fn(model, get_injected_power, tappositions)(Vnode)
         .reshape(-1, 1))
 
 def max_ri(cx_array):

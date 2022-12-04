@@ -23,12 +23,13 @@ Created on Fri May  6 20:44:05 2022
 import numpy as np
 from numpy.linalg import norm
 from functools import partial
+from collections import namedtuple
 from operator import itemgetter
 from scipy.sparse import \
     csc_array, coo_matrix, bmat, diags, csc_matrix, vstack#, hstack
 from scipy.sparse.linalg import splu
 from src.dssex.injections import get_polynomial_coefficients
-from src.dssex.util import get_tap_factors
+from src.dssex.util import get_tap_factors, eval_residual_current
 from src.dssex.util import get_results as util_get_results
 
 # square of voltage magnitude, minimum value for load curve, 
@@ -559,3 +560,60 @@ def calculate_electric_data(model, power_fn, tappositions, Vnode):
     power_fn_ = (get_injected_power_fn(model.injections, loadcurve=power_fn)
                  if isinstance(power_fn, str) else power_fn)
     return util_get_results(model, power_fn_, tappositions, Vnode)
+
+Electric_data = namedtuple(
+    'Electric_data', 
+    'branch injection residual_node_current')
+Electric_data.__doc__ = """ Functions for calculating electric data for 
+branches, injections and nodes from power flow or estimation results.
+
+Parameters
+----------
+branch: function
+    ()->(pandas.DataFrame)
+injection: function
+    ()->(pandas.DataFrame)
+residual_node_current: function
+    ()->(numpy.array<complex>)"""
+
+def calculate_electric_data2(
+        model, voltages_cx, pq_factors, 
+        tappositions=None, vminsqr=_VMINSQR, loadcurve='interpolated'):
+    """Calculates and arranges electric data of injections and branches
+    for a given voltage vector which is typically the result of a power
+    flow calculation.
+    
+    Parameters
+    ----------
+    model: egrid.model.Model
+        model of grid for calculation
+    voltages_cx : array_like, complex
+        node voltage vector
+    pq_factors: numpy.array, float, (nx2)
+        factors for active and reactive power
+    tappositions : array_like, int, optional
+        Positions of taps. The default is model.branchtaps.position.
+    vminsqr : float, optional
+        Upper limit of interpolation, interpolates if |V|² < vminsqr. 
+        The default is _VMINSQR.
+    loadcurve : str, optional
+        'original'|'interpolated'|'square'. The default is 'interpolated'.
+
+    Returns
+    -------
+    Electric_data
+        * .branch, function ()->(pandas.DataFrame)
+        * .injection, function ()->(pandas.DataFrame)
+        * .residual_node_current, function ()->(numpy.array<complex>)"""
+    tappositions_ = (
+        model.branchtaps.position if tappositions is None else tappositions)
+    get_injected_power = get_calc_injected_power_fn(
+        vminsqr, model.injections, pq_factors, loadcurve)
+    result_data = calculate_electric_data(
+        model, get_injected_power, tappositions_, voltages_cx)
+    return Electric_data(
+        branch=lambda: result_data['branches'].set_index('id'),
+        injection=lambda: result_data['injections'].set_index('id'),
+        residual_node_current=lambda:eval_residual_current(
+            model, get_injected_power, Vnode=voltages_cx))
+

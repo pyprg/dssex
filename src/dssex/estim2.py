@@ -2063,7 +2063,7 @@ def get_diff_expressions(model, v_syms_gb_ex, ipqv, selectors):
             _ids.extend(ids)
             _vals.extend(vals)
             _exprs = casadi.vertcat(_exprs, exprs)
-    return _selectors, _ids, _vals, _exprs
+    return _selectors, _ids, casadi.SX(_vals), _exprs
 
 def get_node_values(index_of_node, Vnode_ri):
     """Returns expression of absolute voltages for addressed nodes.
@@ -2293,10 +2293,116 @@ def get_calculate_from_result(model, ed, scaling_data, x):
          casadi.vertcat(np.real(Vslacks_neg), np.imag(Vslacks_neg)),
          model.branchtaps.position))
 
+# def get_estimated_values(model, scaling_data, x, vminsqr=_VMINSQR):
+#     voltages_ri, k = casadi.vertsplit(x, 2*model.shape_of_Y[0])
+#     voltages_cx = ri_to_complex(voltages_ri.toarray())
+#     get_injected_power = pfc.get_calc_injected_power_fn(
+#         _VMINSQR, 
+#         model.injections, 
+#         pq_factors=get_k(scaling_data, k), 
+#         loadcurve='interpolated')
+#     result_data = pfc.calculate_electric_data(
+#         model, get_injected_power, model.branchtaps.position, voltages_cx)
 
+def prep_estimate(model, selectors, count_of_steps=1):
+    """Prepares data for function estimate.
+    
+    Parameters
+    ----------
+    model: egrid.model.Model
+        data of electric grid
+    selectors: str
+        string of characters 'I'|'P'|'Q'
+        addresses current magnitude, active power or reactive power,
+        case insensitiv, other characters are ignored
+    count_of_steps : int
+        Number of estimation steps. The default is 1.
 
+    Returns
+    -------
+    model: egrid.model.Model
+        data of electric grid
+    scaling_data: Scalingdata
+        * .kvars, casadi.SX, column vector, symbols for variables 
+          of scaling factors
+        * .kconsts, casadi.SX, column vector, symbols for constants 
+          of scaling factors
+        * .values_of_vars, casadi.DM, column vector, initial values 
+          for kvars
+        * .values_of_consts, casadi.DM, column vector, values for consts
+    estimation_data: dict
+        estimation data
+        * 'Vnode_syms', casadi.SX (shape n,2)
+        * 'Vslack_syms', casadi.SX (shape n,2)
+        * 'position_syms', casadi.SX (shape n,1)
+    diff_data: tuple
+        table, four column vectors
+        * selectors, list of string
+        * id_of_batch, list of string
+        * value, casadi.DM, vector (shape n,1)
+        * expression, casadi.SX, vector (shape n,1)
+    Vnode_ri_ini: array_like (shape 2n,1)
+        initial node voltages separated real and imaginary values
+    Inode: casadi.SX (shape n,2)
+        * Inode[:,0] - Ire, real part of current injected into node
+        * Inode[:,1] - Iim, imaginary part of current injected into node"""
+    ed = get_estimation_data(model, count_of_steps)
+    scaling_data, Iinj_data = ed['get_scaling_and_injection_data'](step=0)
+    Inode = ed['inj_to_node'] @ Iinj_data[:,:2]
+    # power flow calculation for initial voltages
+    succ, Vnode_ri_ini = calculate_power_flow2(model, ed, scaling_data, Inode)
+    diff_data = get_diff_expressions(model, ed, Iinj_data, selectors)
+    return model, scaling_data, ed, diff_data, Vnode_ri_ini, Inode
 
+def estimate(
+    model, scaling_data, estimation_data, diff_data, Vnode_ri_ini, Inode_inj):
+    """Optimization and a little post-processing.
 
+    Parameters
+    ----------
+    model: egrid.model.Model
+        data of electric grid
+    scaling_data: Scalingdata
+        * .kvars, casadi.SX, column vector, symbols for variables 
+          of scaling factors
+        * .kconsts, casadi.SX, column vector, symbols for constants 
+          of scaling factors
+        * .values_of_vars, casadi.DM, column vector, initial values 
+          for kvars
+        * .values_of_consts, casadi.DM, column vector, values for consts
+    estimation_data: dict
+        estimation data
+        * 'Vnode_syms', casadi.SX (shape n,2)
+        * 'Vslack_syms', casadi.SX (shape n,2)
+        * 'position_syms', casadi.SX (shape n,1)
+    diff_data: tuple
+        table, four column vectors
+        * selectors, list of string
+        * id_of_batch, list of string
+        * value, casadi.DM, vector (shape n,1)
+        * expression, casadi.SX, vector (shape n,1)
+    Vnode_ri_ini: array_like (shape 2n,1)
+        initial node voltages separated real and imaginary values
+    Inode: casadi.SX (shape n,2)
+        * Inode[:,0] - Ire, real part of current injected into node
+        * Inode[:,1] - Iim, imaginary part of current injected into node
+
+    Returns
+    -------
+    succ : bool
+        success?
+    voltages_cx : numpy.array, complex (shape n,1)
+        calculated complex node voltages
+    pq_factors : numpy.array, float (shape m,2)
+        scaling factors for injections"""
+    optimize = get_optimize(model, estimation_data)
+    succ, x = optimize(Vnode_ri_ini, scaling_data, Inode_inj, diff_data)
+    # result processing
+    voltages_ri, k = casadi.vertsplit(x, 2*model.shape_of_Y[0])
+    voltages_cx = ri_to_complex(voltages_ri.toarray())
+    pq_factors = get_k(scaling_data, k)
+    return succ, voltages_cx, pq_factors
+    
 
 
 
