@@ -20,7 +20,6 @@ Created on Wed Nov 30 13:04:16 2022
 @author: pyprg
 """
 import unittest
-import casadi
 import numpy as np
 import egrid.builder as grid
 import src.dssex.util as util  # eval_residual_current
@@ -35,7 +34,6 @@ import src.dssex.estim2 as estim
 #   towards a linear load curve which is 0 when V=0; P(V=0)=0, Q(V=0)=0
 _VMINSQR = 0.8**2
 get_injected_power_fn = partial(pfc.get_calc_injected_power_fn, _VMINSQR)
-
 
 # node: 0               1
 #
@@ -214,7 +212,7 @@ class Power_flow_calculation_taps(unittest.TestCase):
             1e-12, 
             'neutral tap position does not affect voltage')
 
-    def test_calculate_power_flow_02(self):
+    def test_calculate_power_flow_01(self):
         """Power flow calculation with two branches.
         10 percent voltage increase by selected tap."""
         model0 = make_model(
@@ -264,7 +262,7 @@ class Power_flow_calculation_taps(unittest.TestCase):
             delta=1e-12,
             msg='voltage differs by 10 percent')
 
-    def test_calculate_power_flow_03(self):
+    def test_calculate_power_flow_02(self):
         """Power flow calculation with two branches.
         10 percent voltage decrease by selected tap."""
         model0 = make_model(
@@ -384,7 +382,7 @@ class Estimation(unittest.TestCase):
             ed.branch().loc['line_0'].Q0_pu,
             given_values.loc['PQ_line_0'].Q,
             delta=1e-10,
-            msg='estimated reactive power equals given active power')
+            msg='estimated reactive power equals given reactive power')
     
     def test_scale_pq_meet_i(self):
         """Scale active and reactive power of consumer in order to meet the
@@ -414,6 +412,34 @@ class Estimation(unittest.TestCase):
             given_values.loc['I_line_0'].I,
             delta=1e-12,
             msg='estimated electric current equals given electric current')
+    
+    def test_scale_q_meet_v(self):
+        """Scale reactive power of consumer in order to meet the
+        given voltage V (measurement or setpoint).
+        Given V is at node 2 ('n_2')."""
+        model = make_model(
+            grid0,
+            # give magnitude of voltage at n_2
+            grid.Vvalue('n_2', V=1.02),
+            # scaling factor kq for reactive power Q of consumer
+            grid.Defk('kq'),
+            grid.Link(objid='consumer', part='q', id='kq'))
+        succ, *V_k = estim.estimate(
+            *estim.prep_estimate(model, selectors='V')) 
+        self.assertTrue(succ, 'estimation succeeds')
+        ed = pfc.calculate_electric_data2(model, *V_k)
+        self.assertAlmostEqual(
+            # exclude slacks
+            np.max(np.abs(ed.residual_node_current()[model.count_of_slacks:])), 
+            0,
+            delta=1e-8,
+            msg='Inode is almost 0')
+        given_V_at_node = model.vvalues.set_index('id_of_node').loc['n_2']
+        self.assertAlmostEqual(
+            np.abs(V_k[0][given_V_at_node.index_of_node]),
+            given_V_at_node.V,
+            delta=1e-12,
+            msg='estimated voltage equals given voltage')
 
 if __name__ == '__main__':
     unittest.main()

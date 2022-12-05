@@ -713,7 +713,7 @@ def make_get_scaling_data(model, count_of_steps=1):
         _groupby_step(injection_factors))
 
 #
-# injected node current
+# injected power / current
 #
 
 # numeric
@@ -746,10 +746,6 @@ def _interpolate_injected_power_n(Vinj_abs_sqr, Exp_v, PQ, vminsqr):
     
     Parameters
     ----------
-    Vri: numpy.array, shape n,2
-        voltage at terminals of injections
-        Vri[:,0] - real part of voltage
-        Vri[:,1] - imaginary part of voltage
     Vinj_abs_sqr: numpy.array, shape n,1
         square of voltage magnitude at terminals of injections
         Vri[:,0]**2 + Vri[:,1]**2
@@ -757,6 +753,8 @@ def _interpolate_injected_power_n(Vinj_abs_sqr, Exp_v, PQ, vminsqr):
         voltage exponents of active and or reactive power
     PQ: numpy.array, shape n,1 or n,2
         active and or reactive power
+    vminsqr: float
+        square of voltage, upper limit of interpolation interval [0...vminsqr]
     
     Returns
     -------
@@ -779,9 +777,9 @@ def _interpolate_injected_power_n(Vinj_abs_sqr, Exp_v, PQ, vminsqr):
 
 def _calculated_injected_power_n(
         injections, node_to_inj, Vnode, kpq, vminsqr=_VMINSQR):
-    """Numerically calculates magnitudes of injected currents flowing 
+    """Numerically calculates magnitudes of injected power flowing 
     into injections.
-    This function is intended for calculation of currents for selected
+    This function is intended for calculation of power for selected
     injections only.
     
     Parameters
@@ -805,7 +803,7 @@ def _calculated_injected_power_n(
         vector of injection scaling factors for active and reactive power,
         factors for all injections of model
     vminsqr: float
-        square of voltage, upper limit interpolation interval [0...vminsqr]
+        square of voltage, upper limit of interpolation interval [0...vminsqr]
     
     Returns
     -------
@@ -815,22 +813,21 @@ def _calculated_injected_power_n(
     # voltages at injections
     count_of_injections = len(injections)
     idx_of_injections = injections.index
-    Iri = np.ndarray(shape=(count_of_injections,2), dtype=float)
+    PQ_inj = np.ndarray(shape=(count_of_injections,2), dtype=float)
     Vinj = node_to_inj[idx_of_injections] @ Vnode
     Vabs_sqr = Vinj[:, 2]
+    interpolate = Vabs_sqr < vminsqr
     # assumes P10 and Q10 are sums of 3 per-phase-values
     PQscaled = (
-        kpq[idx_of_injections] 
-        * (injections[['P10', 'Q10']].to_numpy() / 3))
+        kpq[idx_of_injections] * (injections[['P10', 'Q10']].to_numpy() / 3))
     Exp_v = injections[['Exp_v_p', 'Exp_v_p']].to_numpy()
-    interpolate = Vabs_sqr < vminsqr
+    PQ_inj[~interpolate] = _calculate_injected_power_n(
+        Vabs_sqr[~interpolate], Exp_v[~interpolate], PQscaled[~interpolate])
     # interpolated power
     Vabs_sqr_ip = Vabs_sqr[interpolate]
-    PQinj_ip = _interpolate_injected_power_n(
+    PQ_inj[interpolate] = _interpolate_injected_power_n(
         Vabs_sqr_ip, Exp_v[interpolate], PQscaled[interpolate], vminsqr)
-
-    #except
-
+    return PQ_inj
 
 def _calculate_injected_current_n(Vri, Vabs_sqr, Exp_v, PQscaled):
     """Calculates values of injected current.
@@ -863,7 +860,8 @@ def _calculate_injected_current_n(Vri, Vabs_sqr, Exp_v, PQscaled):
     return np.hstack([Ire, Iim])
 
 def _interpolate_injected_current_n(Vinj, Vabs_sqr, PQinj):
-    """Interpolates values of injected current in an interval.
+    """Interpolates values of injected current in a voltage interval,
+    S = f(|V|).
     
     Parameters
     ----------
@@ -2014,57 +2012,6 @@ def get_given_values_expressions(model, v_syms_gb_ex, ipqv, selector):
         vals, # given values
         exprs if exprs.size1() else casadi.SX(0,1))
 
-def get_diff_expressions(model, v_syms_gb_ex, ipqv, selectors):
-    """Creates a vector (casadi.SX, shape n,1) expressing the difference
-    between measured and calculated values for absolute current, active power
-    or reactive power. The expressions are based on the batch definitions.
-    Intended use is building the objective.
-    
-    Parameters
-    ----------
-    model: egrid.model.Model
-        model of electric network for calculation
-    v_syms_gb_ex: dict
-        * 'Vnode_syms', casadi.SX, vectors, symbols of node voltages
-        * 'position_syms', casadi.SX, vector, symbols of tap positions
-        * 'gb_mn_tot', casadi.SX, vectors, conductance and susceptance of
-          branches connected to terminals
-    ipqv: casadi.SX (n,8)
-        data of P, Q, I, and V at injections
-        [:,0] Ire, current, real part
-        [:,1] Iim, current, imaginary part
-        [:,2] Pscaled, active power P10 multiplied by scaling factor kp
-        [:,3] Qscaled, reactive power Q10 multiplied by scaling factor kq
-        [:,4] Pip, active power interpolated
-        [:,5] Qip, reactive power interpolated
-        [:,6] Vabs_sqr, square of voltage magnitude
-        [:,7] interpolate?
-    selectors: str
-        string of characters 'I'|'P'|'Q'
-        addresses current magnitude, active power or reactive power,
-        case insensitiv, other characters are ignored
-    
-    Returns
-    -------
-    tuple
-        * selectors, list of string
-        * id_of_batch, list of string
-        * value, casadi.DM, vector (shape n,1)
-        * expression, casadi.SX, vector (shape n,1)"""
-    _selectors = []
-    _ids = []
-    _vals = []
-    _exprs = casadi.SX(0, 1)
-    for sel in selectors.upper():
-        if sel in 'IPQ':
-            ids, vals, exprs = get_given_values_expressions(
-                model, v_syms_gb_ex, ipqv, sel)
-            _selectors.extend([sel]*len(ids))
-            _ids.extend(ids)
-            _vals.extend(vals)
-            _exprs = casadi.vertcat(_exprs, exprs)
-    return _selectors, _ids, casadi.SX(_vals), _exprs
-
 def get_node_values(index_of_node, Vnode_ri):
     """Returns expression of absolute voltages for addressed nodes.
 
@@ -2099,7 +2046,9 @@ def value_of_voltages(vvalues):
     -------
     pandas.DataFrame
         * V, float, absolute value of voltage"""
-    return vvalues[['V', 'index_of_node']].groupby('index_of_node').mean()
+    groups =  (
+        vvalues[['V', 'index_of_node', 'id_of_node']].groupby('index_of_node'))
+    return pd.concat([groups['V'].mean(), groups['id_of_node'].min()], axis=1)
 
 # def voltage_at_node(index_of_node, Vnode):
 #     """Returns expression of absolute voltage at addressed nodes.
@@ -2118,6 +2067,66 @@ def value_of_voltages(vvalues):
 #         Vnode[index_of_node, 2].sqrt()
 #         if len(index_of_node)
 #         else casadi.SX(0,1))
+
+def get_diff_expressions(model, v_syms_gb_ex, ipqv, selectors):
+    """Creates a vector (casadi.SX, shape n,1) expressing the difference
+    between measured and calculated values for absolute current, active power
+    or reactive power and voltage. The expressions are based on the batch 
+    definitions or referenced node. Intended use is building the objective.
+    
+    Parameters
+    ----------
+    model: egrid.model.Model
+        model of electric network for calculation
+    v_syms_gb_ex: dict
+        * 'Vnode_syms', casadi.SX, vectors, symbols of node voltages
+        * 'position_syms', casadi.SX, vector, symbols of tap positions
+        * 'gb_mn_tot', casadi.SX, vectors, conductance and susceptance of
+          branches connected to terminals
+    ipqv: casadi.SX (n,8)
+        data of P, Q, I, and V at injections
+        [:,0] Ire, current, real part
+        [:,1] Iim, current, imaginary part
+        [:,2] Pscaled, active power P10 multiplied by scaling factor kp
+        [:,3] Qscaled, reactive power Q10 multiplied by scaling factor kq
+        [:,4] Pip, active power interpolated
+        [:,5] Qip, reactive power interpolated
+        [:,6] Vabs_sqr, square of voltage magnitude
+        [:,7] interpolate?
+    selectors: str
+        string of characters 'I'|'P'|'Q'|'V'
+        addresses current magnitude, active power or reactive power,
+        case insensitiv, other characters are ignored
+    
+    Returns
+    -------
+    tuple
+        * selectors, list of string
+        * id_of_batch, list of string
+        * value, casadi.DM, vector (shape n,1)
+        * expression, casadi.SX, vector (shape n,1)"""
+    _selectors = []
+    _ids = []
+    _vals = []
+    _exprs = casadi.SX(0, 1)
+    for sel in selectors.upper():
+        if sel in 'IPQ':
+            ids, vals, exprs = get_given_values_expressions(
+                model, v_syms_gb_ex, ipqv, sel)
+            _selectors.extend([sel]*len(ids))
+            _ids.extend(ids)
+            _vals.extend(vals)
+            _exprs = casadi.vertcat(_exprs, exprs)
+        if sel=='V':
+            vvals = value_of_voltages(model.vvalues)
+            count_of_values = len(vvals)
+            _selectors.extend([sel]*count_of_values)
+            _ids.extend(vvals.id_of_node)
+            _vals.extend(vvals.V)
+            _exprs = casadi.vertcat(
+                _exprs, 
+                v_syms_gb_ex['Vnode_syms'][vvals.index,2].sqrt())
+    return _selectors, _ids, casadi.SX(_vals), _exprs
 
 def get_optimize(model, ed):
     """Preapares the optimization function.
@@ -2293,16 +2302,9 @@ def get_calculate_from_result(model, ed, scaling_data, x):
          casadi.vertcat(np.real(Vslacks_neg), np.imag(Vslacks_neg)),
          model.branchtaps.position))
 
-# def get_estimated_values(model, scaling_data, x, vminsqr=_VMINSQR):
-#     voltages_ri, k = casadi.vertsplit(x, 2*model.shape_of_Y[0])
-#     voltages_cx = ri_to_complex(voltages_ri.toarray())
-#     get_injected_power = pfc.get_calc_injected_power_fn(
-#         _VMINSQR, 
-#         model.injections, 
-#         pq_factors=get_k(scaling_data, k), 
-#         loadcurve='interpolated')
-#     result_data = pfc.calculate_electric_data(
-#         model, get_injected_power, model.branchtaps.position, voltages_cx)
+#
+# convenience functions of estimation for easier handling 
+#
 
 def prep_estimate(model, selectors, count_of_steps=1):
     """Prepares data for function estimate.
@@ -2312,7 +2314,7 @@ def prep_estimate(model, selectors, count_of_steps=1):
     model: egrid.model.Model
         data of electric grid
     selectors: str
-        string of characters 'I'|'P'|'Q'
+        string of characters 'I'|'P'|'Q'|'V'
         addresses current magnitude, active power or reactive power,
         case insensitiv, other characters are ignored
     count_of_steps : int
@@ -2402,10 +2404,3 @@ def estimate(
     voltages_cx = ri_to_complex(voltages_ri.toarray())
     pq_factors = get_k(scaling_data, k)
     return succ, voltages_cx, pq_factors
-    
-
-
-
-
-
-

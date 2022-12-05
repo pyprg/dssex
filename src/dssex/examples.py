@@ -37,57 +37,6 @@ import src.dssex.pfcnum as pfc
 #       |               |               |
 #                                      \|/ consumer
 #                                       '
-# model_entities = [
-#     Slacknode(id_of_node='n_0', V=1.+0.j),
-#     Branch(
-#         id='line_0',
-#         id_of_node_A='n_0',
-#         id_of_node_B='n_1',
-#         y_lo=1e3-1e3j,
-#         y_tr=1e-6+1e-6j),
-#     Branch(
-#         id='line_1',
-#         id_of_node_A='n_1',
-#         id_of_node_B='n_2',
-#         y_lo=1e3-1e3j,
-#         y_tr=1e-6+1e-6j),
-#     Branchtaps(
-#         id='tap_line1',
-#         id_of_node='n_1',
-#         id_of_branch='line_1',
-#         Vstep=.1/16,
-#         positionmin=-16,
-#         positionneutral=0,
-#         positionmax=16,
-#         position=0),
-#     Injection(
-#         id='consumer_0',
-#         id_of_node='n_2',
-#         P10=30.0,
-#         Q10=10.0,
-#         Exp_v_p=2.0,
-#         Exp_v_q=2.0),
-#     # define a scaling factor
-#     Defk(id='kp'),
-#     # link the factor to the loads
-#     Link(
-#         objid=('consumer_0'), 
-#         part='p', 
-#         id='kp'),
-#     PValue(
-#         id_of_batch='P_line_0',
-#         P=42.0),
-#     Output(
-#         id_of_batch='P_line_0',
-#         id_of_device='line_0',
-#         id_of_node='n_0'),
-#     PValue(
-#         id_of_batch='P_line_1',
-#         P=42.0),
-#     Output(
-#         id_of_batch='P_line_1',
-#         id_of_device='line_1',
-#         id_of_node='n_1')]
 
 model_entities = [
     Slacknode(id_of_node='n_0', V=1.+0.j),
@@ -188,10 +137,8 @@ print(f'\nVnode_cx_vals (symbolic):\n{Vnode_cx_vals}')
 succ, vcx = pfc.calculate_power_flow(
     1e-12, 10, mymodel, loadcurve='interpolated')
 print(f'\nvcx (numeric):\n{vcx}')
-#%%
 selector = 'P'
 diff_data = get_diff_expressions(mymodel, ed, Iinj_data, selector)
-#%%
 optimize = get_optimize(mymodel, ed)
 succ, x = optimize(Vnode_ri_vals, scaling_data, Inode, diff_data)
 
@@ -301,29 +248,49 @@ def create_gb_of_terminals_n(branchterminals, branchtaps, positions=None):
         gb_mn_tot[:,2] - g_tot
         gb_mn_tot[:,3] - b_tot"""
     index_of_branch_terminals = branchterminals.index
-    taps_at_term = branchtaps.index_of_term.isin(index_of_branch_terminals)
-    idx_of_term = branchtaps[taps_at_term].index_of_term.to_numpy()
-    positions_ = branchtaps.position if positions is None else positions
-    flo = calculate_factors_of_positions_n(branchtaps, positions_)
-    taps_at_other_term = (
+    is_taps_at_term = branchtaps.index_of_term.isin(
+        index_of_branch_terminals)
+    taps_at_term = branchtaps[is_taps_at_term]
+    is_term_at_tap = index_of_branch_terminals.isin(
+        taps_at_term.index_of_term)
+    is_taps_at_other_term = (
         branchtaps.index_of_other_term.isin(index_of_branch_terminals))
-    idx_of_other_term = (
-        branchtaps[taps_at_other_term].index_of_other_term.to_numpy())
+    taps_at_other_term = branchtaps[is_taps_at_other_term]
+    is_other_term_at_tap = index_of_branch_terminals.isin(
+        taps_at_other_term.index_of_other_term)
+    positions_ = branchtaps.position if positions is None else positions
+    f_at_term = calculate_factors_of_positions_n(
+        taps_at_term, positions_[is_taps_at_term])
+    f_at_other_term = calculate_factors_of_positions_n(
+        taps_at_other_term, positions_[is_taps_at_other_term])
     # g_lo, b_lo, g_trans, b_trans
-    gb_mn_mm = _create_gb_of_terminals_n(branchterminals)
-    flo_at_terms = flo[taps_at_term]
-    # longitudinal and transversal
-    gb_mn_mm[idx_of_term] *= flo_at_terms
-    # transversal
-    gb_mn_mm[idx_of_term, 2:] *= flo_at_terms
-    # longitudinal
-    gb_mn_mm[idx_of_other_term, :2] *= flo[taps_at_other_term]
+    gb_mn_tot = _create_gb_of_terminals_n(branchterminals)
     # gb_mn_mm -> gb_mn_tot
-    gb_mn_mm[:, 2:] += gb_mn_mm[:, :2] 
-    return gb_mn_mm
+    gb_mn_tot[:, 2:] += gb_mn_tot[:, :2] 
+    if f_at_term.size:
+        # diagonal and off-diagonal
+        gb_mn_tot[is_term_at_tap] *= f_at_term
+        # diagonal
+        gb_mn_tot[is_term_at_tap, 2:] *= f_at_term
+    if f_at_other_term.size:
+        # off-diagonal
+        gb_mn_tot[is_other_term_at_tap, :2] *= f_at_other_term
+    return gb_mn_tot
 
-gb_mn_tot = create_gb_of_terminals_n(
-    mymodel.branchterminals, mymodel.branchtaps)
+mybranchterms = mymodel.branchterminals#.loc[[3],:]
+
+
+voltages_ri2 = np.hstack(np.vsplit(voltages_ri1,2))
+
+idx_of_node = mybranchterms.index_of_node
+idx_of_other_node = mybranchterms.index_of_other_node
+vnode_ri1 = np.vstack(np.hsplit(voltages_ri2[idx_of_node],2))
+vother_node_ri1 = np.vstack(np.hsplit(voltages_ri2[idx_of_other_node],2))
+
+import pandas as pd
+notaps = pd.DataFrame([],columns=mymodel.branchtaps.columns)
+gb_mn_tot = create_gb_of_terminals_n(mybranchterms, mymodel.branchtaps)
+print(gb_mn_tot)
 #%%
 # calculate residual node current for solution of optimization
 # symbolic
