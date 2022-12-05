@@ -275,22 +275,54 @@ def create_gb_of_terminals_n(branchterminals, branchtaps, positions=None):
     if f_at_other_term.size:
         # off-diagonal
         gb_mn_tot[is_other_term_at_tap, :2] *= f_at_other_term
-    return gb_mn_tot
+    return gb_mn_tot.copy()
+
+def get_branch_flow_values(
+        branchtaps, positions, vnode_ri1, branchterminals):
+    """Calculates current, active and reactive power flow into branch from
+    given terminals. 'branchterminals' is a subset, all other arguments are
+    complete.
+
+    Parameters
+    ----------
+    branchtaps: pandas.DataFrame
+        data of taps
+    positions: array_like<int>
+        tap positions, accepts None
+    vnode_ri1: numpy.array<float>, (shape 2n,1)
+        voltages at nodes, real part than imaginary part
+    branchterminals: pandas.DataFrame
+        data of terminals
+        * .index_of_node
+        * .index_of_other_node
+
+    Returns
+    -------
+    numpy.array<float>, (shape m,3)
+        * [:,0] I
+        * [:,1] P
+        * [:,2] Q"""
+    gb_mn_tot = create_gb_of_terminals_n(
+        branchterminals, branchtaps, positions)
+    # reverts columns to y_tot, y_mn
+    y_mn_tot = gb_mn_tot.view(dtype=np.complex128)[:,np.newaxis,::-1]
+    # complex voltage
+    voltages_ri2 = np.hstack(np.vsplit(voltages_ri1,2))
+    voltages_cx = voltages_ri2.view(dtype=np.complex128)
+    # voltages per node
+    Vcx_node = voltages_cx[branchterminals.index_of_node]
+    Vcx_other_node = voltages_cx[branchterminals.index_of_other_node]
+    Vcx = np.hstack([Vcx_node, -Vcx_other_node]).reshape(-1,2,1)
+    # current into terminal (branch)
+    Icx = (y_mn_tot @ Vcx).reshape(-1,1)
+    Sterm = Vcx_node * Icx.conj()
+    return np.hstack([np.abs(Icx), Sterm.view(dtype=float)])
 
 mybranchterms = mymodel.branchterminals#.loc[[3],:]
+flow = get_branch_flow_values(
+         mymodel.branchtaps, None, voltages_ri1, mymodel.branchterminals)
 
-
-voltages_ri2 = np.hstack(np.vsplit(voltages_ri1,2))
-
-idx_of_node = mybranchterms.index_of_node
-idx_of_other_node = mybranchterms.index_of_other_node
-vnode_ri1 = np.vstack(np.hsplit(voltages_ri2[idx_of_node],2))
-vother_node_ri1 = np.vstack(np.hsplit(voltages_ri2[idx_of_other_node],2))
-
-import pandas as pd
-notaps = pd.DataFrame([],columns=mymodel.branchtaps.columns)
-gb_mn_tot = create_gb_of_terminals_n(mybranchterms, mymodel.branchtaps)
-print(gb_mn_tot)
+print(flow)
 #%%
 # calculate residual node current for solution of optimization
 # symbolic
