@@ -21,6 +21,7 @@ Created on Wed Nov 30 13:04:16 2022
 """
 import unittest
 import numpy as np
+import pandas as pd
 import egrid.builder as grid
 import src.dssex.util as util  # eval_residual_current
 import src.dssex.pfcnum as pfc # get_calc_injected_power_fn
@@ -313,7 +314,7 @@ class Power_flow_calculation_taps(unittest.TestCase):
             msg='voltage differs by 10 percent')
 
 # node: 0               1               2
-#
+
 #       |     line_0    |     line_1    |
 #       +-----=====-----+-----=====-----+
 #       |               |               |
@@ -330,8 +331,8 @@ class Estimation(unittest.TestCase):
     
     def test_scale_p_meet_p(self):
         """Scale active power of consumer in order to meet the
-        given active power P (measurement or setpoint).
-        Given P is at n_0/line_0."""
+        given active power P at a terminal of a branch (measurement or 
+        setpoint). Given P is assigned to n_0/line_0."""
         model = make_model(
             grid0,
             # give value of active power P at n_0/line_0
@@ -356,10 +357,38 @@ class Estimation(unittest.TestCase):
             delta=1e-12,
             msg='estimated active power equals given active power')
     
+    def test_scale_p_meet_p2(self):
+        """Scale active power of consumer in order to meet the
+        given active power P at a terminal of an injection (measurement or 
+        setpoint). Given P is assigned to consumer."""
+        model = make_model(
+            grid0,
+            # give value of active power P at n_0/line_0
+            grid.PValue('PQ_consumer', P=40.0),
+            grid.Output('PQ_consumer', id_of_device='consumer'),
+            # scaling factor kp for active power P of consumer
+            grid.Defk('kp'),
+            grid.Link(objid='consumer', part='p', id='kp'))
+        succ, *V_k = estim.estimate(*estim.prep_estimate(model, selectors='P')) 
+        self.assertTrue(succ, 'estimation succeeds')
+        ed = pfc.calculate_electric_data2(model, *V_k)
+        self.assertAlmostEqual(
+            # exclude slacks
+            np.max(np.abs(ed.residual_node_current()[model.count_of_slacks:])), 
+            0,
+            delta=1e-8,
+            msg='Inode is almost 0')
+        given_values = model.pvalues.set_index('id_of_batch')
+        self.assertAlmostEqual(
+            ed.injection().loc['consumer'].P_pu,
+            given_values.loc['PQ_consumer'].P,
+            delta=1e-8,
+            msg='estimated active power equals given active power')
+    
     def test_scale_q_meet_q(self):
         """Scale reactive power of consumer in order to meet the
-        given reactive power Q (measurement or setpoint).
-        Given Q is at n_0/line_0."""
+        given reactive power Q at a terminal of a branch (measurement or 
+        setpoint). Given Q is assigned to n_0/line_0."""
         model = make_model(
             grid0,
             # give value of active power P at n_0/line_0
@@ -384,13 +413,41 @@ class Estimation(unittest.TestCase):
             delta=1e-10,
             msg='estimated reactive power equals given reactive power')
     
-    def test_scale_pq_meet_i(self):
-        """Scale active and reactive power of consumer in order to meet the
-        given current I (measurement or setpoint).
-        Given I is at n_0/line_0."""
+    def test_scale_q_meet_q2(self):
+        """Scale reactive power of consumer in order to meet the
+        given reactive power Q at a terminal of an injection (measurement or 
+        setpoint). Given Q is assigned to consumer."""
         model = make_model(
             grid0,
             # give value of active power P at n_0/line_0
+            grid.QValue('PQ_consumer', Q=40.0),
+            grid.Output('PQ_consumer', id_of_device='consumer'),
+            # scaling factor kq for reactive power Q of consumer
+            grid.Defk('kq'),
+            grid.Link(objid='consumer', part='q', id='kq'))
+        succ, *V_k = estim.estimate(*estim.prep_estimate(model, selectors='Q')) 
+        self.assertTrue(succ, 'estimation succeeds')
+        ed = pfc.calculate_electric_data2(model, *V_k)
+        self.assertAlmostEqual(
+            # exclude slacks
+            np.max(np.abs(ed.residual_node_current()[model.count_of_slacks:])), 
+            0,
+            delta=1e-8,
+            msg='Inode is almost 0')
+        given_values = model.qvalues.set_index('id_of_batch')
+        self.assertAlmostEqual(
+            ed.injection().loc['consumer'].Q_pu,
+            given_values.loc['PQ_consumer'].Q,
+            delta=1e-8,
+            msg='estimated reactive power equals given reactive power')
+    
+    def test_scale_pq_meet_i(self):
+        """Scale active and reactive power of consumer in order to meet the
+        given current I at a terminal of a branch (measurement or setpoint).
+        Given I is assigned to n_0/line_0."""
+        model = make_model(
+            grid0,
+            # give value of electric current I at n_0/line_0
             grid.IValue('I_line_0', I=40.0),
             grid.Output('I_line_0', id_of_device='line_0', id_of_node='n_0'),
             # scaling factor kpq for active/reactive power P/Q of consumer
@@ -413,10 +470,39 @@ class Estimation(unittest.TestCase):
             delta=1e-12,
             msg='estimated electric current equals given electric current')
     
+    def test_scale_pq_meet_i2(self):
+        """Scale active and reactive power of consumer in order to meet the
+        given current I at a terminal of an injection (measurement or setpoint).
+        Given I is assigned to consumer."""
+        model = make_model(
+            grid0,
+            # give value of active power P at n_0/line_0
+            grid.IValue('I_consumer', I=40.0),
+            grid.Output('I_consumer', id_of_device='consumer'),
+            # scaling factor kpq for active/reactive power P/Q of consumer
+            grid.Defk('kpq'),
+            grid.Link(objid='consumer', part='pq', id='kpq'))
+        succ, *V_k = estim.estimate(
+            *estim.prep_estimate(model, selectors='I')) 
+        self.assertTrue(succ, 'estimation succeeds')
+        ed = pfc.calculate_electric_data2(model, *V_k)
+        self.assertAlmostEqual(
+            # exclude slacks
+            np.max(np.abs(ed.residual_node_current()[model.count_of_slacks:])), 
+            0,
+            delta=1e-8,
+            msg='Inode is almost 0')
+        given_values = model.ivalues.set_index('id_of_batch')
+        self.assertAlmostEqual(
+            ed.injection().loc['consumer'].I_pu,
+            given_values.loc['I_consumer'].I,
+            delta=1e-8,
+            msg='estimated electric current equals given electric current')
+    
     def test_scale_q_meet_v(self):
         """Scale reactive power of consumer in order to meet the
         given voltage V (measurement or setpoint).
-        Given V is at node 2 ('n_2')."""
+        Given V is assigned to node 2 ('n_2')."""
         model = make_model(
             grid0,
             # give magnitude of voltage at n_2
@@ -440,6 +526,96 @@ class Estimation(unittest.TestCase):
             given_V_at_node.V,
             delta=1e-12,
             msg='estimated voltage equals given voltage')
+
+# node: 0               1               2
+#
+#       |     line_0    |     line_1    |
+#       +-----=====-----+-----=====-----+
+#       |               |               |
+#                       |              \|/ consumer_1
+#                       |               '
+#                       |
+# node:                 |               3
+#                       |
+#                       |     line_2    |
+#                       +-----=====-----+---------------+
+#                       |               |               |
+#                                      \|/ consumer_2  \|/ consumer_3
+#                                       '               '
+
+grid1 = (
+    grid.Slacknode('n_0', V=1.+0.j),
+    grid.Branch('line_0', 'n_0', 'n_1', y_lo=1e3-1e3j),
+    grid.Branch('line_1', 'n_1', 'n_2', y_lo=1e3-1e3j),
+    grid.Branch('line_2', 'n_1', 'n_3', y_lo=1e3-1e3j),
+    grid.Injection('consumer_1', 'n_2', P10=10.0, Q10=10.0),
+    grid.Injection('consumer_2', 'n_3', P10=20.0, Q10=15.0),
+    grid.Injection('consumer_3', 'n_3', P10=30.0, Q10=20.0))
+
+class Batch(unittest.TestCase):
+    
+    def test_ipq_single(self):
+        # prepare
+        i_batches = [
+            # give value of I, P, Q at n_0/line_0
+            grid.IValue('batch_0'),
+            grid.PValue('batch_0'),
+            grid.QValue('batch_0'),
+            grid.Output('batch_0', id_of_device='line_0', id_of_node='n_0'),
+            # give value of I, P, Q at consumer_1
+            grid.IValue('batch_1'),
+            grid.PValue('batch_1'),
+            grid.QValue('batch_1'),
+            grid.Output('batch_1', id_of_device='consumer_1')]
+        pq_factors = np.ones((3,2), dtype=float)
+        model = make_model(grid1, i_batches)
+        # calculate power flow
+        success, vnode_ri = estim.calculate_power_flow(
+            model, vminsqr=_VMINSQR)
+        vnode_ri2 = np.hstack(np.vsplit(vnode_ri.toarray(),2))
+        self.assertTrue(success, "calculate_power_flow shall succeed")
+        # check residual current
+        vnode_cx = estim.ri_to_complex(vnode_ri)
+        get_injected_power = get_injected_power_fn(
+            model.injections,
+            pq_factors=pq_factors,
+            loadcurve='interpolated')
+        Inode = util.eval_residual_current(
+            model, get_injected_power, Vnode=vnode_cx)
+        # without slack node, slack is at index 0
+        max_dev = norm(Inode[model.count_of_slacks:], np.inf)
+        self.assertLess(max_dev, 3e-8, 'residual node current is 0')
+        ed = pfc.calculate_electric_data2(model, vnode_cx, pq_factors)
+        # act
+        batch_values = estim.get_batch_values(
+            model, vnode_ri2, pq_factors, None, 'IPQV')
+        # test
+        df_batch = (
+            pd.DataFrame(
+                dict(zip(['Qu', 'id_of_batch', 'value'], batch_values)))
+            .set_index(['id_of_batch', 'Qu']))
+        for result_key, batch_key in \
+            [(('line_0', 'I0_pu'), ('batch_0', 'I')),
+              (('line_0', 'P0_pu'), ('batch_0', 'P')),
+              (('line_0', 'Q0_pu'), ('batch_0', 'Q'))]:
+            f = 3. if batch_key[1] in 'PQ' else 1.
+            self.assertAlmostEqual(
+                f * df_batch.loc[batch_key[0], batch_key[1]].value,
+                ed.branch().loc[result_key[0], result_key[1]],
+                delta=1e-12,
+                msg=f'{batch_key[1]} of batch {batch_key[0]} equals '
+                    f'{result_key[1]} of device {result_key[0]}')
+        for result_key, batch_key in \
+            [(('consumer_1', 'I_pu'), ('batch_1', 'I')),
+              (('consumer_1', 'P_pu'), ('batch_1', 'P')),
+              (('consumer_1', 'Q_pu'), ('batch_1', 'Q'))]:
+            f = 3. if batch_key[1] in 'PQ' else 1.
+            self.assertAlmostEqual(
+                f * df_batch.loc[batch_key[0], batch_key[1]].value,
+                ed.injection().loc[result_key[0], result_key[1]],
+                delta=1e-12,
+                msg=f'{batch_key[1]} of batch {batch_key[0]} equals '
+                    f'{result_key[1]} of device {result_key[0]}')
 
 if __name__ == '__main__':
     unittest.main()

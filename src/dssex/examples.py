@@ -61,7 +61,7 @@ model_entities = [
         positionmin=-16,
         positionneutral=0,
         positionmax=16,
-        position=-16),
+        position=0),
     Injection(
         id='consumer_0',
         id_of_node='n_2',
@@ -69,29 +69,29 @@ model_entities = [
         Q10=10.0,
         Exp_v_p=0.0,
         Exp_v_q=0.0),
-    Injection(
-        id='consumer_1',
-        id_of_node='n_2',
-        P10=30.0,
-        Q10=10.0,
-        Exp_v_p=0.0,
-        Exp_v_q=0.0),
+    # Injection(
+    #     id='consumer_1',
+    #     id_of_node='n_2',
+    #     P10=30.0,
+    #     Q10=10.0,
+    #     Exp_v_p=0.0,
+    #     Exp_v_q=0.0),
     # define a scaling factor
     Defk(id='kp'),
     # link the factor to the loads
     Link(
-        objid=('consumer_0', 'consumer_1'), 
+        objid='consumer_0', 
         part='p', 
         id='kp'),
     # measurement
     PValue(
-        id_of_batch='PQ_line_0',
+        id_of_batch='P_line_0',
         P=40.0),
     # QValue(
-    #     id_of_batch='PQ_line_0',
+    #     id_of_batch='P_line_0',
     #     Q=10.0),
     Output(
-        id_of_batch='PQ_line_0',
+        id_of_batch='P_line_0',
         id_of_device='line_0',
         id_of_node='n_0'),
     # # measurement
@@ -115,11 +115,13 @@ from src.dssex.estim2 import (
     get_batch_expressions,
     get_diff_expressions,
     calculate_power_flow,
-    create_v_symbols_gb_expressions,
+    prep_estimate,
+    estimate,
     get_scaling_factors,
     get_k,
     ri_to_complex,
-    get_calculate_from_result)
+    get_calculate_from_result,
+    _get_batch_values_br)
 import numpy as np
 
 mymodel = model00
@@ -163,181 +165,48 @@ if succ:
         mymodel, get_injected_power, mymodel.branchtaps.position, voltages_cx) 
 
 #%%
-from src.dssex.estim2 import (_current_into_injection_n)
-Vabs_sqr_ = np.sum(np.power(voltages_ri2, 2), axis=1).reshape(-1, 1)
-V_ = np.hstack([voltages_ri2, Vabs_sqr_])
+from src.dssex.estim2 import get_batch_values
+constraint_selector = 'IPQV'
+succ, voltages_cx, kpq = estimate(*prep_estimate(mymodel, 'IPQV'))
+flow_br = _get_batch_values_br(mymodel, voltages_cx, None, 'P')
+batch_values = get_batch_values(mymodel, voltages_cx, kpq, None, 'P')
+print(batch_values)
 
-Iinj_ri2 = _current_into_injection_n(
-    mymodel.injections, 
-    mymodel.mnodeinj.T,
-    V_,
-    k)
 
-#%%
-def _create_gb_of_terminals_n(branchterminals):
-    """Creates a numpy array of branch-susceptances and branch-conductances.
-    
-    Parameters
-    ----------
-    branchterminals: pandas.DataFrame (index_of_terminal)
-        * .g_lo, float, longitudinal conductance
-        * .b_lo, float, longitudinal susceptance
-        * .g_tr_half, float, transversal conductance
-        * .b_tr_half, float, transversal susceptance
-    
-    Returns
-    -------
-    numpy.array (shape n,4)
-        float
-        * [:,0] g_mn, mutual conductance
-        * [:,1] b_mn, mutual susceptance
-        * [:,2] g_mm, self conductance
-        * [:,3] b_mn, self susceptance"""
-    return (
-        branchterminals
-        .loc[:,['g_lo', 'b_lo', 'g_tr_half', 'b_tr_half']]
-        .to_numpy())
-
-def calculate_factors_of_positions_n(branchtaps, positions):
-    """Calculates longitudinal factors of branches.
-
-    Parameters
-    ----------
-    branchtaps: pandas.DataFrame (index of taps)
-        * .Vstep, float voltage diff per tap
-        * .positionneutral, int
-    position: array_like
-        int, vector of positions for branch-terminals with taps
-
-    Returns
-    -------
-    numpy.array (shape n,1)"""
-    return ((1 - branchtaps.Vstep * (positions - branchtaps.positionneutral))
-           .to_numpy()
-           .reshape(-1,1))
-
-def create_gb_of_terminals_n(branchterminals, branchtaps, positions=None):
-    """Creates a vectors (as a numpy array) of branch-susceptances and 
-    branch-conductances.
-    The intended use is calculating a subset of terminal values. 
-    Arguments 'branchtaps' and 'positions' will be selected
-    accordingly, hence, it is appropriate to pass the complete branchtaps 
-    and positions.
-
-    Parameters
-    ----------
-    branchterminals: pandas.DataFrame (index_of_terminal)
-        * .g_lo, float, longitudinal conductance
-        * .b_lo, float, longitudinal susceptance
-        * .g_tr_half, float, transversal conductance
-        * .b_tr_half, float, transversal susceptance
-    branchtaps: pandas.DataFrame (index_of_taps)
-        * .index_of_term, int
-        * .index_of_other_term, int
-        * .Vstep, float voltage diff per tap
-        * .positionneutral, int
-        * .position, int (if argument positions is None)
-    position: array_like (optional, accepts None)
-        int, vector of positions for branch-terminals with taps
-
-    Returns
-    -------
-    numpy.array (shape n,4)
-        gb_mn_tot[:,0] - g_mn
-        gb_mn_tot[:,1] - b_mn
-        gb_mn_tot[:,2] - g_tot
-        gb_mn_tot[:,3] - b_tot"""
-    index_of_branch_terminals = branchterminals.index
-    is_taps_at_term = branchtaps.index_of_term.isin(
-        index_of_branch_terminals)
-    taps_at_term = branchtaps[is_taps_at_term]
-    is_term_at_tap = index_of_branch_terminals.isin(
-        taps_at_term.index_of_term)
-    is_taps_at_other_term = (
-        branchtaps.index_of_other_term.isin(index_of_branch_terminals))
-    taps_at_other_term = branchtaps[is_taps_at_other_term]
-    is_other_term_at_tap = index_of_branch_terminals.isin(
-        taps_at_other_term.index_of_other_term)
-    positions_ = branchtaps.position if positions is None else positions
-    f_at_term = calculate_factors_of_positions_n(
-        taps_at_term, positions_[is_taps_at_term])
-    f_at_other_term = calculate_factors_of_positions_n(
-        taps_at_other_term, positions_[is_taps_at_other_term])
-    # g_lo, b_lo, g_trans, b_trans
-    gb_mn_tot = _create_gb_of_terminals_n(branchterminals)
-    # gb_mn_mm -> gb_mn_tot
-    gb_mn_tot[:, 2:] += gb_mn_tot[:, :2] 
-    if f_at_term.size:
-        # diagonal and off-diagonal
-        gb_mn_tot[is_term_at_tap] *= f_at_term
-        # diagonal
-        gb_mn_tot[is_term_at_tap, 2:] *= f_at_term
-    if f_at_other_term.size:
-        # off-diagonal
-        gb_mn_tot[is_other_term_at_tap, :2] *= f_at_other_term
-    return gb_mn_tot.copy()
-
-def get_branch_flow_values(
-        branchtaps, positions, vnode_ri1, branchterminals):
-    """Calculates current, active and reactive power flow into branch from
-    given terminals. 'branchterminals' is a subset, all other arguments are
-    complete.
-
-    Parameters
-    ----------
-    branchtaps: pandas.DataFrame
-        data of taps
-    positions: array_like<int>
-        tap positions, accepts None
-    vnode_ri1: numpy.array<float>, (shape 2n,1)
-        voltages at nodes, real part than imaginary part
-    branchterminals: pandas.DataFrame
-        data of terminals
-        * .index_of_node
-        * .index_of_other_node
-
-    Returns
-    -------
-    numpy.array<float>, (shape m,3)
-        * [:,0] I
-        * [:,1] P
-        * [:,2] Q"""
-    gb_mn_tot = create_gb_of_terminals_n(
-        branchterminals, branchtaps, positions)
-    # reverts columns to y_tot, y_mn
-    y_mn_tot = gb_mn_tot.view(dtype=np.complex128)[:,np.newaxis,::-1]
-    # complex voltage
-    voltages_ri2 = np.hstack(np.vsplit(voltages_ri1,2))
-    voltages_cx = voltages_ri2.view(dtype=np.complex128)
-    # voltages per node
-    Vcx_node = voltages_cx[branchterminals.index_of_node]
-    Vcx_other_node = voltages_cx[branchterminals.index_of_other_node]
-    Vcx = np.hstack([Vcx_node, -Vcx_other_node]).reshape(-1,2,1)
-    # current into terminal (branch)
-    Icx = (y_mn_tot @ Vcx).reshape(-1,1)
-    Sterm = Vcx_node * Icx.conj()
-    return np.hstack([np.abs(Icx), Sterm.view(dtype=float)])
-
-mybranchterms = mymodel.branchterminals#.loc[[3],:]
-flow = get_branch_flow_values(
-         mymodel.branchtaps, None, voltages_ri1, mymodel.branchterminals)
-
-print(flow)
 #%%
 # calculate residual node current for solution of optimization
 # symbolic
+import pandas as pd
 calculate_from_result = get_calculate_from_result(
     mymodel, ed, scaling_data, x)
-vals_calc = (
-    calculate_from_result(diff_data[3])
-    .toarray()
-    .reshape(-1))
-import pandas as pd
+
+vals_calc = calculate_from_result(diff_data[3]).toarray().reshape(-1)
 val_calc = pd.DataFrame(
     {'qu': diff_data[0],
      'id': diff_data[1],
-     'given': diff_data[2],
+     'given': diff_data[2].toarray().reshape(-1),
      'calculated': vals_calc})
+
+prev = val_calc
+relevant = val_calc.loc[:,'qu'].isin(list(constraint_selector))
+idxs = val_calc.index[relevant]
+
+vals = calculate_from_result(diff_data[3][idxs]).toarray()
+
+
+next_ = pd.DataFrame(
+    {'Qu': diff_data[0], 
+     'id': diff_data[1]})
+
+constraint_data = (
+    diff_data[0][idxs],
+    diff_data[1][idxs],
+    casadi.DM(vals),
+    diff_data[3][idxs])
+
+print(constraint_data)
+
+#%%
 is_power = val_calc.qu.isin(('P','Q'))
 val_calc.loc[is_power, ['given', 'calculated']] *= 3
 Inode_sol = calculate_from_result(ed['Y_by_V'] + vstack(Inode)).toarray().reshape(-1)
@@ -614,7 +483,7 @@ import casadi
 import numpy as np
 from src.dssex.estim2 import (ri_to_complex, 
   create_expressions, make_calculate, get_branch_flow_expressions, 
-  make_get_branch_expressions, get_node_values, vstack)
+  make_get_branch_expressions, get_node_expressions, vstack)
 
 model10 = make_model(
     schema09,
@@ -701,7 +570,8 @@ if success:
     PQ_branch = _calculate(casadi.vcat(branch_PQ_expr))
     branch_I_expr = make_get_branch_expressions(expr, 'I')(mymodel.branchterminals)
     I_branch = _calculate(branch_I_expr)
-    Vnode_abs = get_node_values(mymodel.injections.index_of_node, voltages_ri)
+    Vnode_abs = get_node_expressions(
+        mymodel.injections.index_of_node, voltages_ri)
 #%%
 import casadi
 import pandas as pd

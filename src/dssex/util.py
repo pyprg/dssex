@@ -149,7 +149,7 @@ def get_injected_power_per_injection(calculate_injected_power, Vinj):
     tuple
         * numpy.array, float, real power per injection
         * numpy.array, float, imaginary power per injection
-        * numpy.array, float, voltage at per injection"""
+        * numpy.array, float, voltage per injection"""
     Vinj_abs_sqr = np.power(np.real(Vinj), 2) + np.power(np.imag(Vinj), 2)
     return *calculate_injected_power(Vinj_abs_sqr), Vinj
 
@@ -199,6 +199,11 @@ def get_injection_results(calculate_injected_power, model, Vnode):
     df['P_pu'], df['Q_pu'], Vinj = get_injected_power_per_injection(
         calculate_injected_power, model.mnodeinj.T @ Vnode)
     df['V_pu'] = np.abs(Vinj)
+    n = df['P_pu'].size
+    S = np.empty((n,1), dtype=np.complex128)
+    S.real = df['P_pu'].array.reshape(-1,1)
+    S.imag = df['Q_pu'].array.reshape(-1,1)
+    df['I_pu'] = np.abs(S / Vinj) # abs of conjugate
     df['P_pu'] *= 3 # converts from single phase calculation to 3-phase system
     df['Q_pu'] *= 3 # converts from single phase calculation to 3-phase system
     return df
@@ -346,7 +351,7 @@ def get_branch_results(model, Vnode, pos):
 
 def get_results(model, get_injected_power, tappositions, Vnode):
     """Calculates and arranges electric data of injections and branches
-    for a given voltage vector which is typically the result of a power
+    for a given voltage vector which might be the result of a power
     flow calculation.
     
     Parameters
@@ -536,7 +541,7 @@ def get_residual_current_fn2(
     -------
     function 
         (numpy.array<complex>) -> (numpy.array<complex>)
-        (voltage_of_nodes) -> (current_of_node)"""
+        (voltage_at_nodes) -> (current_into_nodes)"""
     tappositions_ = model.branchtaps.position \
         if tappositions is None else tappositions
     Vslack_ = model.slacks.V.to_numpy() if Vslack is None else Vslack
