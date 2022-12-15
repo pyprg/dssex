@@ -554,7 +554,7 @@ grid1 = (
 
 class Batch(unittest.TestCase):
     
-    def test_ipq_single(self):
+    def test_ipq(self):
         # prepare
         i_batches = [
             # give value of I, P, Q at n_0/line_0
@@ -566,7 +566,19 @@ class Batch(unittest.TestCase):
             grid.IValue('batch_1'),
             grid.PValue('batch_1'),
             grid.QValue('batch_1'),
-            grid.Output('batch_1', id_of_device='consumer_1')]
+            grid.Output('batch_1', id_of_device='consumer_1'),
+            # give value of I, P, Q at n_1/line_1 and n_1/line_2
+            grid.IValue('batch_2'),
+            grid.PValue('batch_2'),
+            grid.QValue('batch_2'),
+            grid.Output('batch_2', id_of_device='line_1', id_of_node='n_1'),
+            grid.Output('batch_2', id_of_device='line_2', id_of_node='n_1'),
+            # give value of I, P, Q at consumer_2 and consumer_3
+            grid.IValue('batch_3'),
+            grid.PValue('batch_3'),
+            grid.QValue('batch_3'),
+            grid.Output('batch_3', id_of_device='consumer_2'),
+            grid.Output('batch_3', id_of_device='consumer_3')]
         pq_factors = np.ones((3,2), dtype=float)
         model = make_model(grid1, i_batches)
         # calculate power flow
@@ -596,8 +608,8 @@ class Batch(unittest.TestCase):
             .set_index(['id_of_batch', 'Qu']))
         for result_key, batch_key in \
             [(('line_0', 'I0_pu'), ('batch_0', 'I')),
-              (('line_0', 'P0_pu'), ('batch_0', 'P')),
-              (('line_0', 'Q0_pu'), ('batch_0', 'Q'))]:
+             (('line_0', 'P0_pu'), ('batch_0', 'P')),
+             (('line_0', 'Q0_pu'), ('batch_0', 'Q'))]:
             f = 3. if batch_key[1] in 'PQ' else 1.
             self.assertAlmostEqual(
                 f * df_batch.loc[batch_key[0], batch_key[1]].value,
@@ -606,14 +618,36 @@ class Batch(unittest.TestCase):
                 msg=f'{batch_key[1]} of batch {batch_key[0]} equals '
                     f'{result_key[1]} of device {result_key[0]}')
         for result_key, batch_key in \
+            [(('line_0', 'I1_pu'), ('batch_2', 'I')),
+             (('line_0', 'P1_pu'), ('batch_2', 'P')),
+             (('line_0', 'Q1_pu'), ('batch_2', 'Q'))]:
+            f = -3. if batch_key[1] in 'PQ' else 1.
+            self.assertAlmostEqual(
+                f * df_batch.loc[batch_key[0], batch_key[1]].value,
+                ed.branch().loc[result_key[0], result_key[1]],
+                delta=1e-12,
+                msg=f'{batch_key[1]} of batch {batch_key[0]} equals '
+                    f'{result_key[1]} of device {result_key[0]}')
+        for result_key, batch_key in \
             [(('consumer_1', 'I_pu'), ('batch_1', 'I')),
-              (('consumer_1', 'P_pu'), ('batch_1', 'P')),
-              (('consumer_1', 'Q_pu'), ('batch_1', 'Q'))]:
+             (('consumer_1', 'P_pu'), ('batch_1', 'P')),
+             (('consumer_1', 'Q_pu'), ('batch_1', 'Q'))]:
             f = 3. if batch_key[1] in 'PQ' else 1.
             self.assertAlmostEqual(
                 f * df_batch.loc[batch_key[0], batch_key[1]].value,
                 ed.injection().loc[result_key[0], result_key[1]],
                 delta=1e-12,
+                msg=f'{batch_key[1]} of batch {batch_key[0]} equals '
+                    f'{result_key[1]} of device {result_key[0]}')
+        for result_key, batch_key in \
+            [(('line_2', 'I1_pu'), ('batch_3', 'I')),
+             (('line_2', 'P1_pu'), ('batch_3', 'P')),
+             (('line_2', 'Q1_pu'), ('batch_3', 'Q'))]:
+            f = -3. if batch_key[1] in 'PQ' else 1.
+            self.assertAlmostEqual(
+                f * df_batch.loc[batch_key[0], batch_key[1]].value,
+                ed.branch().loc[result_key[0], result_key[1]],
+                delta=8e-8,
                 msg=f'{batch_key[1]} of batch {batch_key[0]} equals '
                     f'{result_key[1]} of device {result_key[0]}')
 

@@ -924,7 +924,7 @@ def _injected_current_n(
     # voltages at injections
     count_of_injections = len(injections)
     idx_of_injections = injections.index
-    Iri = np.ndarray(shape=(count_of_injections,2), dtype=float)
+    Iri = np.empty(shape=(count_of_injections,2), dtype=float)
     Vinj_ri2 = node_to_inj[idx_of_injections] @ Vnode_ri2
     Vinj_abs_sqr = node_to_inj[idx_of_injections] @ Vnode_abs_sqr
     # assumes P10 and Q10 are sums of 3 per-phase-values
@@ -983,7 +983,7 @@ def _get_injected_value(
         return np.sum(
             _injected_current_n(
                 injections, node_to_inj, Vnode_ri2, Vabs_sqr, kpq, vminsqr),
-            axis=0)
+            axis=0).reshape(-1, 2)
     if selector=='P':
         return np.sum(
             _injected_power_n(injections, node_to_inj, Vabs_sqr, kpq, vminsqr)
@@ -1292,11 +1292,12 @@ def _get_batch_flow_values(
     inj_vals = _get_batch_values_inj(
         model, Vnode_ri2, Vabs_sqr, kpq, selector, vminsqr)
     for id_of_batch, val in inj_vals.items():
-        dd[id_of_batch] = np.sum(np.vstack([dd[id_of_batch], val]), axis=0)
+        dd[id_of_batch] = np.vstack([dd[id_of_batch], val])
     if selector in 'PQ':
-        return {id_of_batch: arr[0] for id_of_batch, arr in dd.items()}
+        return {id_of_batch: np.sum(arr) for id_of_batch, arr in dd.items()}
     if selector == 'I':
-        return {id_of_batch: np.sqrt(np.sum(Iri_vals*Iri_vals))
+        return {id_of_batch: 
+                np.sqrt(np.sum(np.square(np.sum(Iri_vals, axis=0))))
                 for id_of_batch, Iri_vals in dd.items()}
     assert False, \
         f'selector needs to be one of "I", "P" or "Q" but is "{selector}"'
