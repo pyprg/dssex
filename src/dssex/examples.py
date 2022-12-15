@@ -120,9 +120,12 @@ from src.dssex.estim2 import (
     get_scaling_factors,
     get_k,
     ri_to_complex,
-    get_calculate_from_result,
-    _get_batch_values_br)
+    get_calculate_from_result)
+from src.dssex.batch import (
+    _get_batch_values_br,
+    get_batch_values)
 import numpy as np
+
 
 mymodel = model00
 
@@ -165,7 +168,6 @@ if succ:
         mymodel, get_injected_power, mymodel.branchtaps.position, voltages_cx) 
 
 #%%
-from src.dssex.estim2 import get_batch_values
 constraint_selector = 'IPQV'
 succ, voltages_cx, kpq = estimate(*prep_estimate(mymodel, 'IPQV'))
 flow_br = _get_batch_values_br(mymodel, voltages_cx, None, 'P')
