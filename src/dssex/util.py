@@ -203,9 +203,13 @@ def get_injection_results(calculate_injected_power, model, Vnode):
     S = np.empty((n,1), dtype=np.complex128)
     S.real = df['P_pu'].array.reshape(-1,1)
     S.imag = df['Q_pu'].array.reshape(-1,1)
-    df['I_pu'] = np.abs(S / Vinj) # abs of conjugate
+    Icx_pu = (S / Vinj).conjugate()
+    df['I_pu'] = np.abs((S / Vinj).conjugate()) # abs of conjugate
     df['P_pu'] *= 3 # converts from single phase calculation to 3-phase system
     df['Q_pu'] *= 3 # converts from single phase calculation to 3-phase system
+    df['Vcx_pu'] = Vinj
+    df['Scx_pu'] = 3 * S
+    df['Icx_pu'] = Icx_pu
     return df
 
 def get_crossrefs(terms, count_of_nodes):
@@ -331,22 +335,25 @@ def get_branch_results(model, Vnode, pos):
     Vbr = get_v_branches(terms[term_is_at_A], Vnode)
     Ibr = Ybr @ Vbr
     # converts from single phase calculation to 3-phase system
-    Sbr = 3 * Vbr * Ibr.conjugate()
-    PQbr= Sbr.view(dtype=float).reshape(-1, 4)
+    Sbr = 3 * Vbr * Ibr.conjugate()            # S0, S1
+    PQbr= Sbr.view(dtype=float).reshape(-1, 4) # P0, P1, Q0, Q1
     Sbr_loss = Sbr.sum(axis=1)
     dfbr = (
         terms.loc[term_is_at_A, ['id_of_branch']]
         .rename(columns={'id_of_branch': 'id'}))
     dfv = pd.DataFrame(
         Vbr.reshape(-1, 2),
-        columns=['V0_pu', 'V1_pu'])
+        columns=['V0cx_pu', 'V1cx_pu'])
     res = np.hstack(
-        [np.abs(Ibr).reshape(-1,2), PQbr, Sbr_loss.view(dtype=float)])
+        [np.abs(Ibr).reshape(-1,2), 
+         PQbr, 
+         Sbr_loss.view(dtype=float), 
+         Ibr.reshape(-1,2)])
     dfres = pd.DataFrame(
         res, 
         columns=[
-            'I0_pu', 'I1_pu', 'P0_pu', 'Q0_pu', 'P1_pu', 'Q1_pu', 
-            'Ploss_pu', 'Qloss_pu'])
+            'I0_pu', 'I1_pu', 'P0_pu', 'Q0_pu', 'P1_pu', 'Q1_pu', 'Ploss_pu', 
+            'Qloss_pu', 'I0cx_pu', 'I1cx_pu'])
     return pd.concat([dfbr, dfres, dfv], axis=1)
 
 def get_results(model, get_injected_power, tappositions, Vnode):

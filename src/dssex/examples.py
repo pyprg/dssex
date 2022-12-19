@@ -121,9 +121,7 @@ from src.dssex.estim2 import (
     get_k,
     ri_to_complex,
     get_calculate_from_result)
-from src.dssex.batch import (
-    _get_batch_values_br,
-    get_batch_values)
+from src.dssex.batch import  get_batch_values
 import numpy as np
 
 
@@ -170,7 +168,6 @@ if succ:
 #%%
 constraint_selector = 'IPQV'
 succ, voltages_cx, kpq = estimate(*prep_estimate(mymodel, 'IPQV'))
-flow_br = _get_batch_values_br(mymodel, voltages_cx, None, 'P')
 batch_values = get_batch_values(mymodel, voltages_cx, kpq, None, 'P')
 print(batch_values)
 

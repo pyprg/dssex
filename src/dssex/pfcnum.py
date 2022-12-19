@@ -563,7 +563,7 @@ def calculate_electric_data(model, power_fn, tappositions, Vnode):
 
 Electric_data = namedtuple(
     'Electric_data', 
-    'branch injection residual_node_current')
+    'branch injection node residual_node_current')
 Electric_data.__doc__ = """ Functions for calculating electric data for 
 branches, injections and nodes from power flow or estimation results.
 
@@ -573,6 +573,8 @@ branch: function
     ()->(pandas.DataFrame)
 injection: function
     ()->(pandas.DataFrame)
+node: function
+    ()->(pandas.DataFrame)
 residual_node_current: function
     ()->(numpy.array<complex>)"""
 
@@ -580,7 +582,7 @@ def calculate_electric_data2(
         model, voltages_cx, pq_factors, 
         tappositions=None, vminsqr=_VMINSQR, loadcurve='interpolated'):
     """Calculates and arranges electric data of injections and branches
-    for a given voltage vector which is typically the result of a power
+    for a given voltage vector which is e.g. the result of a power
     flow calculation.
     
     Parameters
@@ -605,6 +607,7 @@ def calculate_electric_data2(
         * .branch, function ()->(pandas.DataFrame)
         * .injection, function ()->(pandas.DataFrame)
         * .residual_node_current, function ()->(numpy.array<complex>)"""
+    from pandas import DataFrame as DF
     tappositions_ = (
         model.branchtaps.position if tappositions is None else tappositions)
     get_injected_power = get_calc_injected_power_fn(
@@ -614,6 +617,11 @@ def calculate_electric_data2(
     return Electric_data(
         branch=lambda: result_data['branches'].set_index('id'),
         injection=lambda: result_data['injections'].set_index('id'),
+        node=lambda:DF(
+            {'V_pu': np.abs(voltages_cx.reshape(-1)),
+             'Vcx_pu':voltages_cx.reshape(-1)}, 
+            index=model.nodes.index, 
+            columns=['V_pu', 'Vcx_pu']),
         residual_node_current=lambda:eval_residual_current(
             model, get_injected_power, Vnode=voltages_cx))
 

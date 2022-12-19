@@ -75,7 +75,7 @@ def value_of_voltages(vvalues):
     return concat([groups['V'].mean(), groups['id_of_node'].min()], axis=1)
 
 #
-# numeric injected power / current
+# injected power / current
 #
 
 def _calculate_injected_power_n(Vinj_abs_sqr, Exp_v, PQ):
@@ -430,7 +430,7 @@ def _get_batch_values_inj(
             'index_of_injection')}
 
 #
-# numeric power / current into branch-terminals
+# power / current into branch-terminals
 #
 
 def _get_gb_of_terminals_n(branchterminals):
@@ -665,8 +665,16 @@ def _get_batch_flow_values(
         f'selector needs to be one of "I", "P" or "Q" but is "{selector}"'
     
 def get_batch_values(
-        model, Vnode_ri2, kpq, positions=None, selectors='', vminsqr=_VMINSQR):
-    """
+    model, Vnode_ri2, kpq, positions=None, quantities='', vminsqr=_VMINSQR):
+    """The model stores given values separated for 
+    I (magnitude of electric current), P (active power), Q (reactive power) and
+    V (magnitude of voltage). Provided, node voltages, scaling factors and
+    tappositions are results and parameters of a power flow calculation 
+    over model this function returns calculated values for the selected
+    quantities of given values. For instance, if quantity is 'P' the function
+    returns the active power according to the power flow calculation for the
+    locations of the active power values given by the model.
+    
     Parameters
     ----------
     model: egrid.model.Model
@@ -679,7 +687,7 @@ def get_batch_values(
         factors for all injections of model
     positions: array_like<int>
         tap positions, accepts None
-    selectors: str
+    quantities: str
         string of characters 'I'|'P'|'Q'|'V'
         addresses current magnitude, active power, reactive power or magnitude 
         of voltage, case insensitive, other characters are ignored
@@ -690,24 +698,24 @@ def get_batch_values(
     Returns
     -------
     tuple
-        * selectors, numpy.array<str>
+        * quantities, numpy.array<str>
         * id_of_batch, numpy.array<str>
         * value, numpy.array<float>, vector (shape n,1)"""
     Vabs_sqr = np.sum(Vnode_ri2 * Vnode_ri2, axis=1)
-    _selectors = []
+    _quantities = []
     _ids = []
     _vals = []
-    for sel in selectors.upper():
+    for sel in quantities.upper():
         if sel in 'IPQ':
             id_val = _get_batch_flow_values(
                 model, Vnode_ri2, Vabs_sqr, kpq, positions, sel, vminsqr)
-            _selectors.extend([sel]*len(id_val))
+            _quantities.extend([sel]*len(id_val))
             _ids.extend(id_val.keys())
             _vals.extend(id_val.values())
         if sel=='V':
             vvals = value_of_voltages(model.vvalues)
             count_of_values = len(vvals)
-            _selectors.extend([sel]*count_of_values)
+            _quantities.extend([sel]*count_of_values)
             _ids.extend(vvals.id_of_node)
-            _vals.extend(vvals.V)
-    return np.array(_selectors), np.array(_ids), np.array(_vals)
+            _vals.extend(np.sqrt(Vabs_sqr[vvals.index]))
+    return np.array(_quantities), np.array(_ids), np.array(_vals)

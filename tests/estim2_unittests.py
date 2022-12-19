@@ -21,7 +21,6 @@ Created on Wed Nov 30 13:04:16 2022
 """
 import unittest
 import numpy as np
-import pandas as pd
 import egrid.builder as grid
 import src.dssex.util as util  # eval_residual_current
 import src.dssex.pfcnum as pfc # get_calc_injected_power_fn
@@ -341,7 +340,8 @@ class Estimation(unittest.TestCase):
             # scaling factor kp for active power P of consumer
             grid.Defk('kp'),
             grid.Link(objid='consumer', part='p', id='kp'))
-        succ, *V_k = estim.estimate(*estim.prep_estimate(model, selectors='P')) 
+        succ, *V_k = estim.estimate(
+            *estim.prep_estimate(model, quantities_of_objective='P')) 
         self.assertTrue(succ, 'estimation succeeds')
         ed = pfc.calculate_electric_data2(model, *V_k)
         self.assertAlmostEqual(
@@ -369,7 +369,8 @@ class Estimation(unittest.TestCase):
             # scaling factor kp for active power P of consumer
             grid.Defk('kp'),
             grid.Link(objid='consumer', part='p', id='kp'))
-        succ, *V_k = estim.estimate(*estim.prep_estimate(model, selectors='P')) 
+        succ, *V_k = estim.estimate(
+            *estim.prep_estimate(model, quantities_of_objective='P')) 
         self.assertTrue(succ, 'estimation succeeds')
         ed = pfc.calculate_electric_data2(model, *V_k)
         self.assertAlmostEqual(
@@ -397,7 +398,8 @@ class Estimation(unittest.TestCase):
             # scaling factor kq for reactive power Q of consumer
             grid.Defk('kq'),
             grid.Link(objid='consumer', part='q', id='kq'))
-        succ, *V_k = estim.estimate(*estim.prep_estimate(model, selectors='Q')) 
+        succ, *V_k = estim.estimate(
+            *estim.prep_estimate(model, quantities_of_objective='Q')) 
         self.assertTrue(succ, 'estimation succeeds')
         ed = pfc.calculate_electric_data2(model, *V_k)
         self.assertAlmostEqual(
@@ -425,7 +427,8 @@ class Estimation(unittest.TestCase):
             # scaling factor kq for reactive power Q of consumer
             grid.Defk('kq'),
             grid.Link(objid='consumer', part='q', id='kq'))
-        succ, *V_k = estim.estimate(*estim.prep_estimate(model, selectors='Q')) 
+        succ, *V_k = estim.estimate(
+            *estim.prep_estimate(model, quantities_of_objective='Q')) 
         self.assertTrue(succ, 'estimation succeeds')
         ed = pfc.calculate_electric_data2(model, *V_k)
         self.assertAlmostEqual(
@@ -454,7 +457,7 @@ class Estimation(unittest.TestCase):
             grid.Defk('kpq'),
             grid.Link(objid='consumer', part='pq', id='kpq'))
         succ, *V_k = estim.estimate(
-            *estim.prep_estimate(model, selectors='I')) 
+            *estim.prep_estimate(model, quantities_of_objective='I')) 
         self.assertTrue(succ, 'estimation succeeds')
         ed = pfc.calculate_electric_data2(model, *V_k)
         self.assertAlmostEqual(
@@ -483,7 +486,7 @@ class Estimation(unittest.TestCase):
             grid.Defk('kpq'),
             grid.Link(objid='consumer', part='pq', id='kpq'))
         succ, *V_k = estim.estimate(
-            *estim.prep_estimate(model, selectors='I')) 
+            *estim.prep_estimate(model, quantities_of_objective='I')) 
         self.assertTrue(succ, 'estimation succeeds')
         ed = pfc.calculate_electric_data2(model, *V_k)
         self.assertAlmostEqual(
@@ -511,7 +514,7 @@ class Estimation(unittest.TestCase):
             grid.Defk('kq'),
             grid.Link(objid='consumer', part='q', id='kq'))
         succ, *V_k = estim.estimate(
-            *estim.prep_estimate(model, selectors='V')) 
+            *estim.prep_estimate(model, quantities_of_objective='V')) 
         self.assertTrue(succ, 'estimation succeeds')
         ed = pfc.calculate_electric_data2(model, *V_k)
         self.assertAlmostEqual(

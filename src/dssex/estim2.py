@@ -1071,7 +1071,7 @@ def get_estimation_data(model, count_of_steps, vminsqr=_VMINSQR):
           which is a function
           (index_of_step, scaling_factors_of_previous_step) 
             -> (tuple - Scalingdata, injection_data)
-        * 'inj_to_node', casadi.SX, matrix, mapping from
+        * 'inj_to_node', casadi.SX, matrix, maps from
           injections to power flow calculation nodes"""
     ed = create_v_symbols_gb_expressions(model)
     ed['get_scaling_and_injection_data'] = (
@@ -1788,7 +1788,7 @@ def get_node_expressions(index_of_node, Vnode_ri):
 #         if len(index_of_node)
 #         else casadi.SX(0,1))
 
-def get_diff_expressions(model, v_syms_gb_ex, ipqv, selectors):
+def get_diff_expressions(model, v_syms_gb_ex, ipqv, quantities):
     """Creates a vector (casadi.SX, shape n,1) expressing the difference
     between measured and calculated values for absolute current, active power
     or reactive power and voltage. The expressions are based on the batch 
@@ -1813,7 +1813,7 @@ def get_diff_expressions(model, v_syms_gb_ex, ipqv, selectors):
         [:,5] Qip, reactive power interpolated
         [:,6] Vabs_sqr, square of voltage magnitude
         [:,7] interpolate?
-    selectors: str
+    quantities: str
         string of characters 'I'|'P'|'Q'|'V'
         addresses current magnitude, active power, reactive power or magnitude 
         of voltage, case insensitive, other characters are ignored
@@ -1821,62 +1821,65 @@ def get_diff_expressions(model, v_syms_gb_ex, ipqv, selectors):
     Returns
     -------
     tuple
-        * selectors, numpy.array<str>
+        * quantities, numpy.array<str>
         * id_of_batch, numpy.array<str>
         * value, casadi.DM, vector (shape n,1)
         * expression, casadi.SX, vector (shape n,1)"""
-    _selectors = []
+    _quantities = []
     _ids = []
     _vals = []
     _exprs = casadi.SX(0, 1)
-    for sel in selectors.upper():
+    for sel in quantities.upper():
         if sel in 'IPQ':
             ids, vals, exprs = get_batch_flow_expressions(
                 model, v_syms_gb_ex, ipqv, sel)
-            _selectors.extend([sel]*len(ids))
+            _quantities.extend([sel]*len(ids))
             _ids.extend(ids)
             _vals.extend(vals)
             _exprs = casadi.vertcat(_exprs, exprs)
         if sel=='V':
             vvals = value_of_voltages(model.vvalues)
             count_of_values = len(vvals)
-            _selectors.extend([sel]*count_of_values)
+            _quantities.extend([sel]*count_of_values)
             _ids.extend(vvals.id_of_node)
             _vals.extend(vvals.V)
             _exprs = casadi.vertcat(
                 _exprs, 
                 v_syms_gb_ex['Vnode_syms'][vvals.index,2].sqrt())
-    return np.array(_selectors), np.array(_ids), casadi.DM(_vals), _exprs
+    return np.array(_quantities), np.array(_ids), casadi.DM(_vals), _exprs
 
-def get_optimize(model, ed):
+def get_optimize(model, estimation_data, positions=None):
     """Preapares the optimization function.
 
     Parameters
     ----------
     model: egrid.model.Model
         data of electric grid
-    ed : dict
+    estimation_data : dict
         estimation data
         * 'Vnode_syms', casadi.SX (shape n,2)
         * 'Vslack_syms', casadi.SX (shape n,2)
         * 'position_syms', casadi.SX (shape n,1)
+    positions: array_like
+        optional
+        int, positions of taps
 
     Returns
     -------
     function"""
     # setup solver
-    Vnode_ri_syms = vstack(ed['Vnode_syms'], 2)
+    Vnode_ri_syms = vstack(estimation_data['Vnode_syms'], 2)
     # values of parameters
     #   Vslack must be negative as Vslack_result + Vslack_in_Inode = 0
     #   because the root is searched for with formula: Y * Vresult + Inode = 0
     Vslacks_neg = -model.slacks.V
     params_ = casadi.vertcat(
-        vstack(ed['Vslack_syms']), 
-        ed['position_syms'])
+        vstack(estimation_data['Vslack_syms']), 
+        estimation_data['position_syms'])
+    positions_ = model.branchtaps.position if positions is None else positions
     values_of_parameters_ = casadi.vertcat(
-        np.real(Vslacks_neg), np.imag(Vslacks_neg), 
-        model.branchtaps.position)
-    def optimize(Vnode_ri_ini, scaling_data, Inode, diff_data):
+        np.real(Vslacks_neg), np.imag(Vslacks_neg), positions_)
+    def optimize(Vnode_ri_ini, scaling_data, Inode_inj, diff_data):
         """Solves an optimization task
 
         Parameters
@@ -1892,7 +1895,7 @@ def get_optimize(model, ed):
             * .values_of_vars, casadi.DM, column vector, initial values 
               for kvars
             * .values_of_consts, casadi.DM, column vector, values for consts
-        Inode: casadi.SX (shape n,2)
+        Inode_inj: casadi.SX (shape n,2)
             expressions for injected node current
         diff_data: tuple
             data for objective function
@@ -1912,7 +1915,7 @@ def get_optimize(model, ed):
         params = casadi.vertcat(params_, scaling_data.kconsts)
         values_of_parameters = casadi.vertcat(
             values_of_parameters_, scaling_data.values_of_consts)
-        constraints = ed['Y_by_V'] + vstack(Inode) 
+        constraints = estimation_data['Y_by_V'] + vstack(Inode_inj) 
         nlp = {'x': syms, 'f': objective, 'g': constraints, 'p': params}
         solver = casadi.nlpsol('solver', 'ipopt', nlp)
         # initial values
@@ -2034,17 +2037,23 @@ def get_calculate_from_result(model, ed, scaling_data, x):
 # convenience functions of estimation for easier handling 
 #
 
-def prep_estimate(model, selectors, count_of_steps=1):
+def prep_estimate(
+        model, quantities_of_objective, positions=None, count_of_steps=1):
     """Prepares data for function estimate.
     
     Parameters
     ----------
     model: egrid.model.Model
         data of electric grid
-    selectors: str
+    quantities_of_objective: str
         string of characters 'I'|'P'|'Q'|'V'
-        addresses current magnitude, active power, reactive power or magnitude 
-        of voltage, case insensitive, other characters are ignored
+        addresses differences of calculated and given values to be minimized,
+        the caracters are symbols for given current magnitude, active power, 
+        reactive power or magnitude of voltage,
+        case insensitive, other characters are ignored
+    positions: array_like
+        optional
+        int, positions of taps
     count_of_steps : int
         Number of estimation steps. The default is 1.
 
@@ -2066,26 +2075,33 @@ def prep_estimate(model, selectors, count_of_steps=1):
           for kvars
         * .values_of_consts, casadi.DM, column vector, values for consts
     diff_data: tuple
+        data for objective function to be minimized
         table, four column vectors
-        * selectors, list of string
+        * quantities, list of string
         * id_of_batch, list of string
         * value, casadi.DM, vector (shape n,1)
         * expression, casadi.SX, vector (shape n,1)
     Vnode_ri_ini: array_like (shape 2n,1)
         initial node voltages separated real and imaginary values
-    Inode: casadi.SX (shape n,2)
-        * Inode[:,0] - Ire, real part of current injected into node
-        * Inode[:,1] - Iim, imaginary part of current injected into node"""
+    Inode_inj: casadi.SX (shape n,2)
+        * Inode_inj[:,0] - Ire, real part of current injected into node
+        * Inode_inj[:,1] - Iim, imaginary part of current injected into node
+    positions: array_like
+        int, positions of taps, can be None"""
     ed = get_estimation_data(model, count_of_steps)
     scaling_data, Iinj_data = ed['get_scaling_and_injection_data'](step=0)
-    Inode = ed['inj_to_node'] @ Iinj_data[:,:2]
+    Inode_inj = ed['inj_to_node'] @ Iinj_data[:,:2]
     # power flow calculation for initial voltages
-    succ, Vnode_ri_ini = calculate_power_flow2(model, ed, scaling_data, Inode)
-    diff_data = get_diff_expressions(model, ed, Iinj_data, selectors)
-    return model, ed, scaling_data, diff_data, Vnode_ri_ini, Inode
+    succ, Vnode_ri_ini = calculate_power_flow2(
+        model, ed, scaling_data, Inode_inj, positions)
+    diff_data = get_diff_expressions(
+        model, ed, Iinj_data, quantities_of_objective)
+    return (
+        model, ed, scaling_data, diff_data, Vnode_ri_ini, Inode_inj, positions)
 
 def estimate(
-    model, estimation_data, scaling_data, diff_data, Vnode_ri_ini, Inode_inj):
+    model, estimation_data, scaling_data, diff_data, Vnode_ri_ini, Inode_inj, 
+    positions):
     """Optimization and a little post-processing.
 
     Parameters
@@ -2106,8 +2122,9 @@ def estimate(
           for kvars
         * .values_of_consts, casadi.DM, column vector, values for consts
     diff_data: tuple
+        data for objective function
         table, four column vectors
-        * selectors, list of string
+        * quantities, list of string
         * id_of_batch, list of string
         * value, casadi.DM, vector (shape n,1)
         * expression, casadi.SX, vector (shape n,1)
@@ -2116,6 +2133,9 @@ def estimate(
     Inode: casadi.SX (shape n,2)
         * Inode[:,0] - Ire, real part of current injected into node
         * Inode[:,1] - Iim, imaginary part of current injected into node
+    positions: array_like
+        optional
+        int, positions of taps
 
     Returns
     -------
@@ -2125,7 +2145,7 @@ def estimate(
         calculated complex node voltages
     pq_factors : numpy.array, float (shape m,2)
         scaling factors for injections"""
-    optimize = get_optimize(model, estimation_data)
+    optimize = get_optimize(model, estimation_data, positions)
     succ, x = optimize(Vnode_ri_ini, scaling_data, Inode_inj, diff_data)
     # result processing
     voltages_ri, k = casadi.vertsplit(x, 2*model.shape_of_Y[0])

@@ -28,6 +28,7 @@ from egrid import make_model
 from functools import partial
 from numpy.linalg import norm
 import src.dssex.estim2 as estim
+import src.dssex.batch as batch
 
 # square of voltage magnitude, minimum value for load curve, 
 #   if value is below _VMINSQR the load curves for P and Q converge
@@ -64,31 +65,34 @@ class Batch(unittest.TestCase):
     
     def test_ipq(self):
         # prepare
-        i_batches = [
-            # give value of I, P, Q at n_0/line_0
+        ipq_batches = [
+            # given value of I, P, Q at n_0/line_0
             grid.IValue('batch_0'),
             grid.PValue('batch_0'),
             grid.QValue('batch_0'),
             grid.Output('batch_0', id_of_device='line_0', id_of_node='n_0'),
-            # give value of I, P, Q at consumer_1
+            # given value of I, P, Q at consumer_1
             grid.IValue('batch_1'),
             grid.PValue('batch_1'),
             grid.QValue('batch_1'),
             grid.Output('batch_1', id_of_device='consumer_1'),
-            # give value of I, P, Q at n_1/line_1 and n_1/line_2
+            # given value of I, P, Q at n_1/line_1 and n_1/line_2
             grid.IValue('batch_2'),
             grid.PValue('batch_2'),
             grid.QValue('batch_2'),
             grid.Output('batch_2', id_of_device='line_1', id_of_node='n_1'),
             grid.Output('batch_2', id_of_device='line_2', id_of_node='n_1'),
-            # give value of I, P, Q at consumer_2 and consumer_3
+            # given value of I, P, Q at consumer_2 and consumer_3
             grid.IValue('batch_3'),
             grid.PValue('batch_3'),
             grid.QValue('batch_3'),
             grid.Output('batch_3', id_of_device='consumer_2'),
-            grid.Output('batch_3', id_of_device='consumer_3')]
+            grid.Output('batch_3', id_of_device='consumer_3'),
+            # given voltage at node n_3
+            grid.Vvalue('n_2'),
+            grid.Vvalue('n_3')]
         pq_factors = np.ones((3,2), dtype=float)
-        model = make_model(grid1, i_batches)
+        model = make_model(grid1, ipq_batches)
         # calculate power flow
         success, vnode_ri = estim.calculate_power_flow(
             model, vminsqr=_VMINSQR)
@@ -107,7 +111,7 @@ class Batch(unittest.TestCase):
         self.assertLess(max_dev, 3e-8, 'residual node current is 0')
         ed = pfc.calculate_electric_data2(model, vnode_cx, pq_factors)
         # act
-        batch_values = estim.get_batch_values(
+        batch_values = batch.get_batch_values(
             model, vnode_ri2, pq_factors, None, 'IPQV')
         # test
         df_batch = (
@@ -118,9 +122,12 @@ class Batch(unittest.TestCase):
             [(('line_0', 'I0_pu'), ('batch_0', 'I')),
              (('line_0', 'P0_pu'), ('batch_0', 'P')),
              (('line_0', 'Q0_pu'), ('batch_0', 'Q'))]:
-            f = 3. if batch_key[1] in 'PQ' else 1.
+            qu = batch_key[1]
+            val = (
+                (3. if qu in 'PQ' else 1.)
+                * df_batch.loc[batch_key[0], qu].value)
             self.assertAlmostEqual(
-                f * df_batch.loc[batch_key[0], batch_key[1]].value,
+                val,
                 ed.branch().loc[result_key[0], result_key[1]],
                 delta=1e-12,
                 msg=f'{batch_key[1]} of batch {batch_key[0]} equals '
@@ -129,9 +136,12 @@ class Batch(unittest.TestCase):
             [(('line_0', 'I1_pu'), ('batch_2', 'I')),
              (('line_0', 'P1_pu'), ('batch_2', 'P')),
              (('line_0', 'Q1_pu'), ('batch_2', 'Q'))]:
-            f = -3. if batch_key[1] in 'PQ' else 1.
+            qu = batch_key[1]
+            val = (
+                (-3. if qu in 'PQ' else 1.) 
+                * df_batch.loc[batch_key[0], qu].value)
             self.assertAlmostEqual(
-                f * df_batch.loc[batch_key[0], batch_key[1]].value,
+                val,
                 ed.branch().loc[result_key[0], result_key[1]],
                 delta=1e-12,
                 msg=f'{batch_key[1]} of batch {batch_key[0]} equals '
@@ -140,9 +150,12 @@ class Batch(unittest.TestCase):
             [(('consumer_1', 'I_pu'), ('batch_1', 'I')),
              (('consumer_1', 'P_pu'), ('batch_1', 'P')),
              (('consumer_1', 'Q_pu'), ('batch_1', 'Q'))]:
-            f = 3. if batch_key[1] in 'PQ' else 1.
+            qu = batch_key[1]
+            val = (
+                (3. if qu in 'PQ' else 1.)
+                * df_batch.loc[batch_key[0], qu].value)
             self.assertAlmostEqual(
-                f * df_batch.loc[batch_key[0], batch_key[1]].value,
+                val,
                 ed.injection().loc[result_key[0], result_key[1]],
                 delta=1e-12,
                 msg=f'{batch_key[1]} of batch {batch_key[0]} equals '
@@ -151,13 +164,26 @@ class Batch(unittest.TestCase):
             [(('line_2', 'I1_pu'), ('batch_3', 'I')),
              (('line_2', 'P1_pu'), ('batch_3', 'P')),
              (('line_2', 'Q1_pu'), ('batch_3', 'Q'))]:
-            f = -3. if batch_key[1] in 'PQ' else 1.
+            qu = batch_key[1]
+            val = (
+                (-3. if qu in 'PQ' else 1.)
+                * df_batch.loc[batch_key[0], qu].value)
             self.assertAlmostEqual(
-                f * df_batch.loc[batch_key[0], batch_key[1]].value,
+                val,
                 ed.branch().loc[result_key[0], result_key[1]],
                 delta=8e-8,
                 msg=f'{batch_key[1]} of batch {batch_key[0]} equals '
                     f'{result_key[1]} of device {result_key[0]}')
-
+        self.assertAlmostEqual(
+            df_batch.loc['n_2', 'V'].value, 
+            ed.node().loc['n_2', 'V_pu'],
+            delta=1e-12,
+            msg='voltage at n_2 is result of power flow calculation')
+        self.assertAlmostEqual(
+            df_batch.loc['n_3', 'V'].value, 
+            ed.node().loc['n_3', 'V_pu'],
+            delta=1e-12,
+            msg='voltage at n_3 is result of power flow calculation')
+        
 if __name__ == '__main__':
     unittest.main()
