@@ -340,10 +340,13 @@ class Estimation(unittest.TestCase):
             # scaling factor kp for active power P of consumer
             grid.Defk('kp'),
             grid.Link(objid='consumer', part='p', id='kp'))
-        succ, *V_k = estim.estimate(
-            *estim.prep_estimate(model, quantities_of_objective='P')) 
+        expressions = estim.get_expressions(model, count_of_steps=1)
+        estimation_data = estim.get_first_step_data(
+            model, expressions, quantities_of_objective='P')
+        succ, x_V, x_scaling = estim.estimate(*estimation_data) 
         self.assertTrue(succ, 'estimation succeeds')
-        ed = pfc.calculate_electric_data2(model, *V_k)
+        V, k = estim.get_Vcx_kpq(estimation_data[2], x_V, x_scaling)
+        ed = pfc.calculate_electric_data2(model, V, k)
         self.assertAlmostEqual(
             # exclude slacks
             np.max(np.abs(ed.residual_node_current()[model.count_of_slacks:])), 
@@ -369,10 +372,13 @@ class Estimation(unittest.TestCase):
             # scaling factor kp for active power P of consumer
             grid.Defk('kp'),
             grid.Link(objid='consumer', part='p', id='kp'))
-        succ, *V_k = estim.estimate(
-            *estim.prep_estimate(model, quantities_of_objective='P')) 
+        expressions = estim.get_expressions(model, count_of_steps=1)
+        estimation_data = estim.get_first_step_data(
+            model, expressions, quantities_of_objective='P')
+        succ, x_V, x_scaling = estim.estimate(*estimation_data) 
         self.assertTrue(succ, 'estimation succeeds')
-        ed = pfc.calculate_electric_data2(model, *V_k)
+        V, k = estim.get_Vcx_kpq(estimation_data[2], x_V, x_scaling)
+        ed = pfc.calculate_electric_data2(model, V, k)
         self.assertAlmostEqual(
             # exclude slacks
             np.max(np.abs(ed.residual_node_current()[model.count_of_slacks:])), 
@@ -398,10 +404,13 @@ class Estimation(unittest.TestCase):
             # scaling factor kq for reactive power Q of consumer
             grid.Defk('kq'),
             grid.Link(objid='consumer', part='q', id='kq'))
-        succ, *V_k = estim.estimate(
-            *estim.prep_estimate(model, quantities_of_objective='Q')) 
+        expressions = estim.get_expressions(model, count_of_steps=1)
+        estimation_data = estim.get_first_step_data(
+            model, expressions, quantities_of_objective='Q')
+        succ, x_V, x_scaling = estim.estimate(*estimation_data) 
         self.assertTrue(succ, 'estimation succeeds')
-        ed = pfc.calculate_electric_data2(model, *V_k)
+        V, k = estim.get_Vcx_kpq(estimation_data[2], x_V, x_scaling)
+        ed = pfc.calculate_electric_data2(model, V, k)
         self.assertAlmostEqual(
             # exclude slacks
             np.max(np.abs(ed.residual_node_current()[model.count_of_slacks:])), 
@@ -427,10 +436,13 @@ class Estimation(unittest.TestCase):
             # scaling factor kq for reactive power Q of consumer
             grid.Defk('kq'),
             grid.Link(objid='consumer', part='q', id='kq'))
-        succ, *V_k = estim.estimate(
-            *estim.prep_estimate(model, quantities_of_objective='Q')) 
+        expressions = estim.get_expressions(model, count_of_steps=1)
+        estimation_data = estim.get_first_step_data(
+            model, expressions, quantities_of_objective='Q')
+        succ, x_V, x_scaling = estim.estimate(*estimation_data) 
         self.assertTrue(succ, 'estimation succeeds')
-        ed = pfc.calculate_electric_data2(model, *V_k)
+        V, k = estim.get_Vcx_kpq(estimation_data[2], x_V, x_scaling)
+        ed = pfc.calculate_electric_data2(model, V, k)
         self.assertAlmostEqual(
             # exclude slacks
             np.max(np.abs(ed.residual_node_current()[model.count_of_slacks:])), 
@@ -456,10 +468,13 @@ class Estimation(unittest.TestCase):
             # scaling factor kpq for active/reactive power P/Q of consumer
             grid.Defk('kpq'),
             grid.Link(objid='consumer', part='pq', id='kpq'))
-        succ, *V_k = estim.estimate(
-            *estim.prep_estimate(model, quantities_of_objective='I')) 
+        expressions = estim.get_expressions(model, count_of_steps=1)
+        estimation_data = estim.get_first_step_data(
+            model, expressions, quantities_of_objective='I')
+        succ, x_V, x_scaling = estim.estimate(*estimation_data) 
         self.assertTrue(succ, 'estimation succeeds')
-        ed = pfc.calculate_electric_data2(model, *V_k)
+        V, k = estim.get_Vcx_kpq(estimation_data[2], x_V, x_scaling)
+        ed = pfc.calculate_electric_data2(model, V, k)
         self.assertAlmostEqual(
             # exclude slacks
             np.max(np.abs(ed.residual_node_current()[model.count_of_slacks:])), 
@@ -485,10 +500,13 @@ class Estimation(unittest.TestCase):
             # scaling factor kpq for active/reactive power P/Q of consumer
             grid.Defk('kpq'),
             grid.Link(objid='consumer', part='pq', id='kpq'))
-        succ, *V_k = estim.estimate(
-            *estim.prep_estimate(model, quantities_of_objective='I')) 
+        expressions = estim.get_expressions(model, count_of_steps=1)
+        estimation_data = estim.get_first_step_data(
+            model, expressions, quantities_of_objective='I')
+        succ, x_V, x_scaling = estim.estimate(*estimation_data) 
         self.assertTrue(succ, 'estimation succeeds')
-        ed = pfc.calculate_electric_data2(model, *V_k)
+        V, k = estim.get_Vcx_kpq(estimation_data[2], x_V, x_scaling)
+        ed = pfc.calculate_electric_data2(model, V, k)
         self.assertAlmostEqual(
             # exclude slacks
             np.max(np.abs(ed.residual_node_current()[model.count_of_slacks:])), 
@@ -513,10 +531,13 @@ class Estimation(unittest.TestCase):
             # scaling factor kq for reactive power Q of consumer
             grid.Defk('kq'),
             grid.Link(objid='consumer', part='q', id='kq'))
-        succ, *V_k = estim.estimate(
-            *estim.prep_estimate(model, quantities_of_objective='V')) 
+        expressions = estim.get_expressions(model, count_of_steps=1)
+        estimation_data = estim.get_first_step_data(
+            model, expressions, quantities_of_objective='V')
+        succ, x_V, x_scaling = estim.estimate(*estimation_data) 
         self.assertTrue(succ, 'estimation succeeds')
-        ed = pfc.calculate_electric_data2(model, *V_k)
+        V, k = estim.get_Vcx_kpq(estimation_data[2], x_V, x_scaling)
+        ed = pfc.calculate_electric_data2(model, V, k)
         self.assertAlmostEqual(
             # exclude slacks
             np.max(np.abs(ed.residual_node_current()[model.count_of_slacks:])), 
@@ -525,7 +546,7 @@ class Estimation(unittest.TestCase):
             msg='Inode is almost 0')
         given_V_at_node = model.vvalues.set_index('id_of_node').loc['n_2']
         self.assertAlmostEqual(
-            np.abs(V_k[0][given_V_at_node.index_of_node]),
+            np.abs(V[given_V_at_node.index_of_node]),
             given_V_at_node.V,
             delta=1e-12,
             msg='estimated voltage equals given voltage')

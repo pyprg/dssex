@@ -311,8 +311,7 @@ def _get_factor_ini_values(myfactors, symbols):
     ini = pd.Series(symbols, index=unique_factors).reindex(prev_index)
     ini.index = unique_factors
     # transfer data from value in case of missing source data
-    ini_isna = ini.isna()
-    ini[ini_isna] = -1
+    ini.fillna(-1, inplace=True)
     return ini.astype(dtype='Int64')
 
 def _get_default_factors(count_of_steps):
@@ -368,7 +367,7 @@ def _factor_index(factors):
         name='index_of_symbol')
 
 def get_load_scaling_factor_data(
-        injectionids, given_factors, assoc, count_of_steps):
+        injectionids, given_factors, assoc_frame, count_of_steps):
     """Creates and arranges indices for scaling factors and initialization
     of scaling factors.
 
@@ -376,10 +375,13 @@ def get_load_scaling_factor_data(
     ----------
     injectionids: pandas.Series
         str, identifiers of injections
-    given_factors: pandas.DataFrame
-        * int, step
-        * ...
-    assoc: pandas.DataFrame (int (step), str (injid))
+    given_factors: pandas.DataFrame (step, id)
+        * .type, 'var' | 'const'
+        * .id_of_source , str, source from previous step for (initial) value
+        * .value, float, (initial) value if no valid source from previous step
+        * .min, float, smallest value, constraint during optimization
+        * .max, float, greatest value, constraint during optimization
+    assoc_frame: pandas.DataFrame (int (step), str (injid), 'p'|'q' (part))
         * str (id of factor)
     count_of_steps: int
         number of optimization steps
@@ -392,7 +394,7 @@ def get_load_scaling_factor_data(
     # given factors
     # step, id_of_factor => id_of_injection, 'id_p'|'id_q'
     step_injection_part_factor = _get_step_factor_to_injection_part(
-        injectionids, assoc, given_factors, count_of_steps)
+        injectionids, assoc_frame, given_factors, count_of_steps)
     # remove factors not needed, add default (nan) factors if necessary
     required_factors_index = step_injection_part_factor.index.unique()
     required_factors = given_factors.reindex(required_factors_index)
@@ -446,7 +448,8 @@ def get_factors(model, count_of_steps=1):
     Returns
     -------
     tuple
-        pandas.DataFrame"""
+        * pandas.DataFrame, all scaling factors
+        * pandas.DataFrame, injections with scaling factors"""
     return get_load_scaling_factor_data(
         model.injections.id,
         model.load_scaling_factors,
@@ -490,10 +493,15 @@ def _get_values_of_symbols(factor_data, value_of_previous_step):
     # explicitely given values not calculated in previous step
     is_given = factor_data.index_of_source < 0
     given = factor_data[is_given]
-    values[given.index_of_symbol] = factor_data.value
+    if len(given):
+        values[given.index_of_symbol] = given.value.to_numpy().reshape(-1,1)
     # values calculated in previous step
     calc = factor_data[~is_given]
-    values[calc.index_of_symbol] = value_of_previous_step[calc.index_of_source]
+    if len(calc):
+        assert (0 < value_of_previous_step.size), \
+            'missing value_of_previous_step'
+        values[calc.index_of_symbol] = (
+            value_of_previous_step[calc.index_of_source.astype(int)])
     return values
 
 def _select_type(vecs, row_index):
@@ -604,7 +612,8 @@ def get_scaling_data(
     #   scaling variables and scaling constants, we prepare indices for 
     #   mapping to kp/kq (which are ordered according to injections)
     var_const_to_factor = np.concatenate(
-        [factors_var.index.array, factors_consts.index.array])
+        [factors_var.index_of_symbol.array, 
+         factors_consts.index_of_symbol.array])
     return Scalingdata(
         # kp/kq used in expression building
         #   (columns of injections_factors.kp/kq store an index)
@@ -667,12 +676,14 @@ def get_k(scaling_data, x_scaling):
     
     Result
     ------
-    numpy.array (n,2)"""
+    tuple
+        * numpy.array (n,2), kp, kq for each injection
+        * casadi.DM (m,1) kvar/const"""
     k_var_const = (
         casadi.vertcat(x_scaling, scaling_data.values_of_consts).toarray())
     kp = k_var_const[scaling_data.var_const_to_kp]
     kq = k_var_const[scaling_data.var_const_to_kq]
-    return np.hstack([kp, kq])
+    return np.hstack([kp, kq]), k_var_const[scaling_data.var_const_to_factor]
 
 def make_get_scaling_data(model, count_of_steps=1):
     """Creates a function for creating Scalingdata specific for a calculation
@@ -1041,7 +1052,7 @@ def make_get_scaling_and_injection_data(
         return scaling_data, Iinj_data
     return get_scaling_and_injection_data
 
-def get_estimation_data(model, count_of_steps, vminsqr=_VMINSQR):
+def get_expressions(model, count_of_steps, vminsqr=_VMINSQR):
     """Prepares data for estimation. Creates symbols and expressions.
 
     Parameters
@@ -1848,14 +1859,14 @@ def get_diff_expressions(model, v_syms_gb_ex, ipqv, quantities):
                 v_syms_gb_ex['Vnode_syms'][vvals.index,2].sqrt())
     return np.array(_quantities), np.array(_ids), casadi.DM(_vals), _exprs
 
-def get_optimize(model, estimation_data, positions=None):
+def get_optimize(model, expressions, positions=None):
     """Preapares the optimization function.
 
     Parameters
     ----------
     model: egrid.model.Model
         data of electric grid
-    estimation_data : dict
+    expressions : dict
         estimation data
         * 'Vnode_syms', casadi.SX (shape n,2)
         * 'Vslack_syms', casadi.SX (shape n,2)
@@ -1868,14 +1879,14 @@ def get_optimize(model, estimation_data, positions=None):
     -------
     function"""
     # setup solver
-    Vnode_ri_syms = vstack(estimation_data['Vnode_syms'], 2)
+    Vnode_ri_syms = vstack(expressions['Vnode_syms'], 2)
     # values of parameters
     #   Vslack must be negative as Vslack_result + Vslack_in_Inode = 0
     #   because the root is searched for with formula: Y * Vresult + Inode = 0
     Vslacks_neg = -model.slacks.V
     params_ = casadi.vertcat(
-        vstack(estimation_data['Vslack_syms']), 
-        estimation_data['position_syms'])
+        vstack(expressions['Vslack_syms']), 
+        expressions['position_syms'])
     positions_ = model.branchtaps.position if positions is None else positions
     values_of_parameters_ = casadi.vertcat(
         np.real(Vslacks_neg), np.imag(Vslacks_neg), positions_)
@@ -1915,7 +1926,7 @@ def get_optimize(model, estimation_data, positions=None):
         params = casadi.vertcat(params_, scaling_data.kconsts)
         values_of_parameters = casadi.vertcat(
             values_of_parameters_, scaling_data.values_of_consts)
-        constraints = estimation_data['Y_by_V'] + vstack(Inode_inj) 
+        constraints = expressions['Y_by_V'] + vstack(Inode_inj) 
         nlp = {'x': syms, 'f': objective, 'g': constraints, 'p': params}
         solver = casadi.nlpsol('solver', 'ipopt', nlp)
         # initial values
@@ -2037,14 +2048,32 @@ def get_calculate_from_result(model, ed, scaling_data, x):
 # convenience functions of estimation for easier handling 
 #
 
-def prep_estimate(
-        model, quantities_of_objective, positions=None, count_of_steps=1):
+def get_first_step_data(
+        model, expressions, quantities_of_objective, positions=None):
     """Prepares data for function estimate.
     
     Parameters
     ----------
     model: egrid.model.Model
         data of electric grid
+    expressions: dict
+        * 'Vnode_syms', casadi.SX, expressions of node Voltages
+        * 'Vslack_syms', casadi.SX, symbols of slack voltages, 
+           Vslack_syms[:,0] real part, Vslack_syms[:,1] imaginary part
+        * 'position_syms', casadi.SX, symbols of tap positions
+        * 'gb_mn_tot', conductance g / susceptance b per branch terminal
+            * gb_mn_tot[:,0] g_mn, mutual conductance
+            * gb_mn_tot[:,1] b_mn, mutual susceptance
+            * gb_mn_tot[:,2] g_tot, self conductance + mutual conductance
+            * gb_mn_tot[:,3] b_tot, self susceptance + mutual susceptance
+        * 'Y_by_V', casadi.SX, expression for Y @ V
+        * 'get_scaling_and_injection_data', function
+          (int, casadi.DM) -> (tuple - Scalingdata, casadi.SX)
+          which is a function
+          (index_of_step, scaling_factors_of_previous_step) 
+            -> (tuple - Scalingdata, injection_data)
+        * 'inj_to_node', casadi.SX, matrix, maps from
+          injections to power flow calculation nodes
     quantities_of_objective: str
         string of characters 'I'|'P'|'Q'|'V'
         addresses differences of calculated and given values to be minimized,
@@ -2054,14 +2083,12 @@ def prep_estimate(
     positions: array_like
         optional
         int, positions of taps
-    count_of_steps : int
-        Number of estimation steps. The default is 1.
 
     Returns
     -------
     model: egrid.model.Model
         data of electric grid
-    estimation_data: dict
+    expressions: dict
         estimation data
         * 'Vnode_syms', casadi.SX (shape n,2)
         * 'Vslack_syms', casadi.SX (shape n,2)
@@ -2088,27 +2115,27 @@ def prep_estimate(
         * Inode_inj[:,1] - Iim, imaginary part of current injected into node
     positions: array_like
         int, positions of taps, can be None"""
-    ed = get_estimation_data(model, count_of_steps)
-    scaling_data, Iinj_data = ed['get_scaling_and_injection_data'](step=0)
-    Inode_inj = ed['inj_to_node'] @ Iinj_data[:,:2]
+    scaling_data, Iinj_data = (
+        expressions['get_scaling_and_injection_data'](step=0))
+    Inode_inj = expressions['inj_to_node'] @ Iinj_data[:,:2]
     # power flow calculation for initial voltages
     succ, Vnode_ri_ini = calculate_power_flow2(
-        model, ed, scaling_data, Inode_inj, positions)
+        model, expressions, scaling_data, Inode_inj, positions)
     diff_data = get_diff_expressions(
-        model, ed, Iinj_data, quantities_of_objective)
-    return (
-        model, ed, scaling_data, diff_data, Vnode_ri_ini, Inode_inj, positions)
+        model, expressions, Iinj_data, quantities_of_objective)
+    return (model, expressions, scaling_data, diff_data, 
+            Vnode_ri_ini, Inode_inj, positions)
 
 def estimate(
-    model, estimation_data, scaling_data, diff_data, Vnode_ri_ini, Inode_inj, 
+    model, expressions, scaling_data, diff_data, Vnode_ri_ini, Inode_inj, 
     positions):
-    """Optimization and a little post-processing.
+    """Optimizes.
 
     Parameters
     ----------
     model: egrid.model.Model
         data of electric grid
-    estimation_data: dict
+    expressions: dict
         estimation data
         * 'Vnode_syms', casadi.SX (shape n,2)
         * 'Vslack_syms', casadi.SX (shape n,2)
@@ -2130,9 +2157,9 @@ def estimate(
         * expression, casadi.SX, vector (shape n,1)
     Vnode_ri_ini: array_like (shape 2n,1)
         initial node voltages separated real and imaginary values
-    Inode: casadi.SX (shape n,2)
-        * Inode[:,0] - Ire, real part of current injected into node
-        * Inode[:,1] - Iim, imaginary part of current injected into node
+    Inode_inj: casadi.SX (shape n,2)
+        * Inode_inj[:,0] - Ire, real part of current injected into node
+        * Inode_inj[:,1] - Iim, imaginary part of current injected into node
     positions: array_like
         optional
         int, positions of taps
@@ -2145,10 +2172,29 @@ def estimate(
         calculated complex node voltages
     pq_factors : numpy.array, float (shape m,2)
         scaling factors for injections"""
-    optimize = get_optimize(model, estimation_data, positions)
+    optimize = get_optimize(model, expressions, positions)
     succ, x = optimize(Vnode_ri_ini, scaling_data, Inode_inj, diff_data)
     # result processing
-    voltages_ri, k = casadi.vertsplit(x, 2*model.shape_of_Y[0])
-    voltages_cx = ri_to_complex(voltages_ri.toarray())
-    pq_factors = get_k(scaling_data, k)
-    return succ, voltages_cx, pq_factors
+    return succ, *casadi.vertsplit(x, 2*model.shape_of_Y[0])
+        
+def get_Vcx_kpq(scaling_data, x_V, x_scaling):
+    """Helper. Processes results of estimation.
+    
+    Parameters
+    ----------
+    scaling_data : TYPE
+        DESCRIPTION.
+    x_V : casadi.DM
+        real part of node voltages, imaginary part of node voltages
+    x_scaling : casasdi.DM
+        scaling factors
+
+    Returns
+    -------
+    V : numpy.array (shape n,1), complex
+        node voltages
+    k : numpy.array (shape m,2), float
+        scaling factors per injection"""
+    k, _ = get_k(scaling_data, x_scaling)
+    V = ri_to_complex(x_V)
+    return V, k

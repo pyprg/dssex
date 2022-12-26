@@ -35,7 +35,7 @@ import src.dssex.pfcnum as pfc
 #       |     line_0    |     line_1    |
 #       +-----=====-----+-----=====-----+
 #       |               |               |
-#                                      \|/ consumer
+#                                      \|/ consumer_1/2
 #                                       '
 
 model_entities = [
@@ -69,53 +69,60 @@ model_entities = [
         Q10=10.0,
         Exp_v_p=0.0,
         Exp_v_q=0.0),
-    # Injection(
-    #     id='consumer_1',
-    #     id_of_node='n_2',
-    #     P10=30.0,
-    #     Q10=10.0,
-    #     Exp_v_p=0.0,
-    #     Exp_v_q=0.0),
+    Injection(
+        id='consumer_1',
+        id_of_node='n_2',
+        P10=30.0,
+        Q10=10.0,
+        Exp_v_p=0.0,
+        Exp_v_q=0.0),
     # define a scaling factor
-    Defk(id='kp'),
+    Defk(id='kp', step=(0,1,2)),
     # link the factor to the loads
     Link(
         objid='consumer_0', 
         part='p', 
-        id='kp'),
+        id='kp',
+        step=(0,1,2)),
     # measurement
     PValue(
-        id_of_batch='P_line_0',
+        id_of_batch='n_0_line_0',
         P=40.0),
-    # QValue(
-    #     id_of_batch='P_line_0',
-    #     Q=10.0),
+    QValue(
+        id_of_batch='n_0_line_0',
+        Q=10.0),
+    IValue(
+        id_of_batch='n_0_line_0',
+        I=42.0),
     Output(
-        id_of_batch='P_line_0',
+        id_of_batch='n_0_line_0',
         id_of_device='line_0',
         id_of_node='n_0'),
     # # measurement
-    # PValue(
-    #     id_of_batch='P_line_1',
-    #     P=40.0),
-    # Output(
-    #     id_of_batch='P_line_1',
-    #     id_of_device='line_1',
-    #     id_of_node='n_1')
+    PValue(
+        id_of_batch='n_1_line_1',
+        P=40.0),
+    Output(
+        id_of_batch='n_1_line_1',
+        id_of_device='line_1',
+        id_of_node='n_1'),
+    Vvalue(
+        id_of_node='n_1',
+        V=.95)
     ]
 
 model00 = make_model(model_entities)
 
 import casadi
 from src.dssex.estim2 import (
-    get_estimation_data,
+    get_expressions,
     get_optimize,
     vstack, 
     calculate_power_flow2,
     get_batch_expressions,
     get_diff_expressions,
     calculate_power_flow,
-    prep_estimate,
+    get_first_step_data,
     estimate,
     get_scaling_factors,
     get_k,
@@ -127,13 +134,11 @@ import numpy as np
 
 mymodel = model00
 
-ed = get_estimation_data(mymodel, count_of_steps=2)
+ed = get_expressions(mymodel, count_of_steps=2)
 scaling_data, Iinj_data = ed['get_scaling_and_injection_data'](step=0)
 Inode = ed['inj_to_node'] @ Iinj_data[:,:2]
 # power flow calculation for initial voltages
 succ, Vnode_ri_vals = calculate_power_flow2(mymodel, ed, scaling_data, Inode)
-
-
 
 Vnode_cx_vals = ri_to_complex(Vnode_ri_vals)
 print(f'\nVnode_cx_vals (symbolic):\n{Vnode_cx_vals}')
@@ -144,8 +149,6 @@ selector = 'P'
 diff_data = get_diff_expressions(mymodel, ed, Iinj_data, selector)
 optimize = get_optimize(mymodel, ed)
 succ, x = optimize(Vnode_ri_vals, scaling_data, Inode, diff_data)
-
-
 
 print('\n',('SUCCESS' if succ else 'F A I L E D'))
 
@@ -158,7 +161,7 @@ if succ:
     x_scaling = x[count_of_v_ri:]
     scaling_factors = get_scaling_factors(scaling_data, x_scaling)
     print(f'\nscaling_factors:\n{scaling_factors}')
-    k = get_k(scaling_data, x_scaling)
+    k, _ = get_k(scaling_data, x_scaling)
     print(f'\nk:\n{k}')
     get_injected_power = pfc.get_calc_injected_power_fn(
         0.8**2, mymodel.injections, pq_factors=k, loadcurve='interpolated')   
@@ -166,12 +169,31 @@ if succ:
         mymodel, get_injected_power, mymodel.branchtaps.position, voltages_cx) 
 
 #%%
-constraint_selector = 'IPQV'
-succ, voltages_cx, kpq = estimate(*prep_estimate(mymodel, 'IPQV'))
-batch_values = get_batch_values(mymodel, voltages_cx, kpq, None, 'P')
+optimization_quantities = 'IPQV'
+constraint_quantities = 'IPQV'
+positions = None
+count_of_steps = 3
+expressions = get_expressions(mymodel, count_of_steps)
+
+succ, voltages_ri, k = estimate(
+    *get_first_step_data(
+        mymodel, expressions, optimization_quantities, positions))
+voltages_cx = ri_to_complex(voltages_ri.toarray())
+kpq, k_var_const = get_k(scaling_data, k)
+
+batch_values = get_batch_values(
+    mymodel, voltages_cx, kpq, positions, constraint_quantities)
 print(batch_values)
+#%%
+selector_1 = 'Q'
 
-
+scaling_data_1, Iinj_data_1 = (
+        expressions['get_scaling_and_injection_data']
+        (step=1, k_prev=k_var_const))
+diff_data_1 = get_diff_expressions(mymodel, expressions, Iinj_data_1, selector_1)
+succ, voltages_ri, k = estimate(
+    mymodel, expressions, scaling_data_1, diff_data_1, voltages_ri, Iinj_data_1, 
+    positions)
 #%%
 # calculate residual node current for solution of optimization
 # symbolic
@@ -187,7 +209,7 @@ val_calc = pd.DataFrame(
      'calculated': vals_calc})
 
 prev = val_calc
-relevant = val_calc.loc[:,'qu'].isin(list(constraint_selector))
+relevant = val_calc.loc[:,'qu'].isin(list(constraint_quantities))
 idxs = val_calc.index[relevant]
 
 vals = calculate_from_result(diff_data[3][idxs]).toarray()
@@ -211,8 +233,9 @@ val_calc.loc[is_power, ['given', 'calculated']] *= 3
 Inode_sol = calculate_from_result(ed['Y_by_V'] + vstack(Inode)).toarray().reshape(-1)
 print(f'\nInode_sol:\n{Inode_sol}')
 # numeric
+kpq, k_var_const = get_k(scaling_data, k)
 get_injected_power = pfc.get_calc_injected_power_fn(
-    0.8**2, mymodel.injections, pq_factors=k, loadcurve='interpolated')   
+    0.8**2, mymodel.injections, pq_factors=kpq, loadcurve='interpolated')   
 ed2 = pfc.calculate_electric_data(
     mymodel, get_injected_power, mymodel.branchtaps.position, voltages_cx) 
 #%% calculate power flow
