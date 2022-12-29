@@ -31,16 +31,16 @@ _VMINSQR = 0.8**2
 _EPSILON = 1e-12
 
 def get_values(model, selector):
-    """Helper for returning I/P/Q/V-values from model using a 
+    """Helper for returning I/P/Q/V-values from model using a
     string 'I'|'P'|'Q'|'V'.
-    
+
     Parameters
     ----------
     model: egrid.model.Model
         data of electric grid
     selector: 'I'|'P'|'Q'|'V'
         accesses model.ivalues | model.pvalues | model.qvalues | model.vvalues
-        
+
     Returns
     -------
     pandas.DataFrame
@@ -88,9 +88,9 @@ def _calculate_injected_power_n(Vinj_abs_sqr, Exp_v, PQ):
     Exp_v: numpy array (n,1 or n,2)
         voltage exponents for active or reactive powre or both
     PQ: numpy array (n,1 or n,2)
-        active or reactive power or both, dimension must match dimension of 
+        active or reactive power or both, dimension must match dimension of
         Exp_v
-    
+
     Returns
     -------
     numpy.array (shape PQ.shape)"""
@@ -103,7 +103,7 @@ def _calculate_injected_power_n(Vinj_abs_sqr, Exp_v, PQ):
 
 def _interpolate_injected_power_n(Vinj_abs_sqr, Exp_v, PQ, vminsqr):
     """Interpolates values of injected power.
-    
+
     Parameters
     ----------
     Vinj_abs_sqr: numpy.array, shape n,1
@@ -115,7 +115,7 @@ def _interpolate_injected_power_n(Vinj_abs_sqr, Exp_v, PQ, vminsqr):
         active and or reactive power
     vminsqr: float
         square of voltage, upper limit of interpolation interval [0...vminsqr]
-    
+
     Returns
     -------
     numpy.array, shape n,1 or n,2"""
@@ -137,11 +137,11 @@ def _interpolate_injected_power_n(Vinj_abs_sqr, Exp_v, PQ, vminsqr):
 
 def _injected_power_n(
         injections, node_to_inj, Vnode_abs_sqr, kpq, vminsqr=_VMINSQR):
-    """Numerically calculates magnitudes of injected power flowing 
+    """Numerically calculates magnitudes of injected power flowing
     into injections.
     This function is intended for calculation of power for selected
     injections only.
-    
+
     Parameters
     ----------
     injections: pandas.DataFrame (int index_of_injection)
@@ -161,7 +161,7 @@ def _injected_power_n(
         factors for all injections of model
     vminsqr: float
         square of voltage, upper limit of interpolation interval [0...vminsqr]
-    
+
     Returns
     -------
     numpy.array, shape n,2
@@ -187,7 +187,7 @@ def _injected_power_n(
 
 def _calculate_injected_current_n(Vri, Vabs_sqr, Exp_v, PQscaled):
     """Calculates values of injected current.
-    
+
     Parameters
     ----------
     Vri: numpy.array, shape n,2
@@ -200,11 +200,11 @@ def _calculate_injected_current_n(Vri, Vabs_sqr, Exp_v, PQscaled):
     Exp_v: numpy.array, shape n,2
         voltage exponents of active and reactive power
     PQscaled: numpy.array, shape n,2
-        active and reactive power at nominal voltage multiplied 
+        active and reactive power at nominal voltage multiplied
         by scaling factors
         PQscaled[:,0] - active power
         PQscaled[:,1] - reactive power
-    
+
     Returns
     -------
     numpy.array, shape n,2
@@ -218,7 +218,7 @@ def _calculate_injected_current_n(Vri, Vabs_sqr, Exp_v, PQscaled):
 def _interpolate_injected_current_n(Vinj, Vabs_sqr, PQinj):
     """Interpolates values of injected current in a voltage interval,
     S = f(|V|).
-    
+
     Parameters
     ----------
     Vinj: numpy.array, shape n,2
@@ -229,10 +229,10 @@ def _interpolate_injected_current_n(Vinj, Vabs_sqr, PQinj):
         square of voltage magnitude at terminals of injections
         Vinj[:,0]**2 + Vinj[:,1]**2
     PQinj: numpy.array, shape n,2
-        injected active and reactive power 
+        injected active and reactive power
         Sinj[:,0] - active power
         Sinj[:,1] - reactive power
-    
+
     Returns
     -------
     numpy.array, shape n,2
@@ -248,13 +248,13 @@ def _interpolate_injected_current_n(Vinj, Vabs_sqr, PQinj):
     return np.hstack([Ire.reshape(-1, 1), Iim.reshape(-1, 1)])
 
 def _injected_current_n(
-        injections, node_to_inj, Vnode_ri2, Vnode_abs_sqr, kpq, 
+        injections, node_to_inj, Vnode_ri2, Vnode_abs_sqr, kpq,
         vminsqr=_VMINSQR):
-    """Numerically calculates magnitudes of injected currents flowing 
+    """Numerically calculates magnitudes of injected currents flowing
     into injections.
     This function is intended for calculation of currents for selected
     injections only.
-    
+
     Parameters
     ----------
     injections: pandas.DataFrame (int index_of_injection)
@@ -277,7 +277,7 @@ def _injected_current_n(
         factors for all injections of model
     vminsqr: float
         square of voltage, upper limit interpolation interval [0...vminsqr]
-    
+
     Returns
     -------
     numpy.array, shape n,2
@@ -291,7 +291,7 @@ def _injected_current_n(
     Vinj_abs_sqr = node_to_inj[idx_of_injections] @ Vnode_abs_sqr
     # assumes P10 and Q10 are sums of 3 per-phase-values
     PQscaled = (
-        kpq[idx_of_injections] 
+        kpq[idx_of_injections]
         * (injections[['P10', 'Q10']].to_numpy() / 3))
     Exp_v = injections[['Exp_v_p', 'Exp_v_p']].to_numpy()
     interpolate = Vinj_abs_sqr < vminsqr
@@ -310,8 +310,8 @@ def _injected_current_n(
 
 def _get_injected_value(
         node_to_inj, Vnode_ri2, Vabs_sqr, kpq, selector, vminsqr, injections):
-    """Returns one of electric current I, active power P or reactive power Q 
-    selected by selector for given injections.  
+    """Returns one of electric current I, active power P or reactive power Q
+    selected by selector for given injections.
 
     Parameters
     ----------
@@ -386,10 +386,10 @@ def get_batches(values, outputs, column_of_device_index):
 
 def _get_batch_values_inj(
         model, Vnode_ri2, Vabs_sqr, kpq, selector, vminsqr=_VMINSQR):
-    """Calculates a vector (numpy.array, shape n,1) of injected absolute 
-    current, active power or reactive power. The expressions are based 
+    """Calculates a vector (numpy.array, shape n,1) of injected absolute
+    current, active power or reactive power. The expressions are based
     on the batch definitions.
-    
+
     Parameters
     ----------
     model: egrid.model.Model
@@ -406,7 +406,7 @@ def _get_batch_values_inj(
         addresses current magnitude, active power or reactive power
     vminsqr: float
         square of voltage, upper limit of interpolation interval [0...vminsqr]
-    
+
     Returns
     -------
     dict
@@ -414,19 +414,19 @@ def _get_batch_values_inj(
     assert selector in 'IPQ', \
         f'selector needs to be one of "I", "P" or "Q" but is "{selector}"'
     get_inj_val = partial(
-        _get_injected_value, 
-        model.mnodeinj.T, 
+        _get_injected_value,
+        model.mnodeinj.T,
         Vnode_ri2,
         Vabs_sqr,
-        kpq, 
-        selector, 
+        kpq,
+        selector,
         vminsqr)
     injections = model.injections
     return {
         id_of_batch:get_inj_val(injections.loc[df.index_of_injection])
         for id_of_batch, df in get_batches(
-            get_values(model, selector), 
-            model.injectionoutputs, 
+            get_values(model, selector),
+            model.injectionoutputs,
             'index_of_injection')}
 
 #
@@ -435,7 +435,7 @@ def _get_batch_values_inj(
 
 def _get_gb_of_terminals_n(branchterminals):
     """Creates a numpy array of branch-susceptances and branch-conductances.
-    
+
     Parameters
     ----------
     branchterminals: pandas.DataFrame (index_of_terminal)
@@ -443,7 +443,7 @@ def _get_gb_of_terminals_n(branchterminals):
         * .b_lo, float, longitudinal susceptance
         * .g_tr_half, float, transversal conductance
         * .b_tr_half, float, transversal susceptance
-    
+
     Returns
     -------
     numpy.array (shape n,4)
@@ -477,11 +477,11 @@ def _calculate_factors_of_positions_n(branchtaps, positions):
         .reshape(-1,1))
 
 def _create_gb_of_terminals_n(branchterminals, branchtaps, positions=None):
-    """Creates a vectors (as a numpy array) of branch-susceptances and 
+    """Creates a vectors (as a numpy array) of branch-susceptances and
     branch-conductances.
-    The intended use is calculating a subset of terminal values. 
+    The intended use is calculating a subset of terminal values.
     Arguments 'branchtaps' and 'positions' will be selected
-    accordingly, hence, it is appropriate to pass the complete branchtaps 
+    accordingly, hence, it is appropriate to pass the complete branchtaps
     and positions.
 
     Parameters
@@ -526,7 +526,7 @@ def _create_gb_of_terminals_n(branchterminals, branchtaps, positions=None):
     # g_lo, b_lo, g_trans, b_trans
     gb_mn_tot = _get_gb_of_terminals_n(branchterminals)
     # gb_mn_mm -> gb_mn_tot
-    gb_mn_tot[:, 2:] += gb_mn_tot[:, :2] 
+    gb_mn_tot[:, 2:] += gb_mn_tot[:, :2]
     if f_at_term.size:
         # diagonal and off-diagonal
         gb_mn_tot[is_term_at_tap] *= f_at_term
@@ -583,10 +583,10 @@ _branch_flow_slicer = dict(I=np.s_[:,:2], P=np.s_[:,2], Q=np.s_[:,3])
 
 def _get_batch_values_br(
         model, vnode_ri2, positions, selector, vminsqr=.8**2):
-    """Calculates a vector (numpy.array, shape n,1) of injected absolute 
-    current, active power or reactive power. The expressions are based 
+    """Calculates a vector (numpy.array, shape n,1) of injected absolute
+    current, active power or reactive power. The expressions are based
     on the batch definitions.
-    
+
     Parameters
     ----------
     model: egrid.model.Model
@@ -600,7 +600,7 @@ def _get_batch_values_br(
         addresses current magnitude, active power or reactive power
     vminsqr: float
         square of voltage, upper limit of interpolation interval [0...vminsqr]
-    
+
     Returns
     -------
     dict
@@ -613,15 +613,15 @@ def _get_batch_values_br(
     return {
         id_of_batch:get_branch_vals(branchterminals.loc[df.index_of_term])
         for id_of_batch, df in get_batches(
-            get_values(model, selector), 
-            model.branchoutputs, 
+            get_values(model, selector),
+            model.branchoutputs,
             'index_of_term')}
 
 def _get_batch_flow_values(
         model, Vnode_ri2, Vabs_sqr, kpq, positions, selector, vminsqr):
     """Calculates a float value for each batch id. The returned values
     are a subset of calculated values of a network model.
-    
+
     Parameters
     ----------
     model: egrid.model.Model
@@ -641,7 +641,7 @@ def _get_batch_flow_values(
     vminsqr: float
         square of voltage, upper limit of interpolation interval [0...vminsqr]
         for interpolation of injected values
-    
+
     Returns
     -------
     dict
@@ -658,23 +658,23 @@ def _get_batch_flow_values(
     if selector in 'PQ':
         return {id_of_batch: np.sum(arr) for id_of_batch, arr in dd.items()}
     if selector == 'I':
-        return {id_of_batch: 
+        return {id_of_batch:
                 np.sqrt(np.sum(np.square(np.sum(Iri_vals, axis=0))))
                 for id_of_batch, Iri_vals in dd.items()}
     assert False, \
         f'selector needs to be one of "I", "P" or "Q" but is "{selector}"'
-    
+
 def get_batch_values(
     model, Vnode_ri2, kpq, positions=None, quantities='', vminsqr=_VMINSQR):
-    """The model stores given values separated for 
+    """The model stores given values separated for
     I (magnitude of electric current), P (active power), Q (reactive power) and
     V (magnitude of voltage). Provided, node voltages, scaling factors and
-    tappositions are results and parameters of a power flow calculation 
+    tappositions are results and parameters of a power flow calculation
     over model this function returns calculated values for the selected
     quantities of given values. For instance, if quantity is 'P' the function
     returns the active power according to the power flow calculation for the
     locations of the active power values given by the model.
-    
+
     Parameters
     ----------
     model: egrid.model.Model
@@ -689,12 +689,12 @@ def get_batch_values(
         tap positions, accepts None
     quantities: str
         string of characters 'I'|'P'|'Q'|'V'
-        addresses current magnitude, active power, reactive power or magnitude 
+        addresses current magnitude, active power, reactive power or magnitude
         of voltage, case insensitive, other characters are ignored
     vminsqr: float
         square of voltage, upper limit of interpolation interval [0...vminsqr]
         for interpolation of injected values
-    
+
     Returns
     -------
     tuple

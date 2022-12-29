@@ -106,10 +106,9 @@ def create_y(terms, count_of_nodes, foffd):
     return coo_matrix((yvals, rowcol), shape=shape, dtype=np.complex128)
 
 def create_y_matrix(model, pos):
-    """Generates admittance matrix of branches. 
-    M[n,n] of slack nodes is set to 1, other
-    values of slack nodes are zero. Hence, the returned 
-    matrix is unsymmetrical.
+    """Generates the branch-admittance matrix. 
+    M[n,n] of slack nodes is set to 1, other values of slack nodes are zero. 
+    Hence, the returned matrix is unsymmetrical.
     
     Parameters
     ----------

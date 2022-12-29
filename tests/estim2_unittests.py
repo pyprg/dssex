@@ -29,7 +29,7 @@ from functools import partial
 from numpy.linalg import norm
 import src.dssex.estim2 as estim
 
-# square of voltage magnitude, minimum value for load curve, 
+# square of voltage magnitude, minimum value for load curve,
 #   if value is below _VMINSQR the load curves for P and Q converge
 #   towards a linear load curve which is 0 when V=0; P(V=0)=0, Q(V=0)=0
 _VMINSQR = 0.8**2
@@ -48,9 +48,9 @@ grid_pfc = (
     grid.Branch('line', 'n_0', 'n_1', y_lo=1e3-1e3j, y_tr=1e-6+1e-6j))
 
 class Power_flow_calculation_basic(unittest.TestCase):
-    
+
     def test_calculate_power_flow_00(self):
-        """Power flow calculation with one branch and one 
+        """Power flow calculation with one branch and one
         pure active power consumer."""
         model = make_model(
             grid_pfc, grid.Injection('consumer', 'n_1', P10=30.0))
@@ -62,7 +62,7 @@ class Power_flow_calculation_basic(unittest.TestCase):
         # check residual current
         vnode_cx = estim.ri_to_complex(vnode_ri)
         get_injected_power = get_injected_power_fn(
-            model.injections, 
+            model.injections,
             loadcurve='interpolated')
         Inode = util.eval_residual_current(
             model, get_injected_power, Vnode=vnode_cx)
@@ -72,12 +72,12 @@ class Power_flow_calculation_basic(unittest.TestCase):
         vnode_abs = np.abs(vnode_cx)
         # check voltage at consumer
         self.assertGreater(
-            vnode_abs[0], 
-            vnode_abs[1], 
+            vnode_abs[0],
+            vnode_abs[1],
             'voltage at slack is greater than voltage at consumer')
-    
+
     def test_calculate_power_flow_01(self):
-        """Power flow calculation with one branch and one 
+        """Power flow calculation with one branch and one
         pure reactive power consumer."""
         model = make_model(
             grid_pfc, grid.Injection('consumer', 'n_1', Q10=10.0))
@@ -89,7 +89,7 @@ class Power_flow_calculation_basic(unittest.TestCase):
         # check residual current
         vnode_cx = estim.ri_to_complex(vnode_ri)
         get_injected_power = get_injected_power_fn(
-            model.injections, 
+            model.injections,
             loadcurve='interpolated')
         Inode = util.eval_residual_current(
             model, get_injected_power, Vnode=vnode_cx)
@@ -99,10 +99,10 @@ class Power_flow_calculation_basic(unittest.TestCase):
         vnode_abs = np.abs(vnode_cx)
         # check voltage at consumer
         self.assertGreater(
-            vnode_abs[0], 
-            vnode_abs[1], 
+            vnode_abs[0],
+            vnode_abs[1],
             'voltage at slack is greater than voltage at consumer')
-    
+
     def test_calculate_power_flow_02(self):
         """Power flow calculation with one branch and one power consumer."""
         model = make_model(
@@ -115,7 +115,7 @@ class Power_flow_calculation_basic(unittest.TestCase):
         # check residual current
         vnode_cx = estim.ri_to_complex(vnode_ri)
         get_injected_power = get_injected_power_fn(
-            model.injections, 
+            model.injections,
             loadcurve='interpolated')
         Inode = util.eval_residual_current(
             model, get_injected_power, Vnode=vnode_cx)
@@ -125,12 +125,12 @@ class Power_flow_calculation_basic(unittest.TestCase):
         vnode_abs = np.abs(vnode_cx)
         # check voltage at consumer
         self.assertGreater(
-            vnode_abs[0], 
-            vnode_abs[1], 
+            vnode_abs[0],
+            vnode_abs[1],
             'voltage at slack is greater than voltage at consumer')
-    
+
     def test_calculate_power_flow_03(self):
-        """Power flow calculation with one branch and one 
+        """Power flow calculation with one branch and one
         pure active power generator."""
         model = make_model(
             grid_pfc, grid.Injection('generator', 'n_1', P10=-30.0))
@@ -142,7 +142,7 @@ class Power_flow_calculation_basic(unittest.TestCase):
         # check residual current
         vnode_cx = estim.ri_to_complex(vnode_ri)
         get_injected_power = get_injected_power_fn(
-            model.injections, 
+            model.injections,
             loadcurve='interpolated')
         Inode = util.eval_residual_current(
             model, get_injected_power, Vnode=vnode_cx)
@@ -152,8 +152,8 @@ class Power_flow_calculation_basic(unittest.TestCase):
         vnode_abs = np.abs(vnode_cx)
         # check voltage at consumer
         self.assertLess(
-            vnode_abs[0], 
-            vnode_abs[1], 
+            vnode_abs[0],
+            vnode_abs[1],
             'voltage at slack is smaller than voltage at generator')
 
 # node: 0               1               2
@@ -170,7 +170,7 @@ grid_pfc2 = (
     grid.Branch('branch_1', 'n_1', 'n_2', y_lo=1e3-1e3j))
 
 class Power_flow_calculation_taps(unittest.TestCase):
-    
+
     def test_calculate_power_flow_00(self):
         """Power flow calculation with two branches.
         Several taps at node_1/branch_1. Neutral tap."""
@@ -198,7 +198,7 @@ class Power_flow_calculation_taps(unittest.TestCase):
         # check residual current
         vnode_cx0 = estim.ri_to_complex(vnode_ri0)
         get_injected_power0 = get_injected_power_fn(
-            model0.injections, 
+            model0.injections,
             loadcurve='interpolated')
         Inode0 = util.eval_residual_current(
             model0, get_injected_power0, Vnode=vnode_cx0)
@@ -208,8 +208,8 @@ class Power_flow_calculation_taps(unittest.TestCase):
         # node voltages are equal
         v_diff = vnode_ri0 - vnode_ri1
         self.assertLess(
-            norm(v_diff), 
-            1e-12, 
+            norm(v_diff),
+            1e-12,
             'neutral tap position does not affect voltage')
 
     def test_calculate_power_flow_01(self):
@@ -240,7 +240,7 @@ class Power_flow_calculation_taps(unittest.TestCase):
         vnode_cx0 = estim.ri_to_complex(vnode_ri0)
         vnode_cx1 = estim.ri_to_complex(vnode_ri1)
         get_injected_power0 = get_injected_power_fn(
-            model0.injections, 
+            model0.injections,
             loadcurve='interpolated')
         Inode0 = util.eval_residual_current(
             model0, get_injected_power0, Vnode=vnode_cx0)
@@ -253,11 +253,11 @@ class Power_flow_calculation_taps(unittest.TestCase):
         vnode_2_cx1 = vnode_cx1[idx_node_2]
         vdiff_node_2_abs = np.abs(vnode_2_cx0-vnode_2_cx1)
         self.assertLess(
-            np.abs(vnode_2_cx0), 
+            np.abs(vnode_2_cx0),
             np.abs(vnode_2_cx1),
             'voltage is increased')
         self.assertAlmostEqual(
-            vdiff_node_2_abs, 
+            vdiff_node_2_abs,
             0.1 * np.abs(vnode_2_cx0),
             delta=1e-12,
             msg='voltage differs by 10 percent')
@@ -290,7 +290,7 @@ class Power_flow_calculation_taps(unittest.TestCase):
         vnode_cx0 = estim.ri_to_complex(vnode_ri0)
         vnode_cx1 = estim.ri_to_complex(vnode_ri1)
         get_injected_power0 = get_injected_power_fn(
-            model0.injections, 
+            model0.injections,
             loadcurve='interpolated')
         Inode0 = util.eval_residual_current(
             model0, get_injected_power0, Vnode=vnode_cx0)
@@ -303,14 +303,81 @@ class Power_flow_calculation_taps(unittest.TestCase):
         vnode_2_cx1 = vnode_cx1[idx_node_2]
         vdiff_node_2_abs = np.abs(vnode_2_cx0-vnode_2_cx1)
         self.assertGreater(
-            np.abs(vnode_2_cx0), 
+            np.abs(vnode_2_cx0),
             np.abs(vnode_2_cx1),
             'voltage is decreased')
         self.assertAlmostEqual(
-            vdiff_node_2_abs, 
+            vdiff_node_2_abs,
             0.1 * np.abs(vnode_2_cx0),
             delta=1e-12,
             msg='voltage differs by 10 percent')
+
+# node: 0               1               2
+#
+#       |     line_0    |     line_1    |
+#       +-----=====-----+-----=====-----+
+#       |               |               |
+#                                      \|/ consumer_1/2
+#                                       '
+
+grid_pfc3 = [
+    grid.Slacknode(id_of_node='n_0', V=1.+0.j),
+    grid.Branch(
+        id='line_0',
+        id_of_node_A='n_0',
+        id_of_node_B='n_1',
+        y_lo=1e3-1e3j,
+        y_tr=1e-6+1e-6j
+        ),
+    grid.Branch(
+        id='line_1',
+        id_of_node_A='n_1',
+        id_of_node_B='n_2',
+        y_lo=1e3-1e3j,
+        y_tr=1e-6+1e-6j),
+    grid.Branchtaps(
+        id='tap_line1',
+        id_of_node='n_1',
+        id_of_branch='line_1',
+        Vstep=.1/16,
+        positionmin=-16,
+        positionneutral=0,
+        positionmax=16,
+        position=10),
+    grid.Injection(
+        id='consumer_0',
+        id_of_node='n_2',
+        P10=300.0,
+        Q10=10.0,
+        Exp_v_p=1.0,
+        Exp_v_q=0.0),
+    grid.Injection(
+        id='consumer_1',
+        id_of_node='n_2',
+        P10=30.0,
+        Q10=10.0,
+        Exp_v_p=0.0,
+        Exp_v_q=2.0)]
+
+class Power_flow_calculation_basic2(unittest.TestCase):
+
+    def test_estimate(self):
+        """Calculating power flow using function 'estimate' creates same
+        results like function 'src.dssex.pfcnum.calculate_power_flow'."""
+        model = make_model(grid_pfc3)
+        expr = estim.get_expressions(model, count_of_steps=3)
+        step_data = estim.get_step_data(model, expr)
+        succ_estim, Vnode_ri_estim, _ = estim.estimate(*step_data)
+        self.assertTrue(succ_estim, 'estimation succeeds')
+        Vnode_cx_estim = estim.ri_to_complex(Vnode_ri_estim.toarray())
+        succ_pfc, Vnode_cx_pfc = pfc.calculate_power_flow(
+            1e-12, 20, model, loadcurve='interpolated')
+        self.assertTrue(succ_pfc, 'power flow calculation succeeds')
+        self.assertAlmostEqual(
+            norm(Vnode_cx_pfc - Vnode_cx_estim, np.inf),
+            0.,
+            delta=1e-12,
+            msg='result of estimate equals result of numeric calculation')
 
 # node: 0               1               2
 
@@ -327,10 +394,10 @@ grid0 = (
     grid.Injection('consumer', 'n_2', P10=30.0, Q10=10.0))
 
 class Estimation(unittest.TestCase):
-    
+
     def test_scale_p_meet_p(self):
         """Scale active power of consumer in order to meet the
-        given active power P at a terminal of a branch (measurement or 
+        given active power P at a terminal of a branch (measurement or
         setpoint). Given P is assigned to n_0/line_0."""
         model = make_model(
             grid0,
@@ -341,15 +408,15 @@ class Estimation(unittest.TestCase):
             grid.Defk('kp'),
             grid.Link(objid='consumer', part='p', id='kp'))
         expressions = estim.get_expressions(model, count_of_steps=1)
-        estimation_data = estim.get_first_step_data(
-            model, expressions, quantities_of_objective='P')
-        succ, x_V, x_scaling = estim.estimate(*estimation_data) 
+        estimation_data = estim.get_step_data(
+            model, expressions, 0, quantities_of_objective='P')
+        succ, x_V, x_scaling = estim.estimate(*estimation_data)
         self.assertTrue(succ, 'estimation succeeds')
         V, k = estim.get_Vcx_kpq(estimation_data[2], x_V, x_scaling)
         ed = pfc.calculate_electric_data2(model, V, k)
         self.assertAlmostEqual(
             # exclude slacks
-            np.max(np.abs(ed.residual_node_current()[model.count_of_slacks:])), 
+            np.max(np.abs(ed.residual_node_current()[model.count_of_slacks:])),
             0,
             delta=1e-12,
             msg='Inode is almost 0')
@@ -359,10 +426,10 @@ class Estimation(unittest.TestCase):
             given_values.loc['PQ_line_0'].P,
             delta=1e-12,
             msg='estimated active power equals given active power')
-    
+
     def test_scale_p_meet_p2(self):
         """Scale active power of consumer in order to meet the
-        given active power P at a terminal of an injection (measurement or 
+        given active power P at a terminal of an injection (measurement or
         setpoint). Given P is assigned to consumer."""
         model = make_model(
             grid0,
@@ -373,15 +440,15 @@ class Estimation(unittest.TestCase):
             grid.Defk('kp'),
             grid.Link(objid='consumer', part='p', id='kp'))
         expressions = estim.get_expressions(model, count_of_steps=1)
-        estimation_data = estim.get_first_step_data(
-            model, expressions, quantities_of_objective='P')
-        succ, x_V, x_scaling = estim.estimate(*estimation_data) 
+        estimation_data = estim.get_step_data(
+            model, expressions, 0, quantities_of_objective='P')
+        succ, x_V, x_scaling = estim.estimate(*estimation_data)
         self.assertTrue(succ, 'estimation succeeds')
         V, k = estim.get_Vcx_kpq(estimation_data[2], x_V, x_scaling)
         ed = pfc.calculate_electric_data2(model, V, k)
         self.assertAlmostEqual(
             # exclude slacks
-            np.max(np.abs(ed.residual_node_current()[model.count_of_slacks:])), 
+            np.max(np.abs(ed.residual_node_current()[model.count_of_slacks:])),
             0,
             delta=1e-8,
             msg='Inode is almost 0')
@@ -391,10 +458,10 @@ class Estimation(unittest.TestCase):
             given_values.loc['PQ_consumer'].P,
             delta=1e-8,
             msg='estimated active power equals given active power')
-    
+
     def test_scale_q_meet_q(self):
         """Scale reactive power of consumer in order to meet the
-        given reactive power Q at a terminal of a branch (measurement or 
+        given reactive power Q at a terminal of a branch (measurement or
         setpoint). Given Q is assigned to n_0/line_0."""
         model = make_model(
             grid0,
@@ -405,15 +472,15 @@ class Estimation(unittest.TestCase):
             grid.Defk('kq'),
             grid.Link(objid='consumer', part='q', id='kq'))
         expressions = estim.get_expressions(model, count_of_steps=1)
-        estimation_data = estim.get_first_step_data(
-            model, expressions, quantities_of_objective='Q')
-        succ, x_V, x_scaling = estim.estimate(*estimation_data) 
+        estimation_data = estim.get_step_data(
+            model, expressions, 0, quantities_of_objective='Q')
+        succ, x_V, x_scaling = estim.estimate(*estimation_data)
         self.assertTrue(succ, 'estimation succeeds')
         V, k = estim.get_Vcx_kpq(estimation_data[2], x_V, x_scaling)
         ed = pfc.calculate_electric_data2(model, V, k)
         self.assertAlmostEqual(
             # exclude slacks
-            np.max(np.abs(ed.residual_node_current()[model.count_of_slacks:])), 
+            np.max(np.abs(ed.residual_node_current()[model.count_of_slacks:])),
             0,
             delta=1e-10,
             msg='Inode is almost 0')
@@ -423,10 +490,10 @@ class Estimation(unittest.TestCase):
             given_values.loc['PQ_line_0'].Q,
             delta=1e-10,
             msg='estimated reactive power equals given reactive power')
-    
+
     def test_scale_q_meet_q2(self):
         """Scale reactive power of consumer in order to meet the
-        given reactive power Q at a terminal of an injection (measurement or 
+        given reactive power Q at a terminal of an injection (measurement or
         setpoint). Given Q is assigned to consumer."""
         model = make_model(
             grid0,
@@ -437,15 +504,15 @@ class Estimation(unittest.TestCase):
             grid.Defk('kq'),
             grid.Link(objid='consumer', part='q', id='kq'))
         expressions = estim.get_expressions(model, count_of_steps=1)
-        estimation_data = estim.get_first_step_data(
-            model, expressions, quantities_of_objective='Q')
-        succ, x_V, x_scaling = estim.estimate(*estimation_data) 
+        estimation_data = estim.get_step_data(
+            model, expressions, 0, quantities_of_objective='Q')
+        succ, x_V, x_scaling = estim.estimate(*estimation_data)
         self.assertTrue(succ, 'estimation succeeds')
         V, k = estim.get_Vcx_kpq(estimation_data[2], x_V, x_scaling)
         ed = pfc.calculate_electric_data2(model, V, k)
         self.assertAlmostEqual(
             # exclude slacks
-            np.max(np.abs(ed.residual_node_current()[model.count_of_slacks:])), 
+            np.max(np.abs(ed.residual_node_current()[model.count_of_slacks:])),
             0,
             delta=1e-8,
             msg='Inode is almost 0')
@@ -455,7 +522,7 @@ class Estimation(unittest.TestCase):
             given_values.loc['PQ_consumer'].Q,
             delta=1e-8,
             msg='estimated reactive power equals given reactive power')
-    
+
     def test_scale_pq_meet_i(self):
         """Scale active and reactive power of consumer in order to meet the
         given current I at a terminal of a branch (measurement or setpoint).
@@ -469,15 +536,15 @@ class Estimation(unittest.TestCase):
             grid.Defk('kpq'),
             grid.Link(objid='consumer', part='pq', id='kpq'))
         expressions = estim.get_expressions(model, count_of_steps=1)
-        estimation_data = estim.get_first_step_data(
-            model, expressions, quantities_of_objective='I')
-        succ, x_V, x_scaling = estim.estimate(*estimation_data) 
+        estimation_data = estim.get_step_data(
+            model, expressions, 0, quantities_of_objective='I')
+        succ, x_V, x_scaling = estim.estimate(*estimation_data)
         self.assertTrue(succ, 'estimation succeeds')
         V, k = estim.get_Vcx_kpq(estimation_data[2], x_V, x_scaling)
         ed = pfc.calculate_electric_data2(model, V, k)
         self.assertAlmostEqual(
             # exclude slacks
-            np.max(np.abs(ed.residual_node_current()[model.count_of_slacks:])), 
+            np.max(np.abs(ed.residual_node_current()[model.count_of_slacks:])),
             0,
             delta=1e-12,
             msg='Inode is almost 0')
@@ -487,7 +554,7 @@ class Estimation(unittest.TestCase):
             given_values.loc['I_line_0'].I,
             delta=1e-12,
             msg='estimated electric current equals given electric current')
-    
+
     def test_scale_pq_meet_i2(self):
         """Scale active and reactive power of consumer in order to meet the
         given current I at a terminal of an injection (measurement or setpoint).
@@ -501,15 +568,15 @@ class Estimation(unittest.TestCase):
             grid.Defk('kpq'),
             grid.Link(objid='consumer', part='pq', id='kpq'))
         expressions = estim.get_expressions(model, count_of_steps=1)
-        estimation_data = estim.get_first_step_data(
-            model, expressions, quantities_of_objective='I')
-        succ, x_V, x_scaling = estim.estimate(*estimation_data) 
+        estimation_data = estim.get_step_data(
+            model, expressions, 0, quantities_of_objective='I')
+        succ, x_V, x_scaling = estim.estimate(*estimation_data)
         self.assertTrue(succ, 'estimation succeeds')
         V, k = estim.get_Vcx_kpq(estimation_data[2], x_V, x_scaling)
         ed = pfc.calculate_electric_data2(model, V, k)
         self.assertAlmostEqual(
             # exclude slacks
-            np.max(np.abs(ed.residual_node_current()[model.count_of_slacks:])), 
+            np.max(np.abs(ed.residual_node_current()[model.count_of_slacks:])),
             0,
             delta=1e-8,
             msg='Inode is almost 0')
@@ -519,7 +586,7 @@ class Estimation(unittest.TestCase):
             given_values.loc['I_consumer'].I,
             delta=1e-8,
             msg='estimated electric current equals given electric current')
-    
+
     def test_scale_q_meet_v(self):
         """Scale reactive power of consumer in order to meet the
         given voltage V (measurement or setpoint).
@@ -532,15 +599,15 @@ class Estimation(unittest.TestCase):
             grid.Defk('kq'),
             grid.Link(objid='consumer', part='q', id='kq'))
         expressions = estim.get_expressions(model, count_of_steps=1)
-        estimation_data = estim.get_first_step_data(
-            model, expressions, quantities_of_objective='V')
-        succ, x_V, x_scaling = estim.estimate(*estimation_data) 
+        estimation_data = estim.get_step_data(
+            model, expressions, 0, quantities_of_objective='V')
+        succ, x_V, x_scaling = estim.estimate(*estimation_data)
         self.assertTrue(succ, 'estimation succeeds')
         V, k = estim.get_Vcx_kpq(estimation_data[2], x_V, x_scaling)
         ed = pfc.calculate_electric_data2(model, V, k)
         self.assertAlmostEqual(
             # exclude slacks
-            np.max(np.abs(ed.residual_node_current()[model.count_of_slacks:])), 
+            np.max(np.abs(ed.residual_node_current()[model.count_of_slacks:])),
             0,
             delta=1e-8,
             msg='Inode is almost 0')
@@ -553,7 +620,7 @@ class Estimation(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
-    
+
 
 
 

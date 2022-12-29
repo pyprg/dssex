@@ -167,6 +167,7 @@ def _get_squared_injected_power_fn(injections, pq_factors=None):
         * .c3p, .c2p, .c1p, polynomial coefficients for active power P
         * .c3q, .c2q, .c1q, polynomial coefficients for reactive power Q
     pq_factors: numpy.array, float, (nx2)
+        optional
         factors for active and reactive power
     loadcurve: 'original' | 'interpolated' | 'square'
 
@@ -222,6 +223,7 @@ def _get_original_injected_power_fn(injections, pq_factors=None):
         * .Exp_v_q
         * .V_abs_sqr
     pq_factors: numpy.array, float, (nx2)
+        optional
         factors for active and reactive power
     loadcurve: 'original' | 'interpolated' | 'square'
 
@@ -277,6 +279,7 @@ def _get_interpolated_injected_power_fn(vminsqr, injections, pq_factors=None):
         * .c3p, .c2p, .c1p, polynomial coefficients for active power P
         * .c3q, .c2q, .c1q, polynomial coefficients for reactive power Q
     pq_factors: numpy.array, float, (nx2)
+        optional
         factors for active and reactive power
     loadcurve: 'original' | 'interpolated' | 'square'
 
@@ -348,6 +351,7 @@ def get_calc_injected_power_fn(
         * .c3p, .c2p, .c1p, polynomial coefficients for active power P
         * .c3q, .c2q, .c1q, polynomial coefficients for reactive power Q
     pq_factors: numpy.array, float, (nx2)
+        optional
         factors for active and reactive power
     loadcurve: 'original' | 'interpolated' | 'square'
 
@@ -518,9 +522,7 @@ def calculate_power_flow(
         Vslack_) 
     _solved = partial(solved, precision, gb) # success predicate
     iter_counter = 0
-    vs = []
     for V, I in _next_voltage(Vinit_):
-        vs.append(np.hstack(np.split(V,2)).view(dtype=np.complex128))
         if _solved(V, I):
             return True, np.hstack(np.vsplit(V, 2)).view(dtype=np.complex128)
         if max_iter <= iter_counter:
@@ -579,7 +581,7 @@ residual_node_current: function
     ()->(numpy.array<complex>)"""
 
 def calculate_electric_data2(
-        model, voltages_cx, pq_factors, 
+        model, voltages_cx, pq_factors=None, 
         tappositions=None, vminsqr=_VMINSQR, loadcurve='interpolated'):
     """Calculates and arranges electric data of injections and branches
     for a given voltage vector which is e.g. the result of a power
@@ -592,6 +594,7 @@ def calculate_electric_data2(
     voltages_cx : array_like, complex
         node voltage vector
     pq_factors: numpy.array, float, (nx2)
+        optional
         factors for active and reactive power
     tappositions : array_like, int, optional
         Positions of taps. The default is model.branchtaps.position.

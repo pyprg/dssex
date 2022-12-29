@@ -30,7 +30,7 @@ from numpy.linalg import norm
 import src.dssex.estim2 as estim
 import src.dssex.batch as batch
 
-# square of voltage magnitude, minimum value for load curve, 
+# square of voltage magnitude, minimum value for load curve,
 #   if value is below _VMINSQR the load curves for P and Q converge
 #   towards a linear load curve which is 0 when V=0; P(V=0)=0, Q(V=0)=0
 _VMINSQR = 0.8**2
@@ -62,7 +62,7 @@ grid1 = (
     grid.Injection('consumer_3', 'n_3', P10=30.0, Q10=20.0))
 
 class Batch(unittest.TestCase):
-    
+
     def test_ipq(self):
         # prepare
         ipq_batches = [
@@ -138,7 +138,7 @@ class Batch(unittest.TestCase):
              (('line_0', 'Q1_pu'), ('batch_2', 'Q'))]:
             qu = batch_key[1]
             val = (
-                (-3. if qu in 'PQ' else 1.) 
+                (-3. if qu in 'PQ' else 1.)
                 * df_batch.loc[batch_key[0], qu].value)
             self.assertAlmostEqual(
                 val,
@@ -175,15 +175,15 @@ class Batch(unittest.TestCase):
                 msg=f'{batch_key[1]} of batch {batch_key[0]} equals '
                     f'{result_key[1]} of device {result_key[0]}')
         self.assertAlmostEqual(
-            df_batch.loc['n_2', 'V'].value, 
+            df_batch.loc['n_2', 'V'].value,
             ed.node().loc['n_2', 'V_pu'],
             delta=1e-12,
             msg='voltage at n_2 is result of power flow calculation')
         self.assertAlmostEqual(
-            df_batch.loc['n_3', 'V'].value, 
+            df_batch.loc['n_3', 'V'].value,
             ed.node().loc['n_3', 'V_pu'],
             delta=1e-12,
             msg='voltage at n_3 is result of power flow calculation')
-        
+
 if __name__ == '__main__':
     unittest.main()

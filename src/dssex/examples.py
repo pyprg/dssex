@@ -20,12 +20,23 @@ Created on Sun Aug  8 08:36:10 2021
 @author: pyprg
 """
 from egrid import make_model
+from functools import partial
 from egrid.builder import (
     Slacknode, Branch, Branchtaps, Injection, PValue, QValue, IValue, Output, 
     Vvalue, Defk, Link)
 import src.dssex.present as pr
 from src.dssex.estim import calculate
 import src.dssex.pfcnum as pfc
+
+
+# square of voltage magnitude, minimum value for load curve, 
+#   if value is below _VMINSQR the load curves for P and Q converge
+#   towards a linear load curve which is 0 when V=0; P(V=0)=0, Q(V=0)=0
+_VMINSQR = 0.8**2
+get_injected_power_fn = partial(pfc.get_calc_injected_power_fn, _VMINSQR)
+
+
+
 
 # Always use a decimal point for floats. Now and then processing ints
 # fails with casadi/pandas/numpy.
@@ -61,21 +72,21 @@ model_entities = [
         positionmin=-16,
         positionneutral=0,
         positionmax=16,
-        position=0),
+        position=10),
     Injection(
         id='consumer_0',
         id_of_node='n_2',
-        P10=30.0,
-        Q10=10.0,
+        #P10=200.0,
+        Q10=200.0,
         Exp_v_p=0.0,
-        Exp_v_q=0.0),
+        Exp_v_q=2.0),
     Injection(
         id='consumer_1',
         id_of_node='n_2',
         P10=30.0,
         Q10=10.0,
         Exp_v_p=0.0,
-        Exp_v_q=0.0),
+        Exp_v_q=2.0),
     # define a scaling factor
     Defk(id='kp', step=(0,1,2)),
     # link the factor to the loads
@@ -122,84 +133,63 @@ from src.dssex.estim2 import (
     get_batch_expressions,
     get_diff_expressions,
     calculate_power_flow,
-    get_first_step_data,
+    get_step_data,
     estimate,
-    get_scaling_factors,
     get_k,
-    ri_to_complex,
+    ri_to_complex, ri_to_ri2, get_Vcx_kpq,
     get_calculate_from_result)
 from src.dssex.batch import  get_batch_values
 import numpy as np
 
 
-mymodel = model00
+model = model00
+count_of_steps = 3
+expressions = get_expressions(model, count_of_steps=count_of_steps)
 
-ed = get_expressions(mymodel, count_of_steps=2)
-scaling_data, Iinj_data = ed['get_scaling_and_injection_data'](step=0)
-Inode = ed['inj_to_node'] @ Iinj_data[:,:2]
-# power flow calculation for initial voltages
-succ, Vnode_ri_vals = calculate_power_flow2(mymodel, ed, scaling_data, Inode)
-
-Vnode_cx_vals = ri_to_complex(Vnode_ri_vals)
-print(f'\nVnode_cx_vals (symbolic):\n{Vnode_cx_vals}')
-succ, vcx = pfc.calculate_power_flow(
-    1e-12, 10, mymodel, loadcurve='interpolated')
-print(f'\nvcx (numeric):\n{vcx}')
-selector = 'P'
-diff_data = get_diff_expressions(mymodel, ed, Iinj_data, selector)
-optimize = get_optimize(mymodel, ed)
-succ, x = optimize(Vnode_ri_vals, scaling_data, Inode, diff_data)
-
-print('\n',('SUCCESS' if succ else 'F A I L E D'))
-
-if succ:
-    count_of_v_ri = Vnode_ri_vals.size1()
-    voltages_ri1 = x[:count_of_v_ri].toarray()
-    voltages_ri2 = np.hstack(np.vsplit(voltages_ri1,2))
-    voltages_cx = voltages_ri2.view(dtype=np.complex128)
-    print(f'\nvoltages_cx:\n{voltages_cx}')
-    x_scaling = x[count_of_v_ri:]
-    scaling_factors = get_scaling_factors(scaling_data, x_scaling)
-    print(f'\nscaling_factors:\n{scaling_factors}')
-    k, _ = get_k(scaling_data, x_scaling)
-    print(f'\nk:\n{k}')
-    get_injected_power = pfc.get_calc_injected_power_fn(
-        0.8**2, mymodel.injections, pq_factors=k, loadcurve='interpolated')   
-    result_data = pfc.calculate_electric_data(
-        mymodel, get_injected_power, mymodel.branchtaps.position, voltages_cx) 
-
-#%%
 optimization_quantities = 'IPQV'
 constraint_quantities = 'IPQV'
-positions = None
-count_of_steps = 3
-expressions = get_expressions(mymodel, count_of_steps)
+step_data = get_step_data(model, expressions, 0, optimization_quantities)
+succ, voltages_ri, k = estimate(*step_data)
+print('\n',(">> SUCCESS <<" if succ else 'F A I L E D'),'\n')
+if succ:
+    voltages_cx, kpq = get_Vcx_kpq(step_data[2], voltages_ri, k)
+    print(f'\nvoltages_cx:\n{voltages_cx}')
+    print(f'\nkpq:\n{kpq}')
+    # result = pfc.calculate_electric_data2(mymodel, voltages_cx, kpq)
+    # print(f'\nbranches:\n{result.branch()}')
+    # print(f'\ninjections:\n{result.injection()}')
 
-succ, voltages_ri, k = estimate(
-    *get_first_step_data(
-        mymodel, expressions, optimization_quantities, positions))
-voltages_cx = ri_to_complex(voltages_ri.toarray())
-kpq, k_var_const = get_k(scaling_data, k)
-
+#%%
+voltages_ri2 = ri_to_ri2(voltages_ri.toarray())
+kpq, k_var_const = get_k(step_data[2], k)
 batch_values = get_batch_values(
-    mymodel, voltages_cx, kpq, positions, constraint_quantities)
+    model, voltages_ri2, kpq, None, constraint_quantities)
 print(batch_values)
 #%%
-selector_1 = 'Q'
+optimization_quantities_1 = 'PQ'
+
 
 scaling_data_1, Iinj_data_1 = (
-        expressions['get_scaling_and_injection_data']
-        (step=1, k_prev=k_var_const))
-diff_data_1 = get_diff_expressions(mymodel, expressions, Iinj_data_1, selector_1)
-succ, voltages_ri, k = estimate(
-    mymodel, expressions, scaling_data_1, diff_data_1, voltages_ri, Iinj_data_1, 
-    positions)
+    expressions['get_scaling_and_injection_data'](step=1, k_prev=k_var_const))
+Inode_inj_1 = expressions['inj_to_node'] @ Iinj_data_1[:,:2]
+diff_data_1 = get_diff_expressions(
+    model, expressions, Iinj_data_1, optimization_quantities_1)
+
+
+#%%
+succ_1, voltages_ri_1, k_1 = estimate(
+    model, expressions, scaling_data_1, diff_data_1, voltages_ri, 
+    Inode_inj_1, None)
+print('\n',(">> SUCCESS <<" if succ else 'F A I L E D'),'\n')
+
 #%%
 # calculate residual node current for solution of optimization
 # symbolic
 import pandas as pd
 calculate_from_result = get_calculate_from_result(
-    mymodel, ed, scaling_data, x)
+    model, expressions, step_data[2], x)
+
+diff_data = step_data[4]
 
 vals_calc = calculate_from_result(diff_data[3]).toarray().reshape(-1)
 val_calc = pd.DataFrame(
@@ -230,7 +220,7 @@ print(constraint_data)
 #%%
 is_power = val_calc.qu.isin(('P','Q'))
 val_calc.loc[is_power, ['given', 'calculated']] *= 3
-Inode_sol = calculate_from_result(ed['Y_by_V'] + vstack(Inode)).toarray().reshape(-1)
+Inode_sol = calculate_from_result(expressions['Y_by_V'] + vstack(Inode)).toarray().reshape(-1)
 print(f'\nInode_sol:\n{Inode_sol}')
 # numeric
 kpq, k_var_const = get_k(scaling_data, k)
