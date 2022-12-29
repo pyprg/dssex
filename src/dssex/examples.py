@@ -35,9 +35,6 @@ import src.dssex.pfcnum as pfc
 _VMINSQR = 0.8**2
 get_injected_power_fn = partial(pfc.get_calc_injected_power_fn, _VMINSQR)
 
-
-
-
 # Always use a decimal point for floats. Now and then processing ints
 # fails with casadi/pandas/numpy.
 
@@ -76,8 +73,8 @@ model_entities = [
     Injection(
         id='consumer_0',
         id_of_node='n_2',
-        #P10=200.0,
-        Q10=200.0,
+        P10=100.0,
+        Q10=50.0,
         Exp_v_p=0.0,
         Exp_v_q=2.0),
     Injection(
@@ -122,33 +119,29 @@ model_entities = [
         V=.95)
     ]
 
-model00 = make_model(model_entities)
+model = make_model(model_entities)
 
 import casadi
 from src.dssex.estim2 import (
     get_expressions,
-    get_optimize,
     vstack, 
     calculate_power_flow2,
-    get_batch_expressions,
     get_diff_expressions,
     calculate_power_flow,
     get_step_data,
     estimate,
     get_k,
-    ri_to_complex, ri_to_ri2, get_Vcx_kpq,
-    get_calculate_from_result)
+    ri_to_complex, ri_to_ri2, get_Vcx_kpq)
 from src.dssex.batch import  get_batch_values
 import numpy as np
 
 
-model = model00
 count_of_steps = 3
 expressions = get_expressions(model, count_of_steps=count_of_steps)
 
-optimization_quantities = 'IPQV'
-constraint_quantities = 'IPQV'
-step_data = get_step_data(model, expressions, 0, optimization_quantities)
+optimization_quantities = 'PQ'
+step_data = get_step_data(
+    model, expressions, 0, quantities_of_objective=optimization_quantities)
 succ, voltages_ri, k = estimate(*step_data)
 print('\n',(">> SUCCESS <<" if succ else 'F A I L E D'),'\n')
 if succ:
@@ -158,81 +151,32 @@ if succ:
     # result = pfc.calculate_electric_data2(mymodel, voltages_cx, kpq)
     # print(f'\nbranches:\n{result.branch()}')
     # print(f'\ninjections:\n{result.injection()}')
-
 #%%
+constraint_quantities = 'P'
 voltages_ri2 = ri_to_ri2(voltages_ri.toarray())
 kpq, k_var_const = get_k(step_data[2], k)
+
 batch_values = get_batch_values(
     model, voltages_ri2, kpq, None, constraint_quantities)
-print(batch_values)
-#%%
-optimization_quantities_1 = 'PQ'
 
 
-scaling_data_1, Iinj_data_1 = (
-    expressions['get_scaling_and_injection_data'](step=1, k_prev=k_var_const))
-Inode_inj_1 = expressions['inj_to_node'] @ Iinj_data_1[:,:2]
-diff_data_1 = get_diff_expressions(
-    model, expressions, Iinj_data_1, optimization_quantities_1)
+
+#print(batch_values)
+optimization_quantities_1 = 'V'
+step_data_1 = get_step_data(
+    model, expressions, 1, 
+    k_prev=k_var_const, 
+    quantities_of_objective=optimization_quantities_1,
+    quantities_of_constraints=optimization_quantities,
+    values_of_constraints=batch_values)
 
 
-#%%
-succ_1, voltages_ri_1, k_1 = estimate(
-    model, expressions, scaling_data_1, diff_data_1, voltages_ri, 
-    Inode_inj_1, None)
+# batch_expressions = get_diff_expressions(
+#     model, expressions, ipqv, constraint_quantities)
+
+
+succ_1, voltages_ri_1, k_1 = estimate(*step_data_1)
 print('\n',(">> SUCCESS <<" if succ else 'F A I L E D'),'\n')
-
-#%%
-# calculate residual node current for solution of optimization
-# symbolic
-import pandas as pd
-calculate_from_result = get_calculate_from_result(
-    model, expressions, step_data[2], x)
-
-diff_data = step_data[4]
-
-vals_calc = calculate_from_result(diff_data[3]).toarray().reshape(-1)
-val_calc = pd.DataFrame(
-    {'qu': diff_data[0],
-     'id': diff_data[1],
-     'given': diff_data[2].toarray().reshape(-1),
-     'calculated': vals_calc})
-
-prev = val_calc
-relevant = val_calc.loc[:,'qu'].isin(list(constraint_quantities))
-idxs = val_calc.index[relevant]
-
-vals = calculate_from_result(diff_data[3][idxs]).toarray()
-
-
-next_ = pd.DataFrame(
-    {'Qu': diff_data[0], 
-     'id': diff_data[1]})
-
-constraint_data = (
-    diff_data[0][idxs],
-    diff_data[1][idxs],
-    casadi.DM(vals),
-    diff_data[3][idxs])
-
-print(constraint_data)
-
-#%%
-is_power = val_calc.qu.isin(('P','Q'))
-val_calc.loc[is_power, ['given', 'calculated']] *= 3
-Inode_sol = calculate_from_result(expressions['Y_by_V'] + vstack(Inode)).toarray().reshape(-1)
-print(f'\nInode_sol:\n{Inode_sol}')
-# numeric
-kpq, k_var_const = get_k(scaling_data, k)
-get_injected_power = pfc.get_calc_injected_power_fn(
-    0.8**2, mymodel.injections, pq_factors=kpq, loadcurve='interpolated')   
-ed2 = pfc.calculate_electric_data(
-    mymodel, get_injected_power, mymodel.branchtaps.position, voltages_cx) 
-#%% calculate power flow
-results = [*calculate(model00)]
-# print the result
-pr.print_estim_results(results)
-pr.print_measurements(results)
 #%% scale load in order to meet values for active power P
 model_PQ_measurements = [
      # measured P/Q pair
@@ -491,11 +435,9 @@ model09 = make_model(
 # pr.print_estim_results(result09)
 # pr.print_measurements(result09)
 #%%
-import casadi
-import numpy as np
-from src.dssex.estim2 import (ri_to_complex, 
+from src.dssex.estim2 import (
   create_expressions, make_calculate, get_branch_flow_expressions, 
-  make_get_branch_expressions, get_node_expressions, vstack)
+  make_get_branch_expressions, get_node_expressions)
 
 model10 = make_model(
     schema09,
@@ -590,12 +532,9 @@ import pandas as pd
 from src.dssex.estim2 import (
     make_get_scaling_and_injection_data, 
     vstack, make_calculate, 
-    calculate_power_flow2,
-    get_batch_expressions,
     get_flow_diffs)
 
-mymodel = model00
-expr = create_expressions(mymodel)
+expr = create_expressions(model)
 get_scaling_and_injection_data = make_get_scaling_and_injection_data(
     mymodel, expr['Vnode_syms'], vminsqr=0.8**2, count_of_steps=2)
 scaling_data, Iinj_data = get_scaling_and_injection_data(step=0)

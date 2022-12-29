@@ -303,7 +303,8 @@ def _get_factor_ini_values(myfactors, symbols):
     return ini.astype(dtype='Int64')
 
 def _get_default_factors(count_of_steps):
-    """Generates one default scaling factor per step.
+    """Generates one default scaling factor for each step. The factor is
+    of type 'const' has value 1.0, minimum and maximum are 1.0 too.
 
     Parameters
     ----------
@@ -312,7 +313,10 @@ def _get_default_factors(count_of_steps):
 
     Parameters
     ----------
-    pandas.DataFrame"""
+    pandas.DataFrame (index: ['step', 'id'])
+        value in column 'id' of index is the string 
+        of egrid.builder.DEFAULT_FACTOR_ID,
+        columns according to fields of egrid.builder.Loadfactor"""
     return (
         pd.DataFrame(
             defk(id_=DEFAULT_FACTOR_ID, type_='const', value=1.0,
@@ -322,7 +326,6 @@ def _get_default_factors(count_of_steps):
 
 def _factor_index_per_step(factors):
     """Creates an index (0...n) for each step.
-    (Alternative for _factor_index)
 
     Parameters
     ----------
@@ -335,22 +338,6 @@ def _factor_index_per_step(factors):
         chain.from_iterable(
             (range(len(factors.loc[step])))
             for step in factors.index.levels[0]),
-        index=factors.index,
-        name='index_of_symbol')
-
-def _factor_index(factors):
-    """Creates an index for all factors (includes all steps).
-    (Alternative for _factor_index_per_step)
-
-    Parameters
-    ----------
-    factors: pandas.DataFrame (step, id)->...
-
-    Returns
-    -------
-    pandas.Series"""
-    return pd.Series(
-        list(range(len(factors.index))),
         index=factors.index,
         name='index_of_symbol')
 
@@ -445,8 +432,8 @@ def get_factors(model, count_of_steps=1):
         count_of_steps)
 
 def _groupby_step(df):
-    """Resets index of pandas.Dataframe df and group the resulting frame by
-    column 'step'.
+    """Resets index of pandas.Dataframe df and groups the data in the 
+    resulting frame by column 'step'.
 
     Parameters
     ----------
@@ -682,6 +669,9 @@ def get_k(scaling_data, x_scaling):
     Enhances scaling factors calculated by optimization with constant
     scaling factors and reorders the factors according to order of injections.
     Returns kp and kq for each injection.
+    The function reates a vector of values for scaling factors which are 
+    decision variables and those which are constants. This vector is ordered 
+    for use as initial scaling factor values in next estimation step.
 
     Parameters
     ----------
@@ -1027,9 +1017,9 @@ def make_get_scaling_and_injection_data(
     -------
     function
         (int, casadi.DM)
-            -> (tuple - Scalingdata, casadi.SX)
+            -> (tuple: Scalingdata, casadi.SX)
         (index_of_step, scaling_factors_of_previous_step)
-            -> (tuple - Scalingdata, injection_data)
+            -> (tuple: Scalingdata, injection_data)
         * Scalingdata
             kp: casadi.SX
                 column vector, symbols for scaling factor of active power
@@ -1119,7 +1109,8 @@ def get_expressions(model, count_of_steps, vminsqr=_VMINSQR):
 
 def calculate_power_flow2(
         model, expr, scaling_data, Inode, tappositions=None, Vinit=None):
-    """Solves the power flow problem using a rootfinding algorithm.
+    """Solves the power flow problem using a rootfinding algorithm. The result
+    is the initial voltage vector for the optimization.
 
     Parameters
     ----------
@@ -1236,7 +1227,7 @@ def calculate_power_flow(
 
 # expressions for flow into injections
 
-def get_injection_flow_expressions(ipqv, selector, injections):
+def get_injection_flow_expressions(ipqv, quantity, injections):
     """Creates expressions for current/power flowing into given injections.
 
     Parameters
@@ -1250,7 +1241,7 @@ def get_injection_flow_expressions(ipqv, selector, injections):
         [:,5] Qip, reactive power interpolated
         [:,6] Vabs_sqr, square of voltage magnitude
         [:,7] interpolate?
-    selector: 'I'|'P'|'Q'
+    quantity: 'I'|'P'|'Q'
         addresses current magnitude, active power or reactive power
     injections: pandas.DataFrame (index of injection)
         * .Exp_v_p, float, voltage exponent for active power
@@ -1259,22 +1250,22 @@ def get_injection_flow_expressions(ipqv, selector, injections):
     Returns
     -------
     casadi.SX (shape n,2) for 'I', casadi.SX (shape n,1) for 'P' or 'Q'"""
-    assert selector in 'IPQ', \
-        f'selector needs to be one of "I", "P" or "Q" but is "{selector}"'
-    if selector=='I':
+    assert quantity in 'IPQ', \
+        f'quantity needs to be one of "I", "P" or "Q" but is "{quantity}"'
+    if quantity=='I':
         return ipqv[injections.index, :2]
     ipqv_ = ipqv[injections.index, :]
-    if selector=='P':
+    if quantity=='P':
         # ipqv_[:,2] Pscaled
         Porig = casadi.power(ipqv_[:,6], injections.Exp_v_p/2) * ipqv_[:,2]
         # ipqv_[:,4] Pip, active power interpolated
         return casadi.if_else(ipqv_[:,7], ipqv_[:,4], Porig)
-    if selector=='Q':
+    if quantity=='Q':
         # ipqv_[:,3] Qscaled
         Qorig = casadi.power(ipqv_[:,6], injections.Exp_v_q/2) * ipqv_[:,3]
         # ipqv_[:,5] Qip, reactive power interpolated
         return casadi.if_else(ipqv_[:,7], ipqv_[:,5], Qorig)
-    assert False, f'no processing for selector "{selector}"'
+    assert False, f'no processing for quantity "{quantity}"'
 
 # expressions for flow into branches
 
@@ -1524,7 +1515,7 @@ def current_into_branch(gb_mn_tot, Vnode, terms):
             Vterm[:,0], Vterm[:,1], Vother[:,0], Vother[:,1])
     return casadi.SX(0,2)
 
-def get_branch_flow_expressions(v_syms_gb_ex, selector, branchterminals):
+def get_branch_flow_expressions(v_syms_gb_ex, quantity, branchterminals):
     """Creates expressions for calculation of Ire and Iim or P and Q
     of branches.
 
@@ -1543,9 +1534,9 @@ def get_branch_flow_expressions(v_syms_gb_ex, selector, branchterminals):
     -------
     casadi.SX
         expressions for Iri/PQ"""
-    assert selector=='PQ' or selector=='I',\
-        f'value of indicator must be "PQ" or "I" but is "{selector}"'
-    expr_fn = power_into_branch if selector=='PQ' else current_into_branch
+    assert quantity=='PQ' or quantity=='I',\
+        f'value of indicator must be "PQ" or "I" but is "{quantity}"'
+    expr_fn = power_into_branch if quantity=='PQ' else current_into_branch
     return expr_fn(
         v_syms_gb_ex['gb_mn_tot'], v_syms_gb_ex['Vnode_syms'], branchterminals)
 
@@ -1571,7 +1562,7 @@ def _get_I_expressions(Iri_exprs):
         # I = sqrt(Ire**2, Iim**2)
         .sqrt())
 
-def make_get_branch_expressions(v_syms_gb_ex, selector):
+def make_get_branch_expressions(v_syms_gb_ex, quantity):
     """Returns an expression building function for I/P/Q-values at
     terminals of branches.
 
@@ -1582,7 +1573,7 @@ def make_get_branch_expressions(v_syms_gb_ex, selector):
         * 'position_syms', casadi.SX, vector, symbols of tap positions
         * 'gb_mn_tot', casadi.SX, vectors, conductance and susceptance of
           branches connected to terminals
-    selector: 'I'|'P'|'Q'
+    quantity: 'I'|'P'|'Q'
         selects the measurement entites to create differences for
 
     Returns
@@ -1590,27 +1581,27 @@ def make_get_branch_expressions(v_syms_gb_ex, selector):
     function
         (pandas.DataFrame) -> (casasdi.SX, shape n,2/n,1)
         (branchterminals) -> (expressions)"""
-    assert selector in 'IPQ', \
-        f'selector needs to be one of "I", "P" or "Q" but is "{selector}"'
-    if selector=='I':
+    assert quantity in 'IPQ', \
+        f'quantity needs to be one of "I", "P" or "Q" but is "{quantity}"'
+    if quantity=='I':
         return (
             lambda terminals:
                 get_branch_flow_expressions(v_syms_gb_ex, 'I', terminals))
-    if selector=='P':
+    if quantity=='P':
         return (
             lambda terminals:
                 get_branch_flow_expressions(v_syms_gb_ex, 'PQ', terminals)[0])
-    if selector=='Q':
+    if quantity=='Q':
         return (
             lambda terminals:
                 get_branch_flow_expressions(v_syms_gb_ex, 'PQ', terminals)[1])
-    assert False, f'no processing implemented for selector "{selector}"'
+    assert False, f'no processing implemented for quantity "{quantity}"'
 
 #
 # expressions of differences, measured - calculated
 #
 
-def _make_get_value(values, selector):
+def _make_get_value(values, quantity):
     """Helper, creates a function retrieving a value from
     ivalues, pvalues, qvalues or vvalues. Returns 'per-phase' values
     (one third of given P or Q).
@@ -1619,7 +1610,7 @@ def _make_get_value(values, selector):
     ----------
     values: pandas.DataFrame
 
-    selector: 'I'|'P'|'Q'|'V'
+    quantity: 'I'|'P'|'Q'|'V'
 
     Returns
     -------
@@ -1627,11 +1618,11 @@ def _make_get_value(values, selector):
         (str) -> (float)
         (index) -> (value)"""
     vals = (
-        values[selector]
-        if selector in 'IV' else values[selector] * values.direction / 3.)
+        values[quantity]
+        if quantity in 'IV' else values[quantity] * values.direction / 3.)
     return lambda idx: vals[idx]
 
-def _get_batch_expressions_br(model, v_syms_gb_ex, selector):
+def _get_batch_expressions_br(model, v_syms_gb_ex, quantity):
     """Creates a vector (casadi.SX, shape n,2/n,1) expressing calculated branch
     values for absolute current, active power or reactive power. The
     expressions are based on the batch definitions.
@@ -1645,25 +1636,25 @@ def _get_batch_expressions_br(model, v_syms_gb_ex, selector):
         * 'position_syms', casadi.SX, vector, symbols of tap positions
         * 'gb_mn_tot', casadi.SX, vectors, conductance and susceptance of
           branches connected to terminals
-    selector: 'I'|'P'|'Q'
+    quantity: 'I'|'P'|'Q'
         addresses current magnitude, active power or reactive power
 
     Returns
     -------
     dict
         id_of_batch => expression for I/P/Q-calculation"""
-    assert selector in 'IPQ', \
-        f'selector needs to be one of "I", "P" or "Q" but is "{selector}"'
-    get_branch_expr = make_get_branch_expressions(v_syms_gb_ex, selector)
+    assert quantity in 'IPQ', \
+        f'quantity needs to be one of "I", "P" or "Q" but is "{quantity}"'
+    get_branch_expr = make_get_branch_expressions(v_syms_gb_ex, quantity)
     branchterminals = model.branchterminals
     return {
         id_of_batch:get_branch_expr(branchterminals.loc[df.index_of_term])
         for id_of_batch, df in get_batches(
-            get_values(model, selector),
+            get_values(model, quantity),
             model.branchoutputs,
             'index_of_term')}
 
-def _get_batch_expressions_inj(model, ipqv, selector):
+def _get_batch_expressions_inj(model, ipqv, quantity):
     """Creates a vector (casadi.SX, shape n,1) expressing injected absolute
     current, active power or reactive power. The expressions are based
     on the batch definitions.
@@ -1681,25 +1672,25 @@ def _get_batch_expressions_inj(model, ipqv, selector):
         [:,5] Qip, reactive power interpolated
         [:,6] Vabs_sqr, square of voltage magnitude
         [:,7] interpolate?
-    selector: 'I'|'P'|'Q'
+    quantity: 'I'|'P'|'Q'
         addresses current magnitude, active power or reactive power
 
     Returns
     -------
     dict
         id_of_batch => expression for I/P/Q-calculation"""
-    assert selector in 'IPQ', \
-        f'selector needs to be one of "I", "P" or "Q" but is "{selector}"'
-    get_inj_expr = partial(get_injection_flow_expressions, ipqv, selector)
+    assert quantity in 'IPQ', \
+        f'quantity needs to be one of "I", "P" or "Q" but is "{quantity}"'
+    get_inj_expr = partial(get_injection_flow_expressions, ipqv, quantity)
     injections = model.injections
     return {
         id_of_batch: get_inj_expr(injections.loc[df.index_of_injection])
         for id_of_batch, df in get_batches(
-            get_values(model, selector),
+            get_values(model, quantity),
             model.injectionoutputs,
             'index_of_injection')}
 
-def get_batch_expressions(model, v_syms_gb_ex, ipqv, selector):
+def get_batch_expressions(model, v_syms_gb_ex, ipqv, quantity):
     """Creates a vector (casadi.SX, shape n,1) expressing calculated
     values for absolute current, active power or reactive power. The
     expressions are based on the batch definitions.
@@ -1722,7 +1713,7 @@ def get_batch_expressions(model, v_syms_gb_ex, ipqv, selector):
         [:,5] Qip, reactive power interpolated
         [:,6] Vabs_sqr, square of voltage magnitude
         [:,7] interpolate?
-    selector: 'I'|'P'|'Q'
+    quantity: 'I'|'P'|'Q'
         addresses current magnitude, active power or reactive power
 
     Returns
@@ -1730,19 +1721,19 @@ def get_batch_expressions(model, v_syms_gb_ex, ipqv, selector):
     dict
         id_of_batch => expression for I/P/Q-calculation"""
     dd = defaultdict(casadi.SX)
-    dd.update(_get_batch_expressions_br(model, v_syms_gb_ex, selector))
-    injectionexpr = _get_batch_expressions_inj(model, ipqv, selector)
+    dd.update(_get_batch_expressions_br(model, v_syms_gb_ex, quantity))
+    injectionexpr = _get_batch_expressions_inj(model, ipqv, quantity)
     for id_of_batch, expr in injectionexpr.items():
         dd[id_of_batch] = casadi.sum1(casadi.vertcat(dd[id_of_batch], expr))
-    if selector in 'PQ':
+    if quantity in 'PQ':
         return dd
-    if selector == 'I':
+    if quantity == 'I':
         return {id_of_batch: _get_I_expressions(Iri_exprs)
                 for id_of_batch, Iri_exprs in dd.items()}
     assert False, \
-        f'selector needs to be one of "I", "P" or "Q" but is "{selector}"'
+        f'quantity needs to be one of "I", "P" or "Q" but is "{quantity}"'
 
-def get_batch_flow_expressions(model, v_syms_gb_ex, ipqv, selector):
+def get_batch_flow_expressions(model, v_syms_gb_ex, ipqv, quantity):
     """Creates a vector (casadi.SX, shape n,1) expressing the difference
     between measured and calculated values for absolute current, active power
     or reactive power. The expressions are based on the batch definitions.
@@ -1766,18 +1757,18 @@ def get_batch_flow_expressions(model, v_syms_gb_ex, ipqv, selector):
         [:,5] Qip, reactive power interpolated
         [:,6] Vabs_sqr, square of voltage magnitude
         [:,7] interpolate?
-    selector: 'I'|'P'|'Q'
+    quantity: 'I'|'P'|'Q'
         addresses current magnitude, active power or reactive power
 
     Returns
     -------
     casadi.SX
         vector (shape n,1)"""
-    assert selector in 'IPQ', \
-        f'selector needs to be one of "I", "P" or "Q" but is "{selector}"'
-    values = get_values(model, selector).set_index('id_of_batch')
-    get_value = _make_get_value(values, selector)
-    batchid_expr = get_batch_expressions(model, v_syms_gb_ex, ipqv, selector)
+    assert quantity in 'IPQ', \
+        f'quantity needs to be one of "I", "P" or "Q" but is "{quantity}"'
+    values = get_values(model, quantity).set_index('id_of_batch')
+    get_value = _make_get_value(values, quantity)
+    batchid_expr = get_batch_expressions(model, v_syms_gb_ex, ipqv, quantity)
     batchids = batchid_expr.keys()
     vals = list(map(get_value, batchids))
     exprs = casadi.vcat(batchid_expr.values())
@@ -1804,7 +1795,7 @@ def get_node_expressions(index_of_node, Vnode_ri):
         return (Vsqr[:, 0] + Vsqr[:, 1]).sqrt()
     return _DM_0r1c
 
-def get_diff_expressions(model, v_syms_gb_ex, ipqv, quantities):
+def get_diff_expressions(model, expressions, ipqv, quantities):
     """Creates a vector (casadi.SX, shape n,1) expressing the difference
     between measured and calculated values for absolute current, active power
     or reactive power and voltage. The expressions are based on the batch
@@ -1814,7 +1805,7 @@ def get_diff_expressions(model, v_syms_gb_ex, ipqv, quantities):
     ----------
     model: egrid.model.Model
         model of electric network for calculation
-    v_syms_gb_ex: dict
+    expressions: dict
         * 'Vnode_syms', casadi.SX, vectors, symbols of node voltages
         * 'position_syms', casadi.SX, vector, symbols of tap positions
         * 'gb_mn_tot', casadi.SX, vectors, conductance and susceptance of
@@ -1845,24 +1836,57 @@ def get_diff_expressions(model, v_syms_gb_ex, ipqv, quantities):
     _ids = []
     _vals = []
     _exprs = casadi.SX(0, 1)
-    for sel in quantities.upper():
-        if sel in 'IPQ':
+    for quantity in quantities.upper():
+        if quantity in 'IPQ':
             ids, vals, exprs = get_batch_flow_expressions(
-                model, v_syms_gb_ex, ipqv, sel)
-            _quantities.extend([sel]*len(ids))
+                model, expressions, ipqv, quantity)
+            _quantities.extend([quantity]*len(ids))
             _ids.extend(ids)
             _vals.extend(vals)
             _exprs = casadi.vertcat(_exprs, exprs)
-        if sel=='V':
+        if quantity=='V':
             vvals = value_of_voltages(model.vvalues)
             count_of_values = len(vvals)
-            _quantities.extend([sel]*count_of_values)
+            _quantities.extend([quantity]*count_of_values)
             _ids.extend(vvals.id_of_node)
             _vals.extend(vvals.V)
             _exprs = casadi.vertcat(
                 _exprs,
-                v_syms_gb_ex['Vnode_syms'][vvals.index,2].sqrt())
+                expressions['Vnode_syms'][vvals.index,2].sqrt())
     return np.array(_quantities), np.array(_ids), casadi.DM(_vals), _exprs
+
+def get_batch_constraints(values_of_constraints, expressions_of_batches):
+    """Creates expressions for constraints for keeping batch values
+    constant.
+    
+    Parameters
+    ----------
+    values_of_constraints: tuple
+        * [0], str, quantity
+        * [1], str, id_of_batch
+        * [3], float, value
+    expressions_of_batches: tuple
+        * [0], str, quantity
+        * [1], str, id_of_batch
+        * [3], casadi.SX (shape m,1), expression
+    
+    Returns
+    -------
+    casadi.SX (shape n,1)"""
+    batch_index = pd.MultiIndex.from_arrays(
+        [expressions_of_batches[0],expressions_of_batches[1]], 
+        names=['quantity', 'id_of_batch'])
+    value_index = pd.MultiIndex.from_arrays(
+        [values_of_constraints[0],values_of_constraints[1]], 
+        names=['quantity', 'id_of_batch'])
+    values_ = pd.Series(values_of_constraints[2], index=value_index)
+    values = values_.reindex(batch_index).reset_index(drop=True)
+    values_notna = values[values.notna()]
+    if values_notna.size:
+        expr_indices = values_notna.index.to_numpy()
+        expr = expressions_of_batches[3][expr_indices]
+        return casadi.SX(values_notna.to_numpy()) - expr
+    return _SX_0r1c
 
 def get_optimize(model, expressions, positions=None):
     """Preapares the optimization function.
@@ -1926,7 +1950,7 @@ def get_optimize(model, expressions, positions=None):
             * casadi.SX, expressions of differences (shape n,1)
         constraints: casadi.SX
             expressions for additional constraints, values to be kept zero
-            (default constraints are Inode== 0)
+            (default constraints are Inode==0)
 
         Returns
         -------
@@ -2078,12 +2102,14 @@ def get_calculate_from_result(model, expressions, scaling_data, x):
          model.branchtaps.position))
 
 #
-# convenience functions of estimation for easier handling
+# convenience functions for easier handling of estimation
 #
 
 def get_step_data(
-    model, expressions, step=0, quantities_of_objective='', positions=None):
-    """Prepares data for first call of function estimate.
+    model, expressions, step=0, k_prev=_DM_0r1c, 
+    quantities_of_objective='', quantities_of_constraints='', 
+    values_of_constraints=None, positions=None):
+    """Prepares data for call of function estimate.
 
     Parameters
     ----------
@@ -2109,12 +2135,31 @@ def get_step_data(
           injections to power flow calculation nodes
     step: int
         index of estimation step
+    k_prev: casadi.DM
+        optional
+        result output of factors (only) calculated in previous step, if any
     quantities_of_objective: str
+        optional
         string of characters 'I'|'P'|'Q'|'V' or empty string ''
         addresses differences of calculated and given values to be minimized,
-        the caracters are symbols for given current magnitude, active power,
+        the characters are symbols for given current magnitude, active power,
         reactive power or magnitude of voltage,
         case insensitive, other characters are ignored
+    quantities_of_constraints: str
+        optional
+        string of characters 'I'|'P'|'Q'|'V' or empty string ''
+        addresses quantities of batches (measured values or setpoints) 
+        to be kept constant, the values are obtained from a previous
+        calculation/initialization step, the characters are symbols for 
+        given current magnitude, active power, reactive power or 
+        magnitude of voltage, case insensitive, other characters are ignored,
+        values must be given with argument 'values_of_constraints',
+        conditions must be satisfied
+    values_of_constraints: tuple
+        * [0] numpy.array<str>, quantities, 
+        * [1] numpy.array<str>, id_of_batch
+        * [2] numpy.array<float>, vector (shape n,1), value
+        values for constraints (refer to argument 'quantities_of_constraints')
     positions: array_like
         optional
         int, positions of taps
@@ -2156,6 +2201,8 @@ def get_step_data(
         * id_of_batch, list of string
         * value, casadi.DM, vector (shape n,1)
         * expression, casadi.SX, vector (shape n,1)
+    batch_constraints: casadi.SX (shape m,1)
+        constraints for keeping quantities calculated in previous step constant
     Vnode_ri_ini: array_like (shape 2n,1)
         initial node voltages separated real and imaginary values
     Inode_inj: casadi.SX (shape n,2)
@@ -2164,14 +2211,22 @@ def get_step_data(
     positions: array_like
         int, positions of taps, can be None"""
     scaling_data, Iinj_data = (
-        expressions['get_scaling_and_injection_data'](step=0))
+        expressions['get_scaling_and_injection_data'](step, k_prev))
     Inode_inj = expressions['inj_to_node'] @ Iinj_data[:,:2]
     diff_data = get_diff_expressions(
         model, expressions, Iinj_data, quantities_of_objective)
-    return model, expressions, scaling_data, diff_data, Inode_inj, positions
+    expr_of_batches = get_diff_expressions(
+        model, expressions, Iinj_data, quantities_of_constraints)
+    batch_constraints = (
+        _SX_0r1c
+        if values_of_constraints is None or len(expr_of_batches[0])==0 else
+        get_batch_constraints(values_of_constraints, expr_of_batches))
+    return (
+        model, expressions, scaling_data, diff_data, batch_constraints, 
+        Inode_inj, positions)
 
 def estimate(
-    model, expressions, scaling_data, diff_data, Inode_inj,
+    model, expressions, scaling_data, diff_data, batch_constraints, Inode_inj,
     positions, Vnode_ri_ini=None):
     """Optimizes.
 
@@ -2222,7 +2277,8 @@ def estimate(
             model, expressions, scaling_data, Inode_inj, positions)
         assert succ, 'calculation of power flow is failed'
     optimize = get_optimize(model, expressions, positions)
-    succ, x = optimize(Vnode_ri_ini, scaling_data, Inode_inj, diff_data)
+    succ, x = optimize(
+        Vnode_ri_ini, scaling_data, Inode_inj, diff_data, batch_constraints)
     # result processing
     count_of_Vvalues = 2 * model.shape_of_Y[0]
     return (
