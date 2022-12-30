@@ -427,10 +427,10 @@ model09 = make_model(
     Defk(step=0, id='kp'),
     # link the factor to the generator
     Link(
-        step=0,
+        step=(0, 1, 2),
         objid=('load_1', 'load_2', 'load_3', 'load_4', 'load_51'), 
-        part='p', 
-        id='kp'))
+        part='pq',
+        id=['kp','kq']))
 # result09 = [*calculate(model09, parameters_of_steps=[{'objectives': 'P'}])]
 # pr.print_estim_results(result09)
 # pr.print_measurements(result09)

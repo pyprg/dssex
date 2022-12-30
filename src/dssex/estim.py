@@ -1846,7 +1846,7 @@ def _(key, estimation_data):
             return key.factor * np.hstack([refvals, symbols.reshape(-1,1)])
         except:
             msg = (
-                "Error, while processing 'Term'-instance having type 'kavg': "
+                "Error, while processing 'Term'-instance having type 'k0': "
                 f"{key}")
             raise ValueError(msg)
 
@@ -2105,7 +2105,7 @@ def estimate(vslack_tappos, estimation_data, previous_data, mynlp,
         create_evaluating_function(mynlp.nlp, values_of_params, r['x']))
 
 def calculate(
-        model=None, parameters_of_steps=(), tap_positions=(), vminsqr=_VMINSQR):
+    model=None, parameters_of_steps=(), tap_positions=(), vminsqr=_VMINSQR):
     """Estimates grid status stepwise.
 
     Parameters
@@ -2115,7 +2115,7 @@ def calculate(
     parameters_of_steps: array_like
         dict {'objectives': objectives, 'constraints': constraints}
             if empty the function calculates power flow,
-            each dict triggersan estimization step
+            each dict triggers an estimization step
         * objectives, ''|'P'|'Q'|'I'|'V' (string or tuple of characters)
           'P' - objective function is created with terms for active power
           'Q' - objective function is created with terms for reactive power

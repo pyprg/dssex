@@ -24,7 +24,7 @@ from .estim import calculate
 
 DEFAULT_NETWORK = """
         n0<-------------cable------------>n1--((~)) motor
-          slack=True      y_mn=1e3-1e3j               P10=42"""
+         slack=True      y_mn=1e3-1e3j               P10=42"""
 
 def calculate_power_flow(*args):
     """Calculates the power flow of given network model.
@@ -33,7 +33,7 @@ def calculate_power_flow(*args):
     (the default input if no args are given)
     ::
         n0<-------------cable------------>n1--((~)) motor
-          slack=True      y_mn=1e3-1e3j               P10=42
+         slack=True      y_mn=1e3-1e3j               P10=42
 
     Parameters
     ----------

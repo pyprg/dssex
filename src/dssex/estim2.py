@@ -30,13 +30,15 @@ from scipy.sparse import coo_matrix
 from egrid.builder import DEFAULT_FACTOR_ID, defk, Loadfactor
 from src.dssex.injections import calculate_cubic_coefficients
 from src.dssex.batch import get_values, get_batches, value_of_voltages
-# square of voltage magnitude, minimum value for load curve,
+# square of voltage magnitude, default value, minimum value for load curve,
 #   if value is below _VMINSQR the load curves for P and Q converge
 #   towards a linear load curve which is 0 when V=0; P(V=0)=0, Q(V=0)=0
 _VMINSQR = 0.8**2
 # value of zero check, used for load curve calculation
 _EPSILON = 1e-12
+# empty vector of values
 _DM_0r1c = casadi.DM(0,1)
+# empty vector of expressions
 _SX_0r1c = casadi.SX(0,1)
 
 def create_symbols_with_ids(ids):

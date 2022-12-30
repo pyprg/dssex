@@ -41,7 +41,7 @@ Loads, PV/PQ-generators, batteries, and shunt capacitors are instances of
 **Injection**. Injections have attributes P10 and Q10 for active and reactive
 power at voltage of 1&nbsp;pu and Exp_v_p and Exp_v_q for modeling the voltage
 dependency. The voltage exponents of the injection instances Exp_v_p,
-Exp_v_q are set to 0 for PQ-generators, constant and measured loads. This
+Exp_v_q are set to 0 for PQ-generators, constant and measured loads. Those
 injections and the injections of shunt capacitors are not scaled. Injections
 of shunt capacitors have an active power setting P10 of 0 and a negative
 reactive power setting Q10. Its voltage exponent for reactive power Exp_v_q
@@ -51,7 +51,7 @@ exponents and can be scaled during estimation.
 The optimization problem is setup using instance of:
 
     * branch (with one or two taps) (line, transformer (winding), series capacitor)
-    * injection (consumer, generator, shunt capacitor)
+    * injection (consumer, generator, shunt capacitor, battery)
     * node (given by reference id from other elements only)
     * slack node, marker of a node, source of given complex voltage
     * given flow value (PQI-measurements, real value)
@@ -78,7 +78,7 @@ into a node equals the injected current&nbsp;- except for slacks.
                            V - complex node voltage vector
                            I - complex node current vector
 
-Sscaling factors and node voltages are the results of the optimization process.
+Scaling factors and node voltages are the results of the optimization process.
 Variables for voltages and factors are named decision variables. The injected
 node current I is expressed in terms of the node voltages and scaling factors.
 The objective function is also expressed in decision
