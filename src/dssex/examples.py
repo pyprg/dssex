@@ -85,12 +85,12 @@ model_entities = [
         Exp_v_p=0.0,
         Exp_v_q=2.0),
     # define a scaling factor
-    Defk(id='kp', step=(0,1,2)),
+    Defk(id='k', step=(0,1,2)),
     # link the factor to the loads
     Link(
         objid='consumer_0', 
-        part='p', 
-        id='kp',
+        part='pq', 
+        id=('k', 'k'),
         step=(0,1,2)),
     # measurement
     PValue(
@@ -106,7 +106,7 @@ model_entities = [
         id_of_batch='n_0_line_0',
         id_of_device='line_0',
         id_of_node='n_0'),
-    # # measurement
+    # measurement
     PValue(
         id_of_batch='n_1_line_1',
         P=40.0),
@@ -126,7 +126,6 @@ from src.dssex.estim2 import (
     get_expressions,
     vstack, 
     calculate_power_flow2,
-    get_diff_expressions,
     calculate_power_flow,
     get_step_data,
     estimate,

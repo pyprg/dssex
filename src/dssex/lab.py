@@ -56,8 +56,8 @@ get_injected_power = get_injected_power_fn(
 pq_factors = np.ones((len(model.injections), 2))
 count_of_nodes = model.shape_of_Y[0]
 init = np.array([1.]*count_of_nodes + [0.]*count_of_nodes).reshape(-1, 1)
-if len(model.errormessages):
-    print(model.errormessages)
+if len(model.messages):
+    print(model.messages)
 else:
     success, V = cpfsymb(1e-10, 20, model, Vinit=init)
     print('SUCCESS' if success else '_F_A_I_L_E_D_')
@@ -95,8 +95,8 @@ pq_factors = fl * np.ones((len(model.injections), 2))
 Vslack = fv * model.slacks.V
 values_of_params = casadi.horzcat(
     np.real(Vslack), np.imag(Vslack), model.branchtaps.position.copy())
-if len(model.errormessages):
-    print(model.errormessages)
+if len(model.messages):
+    print(model.messages)
 else:
     count_of_nodes = model.shape_of_Y[0]
     init = np.array([1.]*count_of_nodes + [0.]*count_of_nodes).reshape(-1, 1)
@@ -159,8 +159,8 @@ model2 = make_model(
     Vvalue(id_of_node='n_1', V=1.,),
     Defk(step=0, id='kq'),
     Link(step=0, objid='Gen', part='q', id='kq'))
-if len(model2.errormessages):
-    print(model2.errormessages)
+if len(model2.messages):
+    print(model2.messages)
 else:
     count_of_nodes = model2.shape_of_Y[0]
     init = np.array([1.]*count_of_nodes + [0.]*count_of_nodes).reshape(-1, 1)

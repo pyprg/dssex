@@ -27,7 +27,7 @@ from collections import defaultdict
 from itertools import chain
 from collections import namedtuple
 from scipy.sparse import coo_matrix
-from egrid.builder import DEFAULT_FACTOR_ID, defk, Loadfactor
+from egrid.input import DEFAULT_FACTOR_ID, defk, Loadfactor
 from src.dssex.injections import calculate_cubic_coefficients
 from src.dssex.batch import get_values, get_batches, value_of_voltages
 # square of voltage magnitude, default value, minimum value for load curve,
