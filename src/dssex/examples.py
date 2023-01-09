@@ -19,14 +19,14 @@ Created on Sun Aug  8 08:36:10 2021
 
 @author: pyprg
 """
+import src.dssex.present as pr
+import src.dssex.pfcnum as pfc
 from egrid import make_model
 from functools import partial
 from egrid.builder import (
     Slacknode, Branch, Branchtaps, Injection, PValue, QValue, IValue, Output, 
     Vvalue, Defk, Link)
-import src.dssex.present as pr
 from src.dssex.estim import calculate
-import src.dssex.pfcnum as pfc
 
 
 # square of voltage magnitude, minimum value for load curve, 
@@ -85,7 +85,7 @@ model_entities = [
         Exp_v_p=0.0,
         Exp_v_q=2.0),
     # define a scaling factor
-    Defk(id='k', step=(0,1,2)),
+    Defk(id='kp', step=(0,1,2)),
     # link the factor to the loads
     Link(
         objid='consumer_0', 
@@ -99,24 +99,24 @@ model_entities = [
     QValue(
         id_of_batch='n_0_line_0',
         Q=10.0),
-    IValue(
-        id_of_batch='n_0_line_0',
-        I=42.0),
+    # IValue(
+    #     id_of_batch='n_0_line_0',
+    #     I=42.0),
     Output(
         id_of_batch='n_0_line_0',
         id_of_device='line_0',
         id_of_node='n_0'),
     # measurement
-    PValue(
-        id_of_batch='n_1_line_1',
-        P=40.0),
-    Output(
-        id_of_batch='n_1_line_1',
-        id_of_device='line_1',
-        id_of_node='n_1'),
-    Vvalue(
-        id_of_node='n_1',
-        V=.95)
+    # PValue(
+    #     id_of_batch='n_1_line_1',
+    #     P=40.0),
+    # Output(
+    #     id_of_batch='n_1_line_1',
+    #     id_of_device='line_1',
+    #     id_of_node='n_1'),
+    # Vvalue(
+    #     id_of_node='n_1',
+    #     V=.95)
     ]
 
 model = make_model(model_entities)
@@ -189,6 +189,7 @@ model_scale_p = [
      # link the factor to an injection
      Link(step=0, objid='consumer_0', part='p', id='kp')]
 model01 = make_model(model_entities, model_PQ_measurements, model_scale_p)
+#%%
 results01 = [*calculate(model01, parameters_of_steps=[{'objectives': 'P'}])]
 # print the result
 pr.print_estim_results(results01)
