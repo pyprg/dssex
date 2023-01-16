@@ -481,7 +481,7 @@ def _get_values_of_symbols(factor_data, value_of_previous_step):
             value_of_previous_step[calc.index_of_source.astype(int)])
     return values
 
-def _select_type(vecs, row_index):
+def _select_rows(vecs, row_index):
     """Creates column vectors from vecs by extracting elements by their
     (row-) indices.
 
@@ -489,7 +489,7 @@ def _select_type(vecs, row_index):
     ----------
     vecs: iterable
         casadi.SX or casadi.DM, column vector
-    factor_data: array_like
+    row_index: array_like
         int
 
     Returns
@@ -602,19 +602,21 @@ def get_scaling_data(
                 'step', 'injid', 'id_p', 'id_q',
                 'kp', 'kq', 'index_of_injection'])
     values = _get_values_of_symbols(factors, k_prev)
-    symbols_values = partial(_select_type, [symbols, values])
+    select_symbols_values = partial(_select_rows, [symbols, values])
     factors_var = factors[factors.type=='var']
-    symbols_of_vars, values_of_vars = symbols_values(
+    symbols_of_vars, values_of_vars = select_symbols_values(
         factors_var.index_of_symbol)
     factors_consts = factors[factors.type=='const']
-    symbols_of_consts, values_of_consts = symbols_values(
+    symbols_of_consts, values_of_consts = select_symbols_values(
         factors_consts.index_of_symbol)
     # the optimization result is provided as a vector of concatenated
     #   scaling variables and scaling constants, we prepare indices for
     #   mapping to kp/kq (which are ordered according to injections)
-    var_const_to_factor = np.concatenate(
+    var_const_idxs = np.concatenate(
         [factors_var.index_of_symbol.array,
          factors_consts.index_of_symbol.array])
+    var_const_to_factor = np.zeros_like(var_const_idxs)
+    var_const_to_factor[var_const_idxs] = factors.index_of_symbol
     return Scalingdata(
         # kp/kq used in expression building
         #   (columns of injections_factors.kp/kq store an index)
@@ -671,7 +673,7 @@ def get_k(scaling_data, x_scaling):
     Enhances scaling factors calculated by optimization with constant
     scaling factors and reorders the factors according to order of injections.
     Returns kp and kq for each injection.
-    The function reates a vector of values for scaling factors which are 
+    The function creates a vector of values for scaling factors which are 
     decision variables and those which are constants. This vector is ordered 
     for use as initial scaling factor values in next estimation step.
 
