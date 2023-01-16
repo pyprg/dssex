@@ -20,14 +20,15 @@ Created on Wed Nov 30 13:04:16 2022
 @author: pyprg
 """
 import unittest
+import context # adds parent folder of dssex to search path
 import numpy as np
 import egrid.builder as grid
-import src.dssex.util as util  # eval_residual_current
-import src.dssex.pfcnum as pfc # get_calc_injected_power_fn
-from egrid import make_model
+import dssex.util as util  # eval_residual_current
+import dssex.pfcnum as pfc # get_calc_injected_power_fn
+import dssex.estim2 as estim
 from functools import partial
 from numpy.linalg import norm
-import src.dssex.estim2 as estim
+from egrid import make_model
 
 # square of voltage magnitude, minimum value for load curve,
 #   if value is below _VMINSQR the load curves for P and Q converge
@@ -49,11 +50,65 @@ grid_pfc = (
 
 class Power_flow_calculation_basic(unittest.TestCase):
 
+    def test_calculate_power_flow_slack(self):
+        """Power flow calculation with one slack node.
+        Minimal configuration."""
+        vcx_slack = 0.9+0.2j
+        model = make_model(grid.Slacknode('n_0', V=vcx_slack))
+        # calculate
+        success, vnode_ri = estim.calculate_power_flow(
+            model, vminsqr=_VMINSQR)
+        # test
+        self.assertTrue(success, "calculate_power_flow shall succeed")
+        vnode_cx = estim.ri_to_complex(vnode_ri)
+        self.assertAlmostEqual(
+            vnode_cx[0,0], 
+            vcx_slack, 
+            'calculated slack voltage is {vcx_slack}')
+
+    def test_calculate_power_flow_slack_consumer(self):
+        """Power flow calculation with one consumer."""
+        vcx_slack = 0.95+0.2j
+        model = make_model(
+            grid.Slacknode('n_0', V=vcx_slack), 
+            grid.Injection('consumer', 'n_0', P10=30.0)
+            )
+        # calculate
+        success, vnode_ri = estim.calculate_power_flow(
+            model, vminsqr=_VMINSQR)
+        # test
+        self.assertTrue(success, "calculate_power_flow shall succeed")
+        vnode_cx = estim.ri_to_complex(vnode_ri)
+        self.assertAlmostEqual(
+            vnode_cx[0,0], 
+            vcx_slack, 
+            'calculated slack voltage is {vcx_slack}')
+
+    def test_calculate_power_flow_slack_branch(self):
+        """Power flow calculation with one branch."""
+        vcx_slack = 0.95+0.2j
+        model = make_model(
+            grid.Slacknode('n_0', V=vcx_slack), 
+            grid.Branch('line', 'n_0', 'n_1', y_lo=1e3-1e3j, y_tr=1e-6+1e-6j)
+            )
+        # calculate
+        success, vnode_ri = estim.calculate_power_flow(
+            model, vminsqr=_VMINSQR)
+        # test
+        self.assertTrue(success, "calculate_power_flow shall succeed")
+        vnode_cx = estim.ri_to_complex(vnode_ri)
+        self.assertAlmostEqual(
+            vnode_cx[0,0], 
+            vcx_slack, 
+            'calculated slack voltage is {vcx_slack}')
+
     def test_calculate_power_flow_00(self):
         """Power flow calculation with one branch and one
         pure active power consumer."""
         model = make_model(
-            grid_pfc, grid.Injection('consumer', 'n_1', P10=30.0))
+            grid_pfc, 
+            grid.Injection('consumer', 'n_1', P10=30.0)
+            )
         # calculate
         success, vnode_ri = estim.calculate_power_flow(
             model, vminsqr=_VMINSQR)

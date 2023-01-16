@@ -19,16 +19,17 @@ Created on Fri Dec 16 00:14:07 2022
 @author: pyprg
 """
 import unittest
+import context # adds parent folder of dssex to search path
 import numpy as np
 import pandas as pd
 import egrid.builder as grid
-import src.dssex.util as util
-import src.dssex.pfcnum as pfc
-from egrid import make_model
+import dssex.util as util
+import dssex.pfcnum as pfc
+import dssex.estim2 as estim
+import dssex.batch as batch
 from functools import partial
 from numpy.linalg import norm
-import src.dssex.estim2 as estim
-import src.dssex.batch as batch
+from egrid import make_model
 
 # square of voltage magnitude, minimum value for load curve,
 #   if value is below _VMINSQR the load curves for P and Q converge
