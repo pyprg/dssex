@@ -2,7 +2,7 @@
 """
 Created on Sat Sep 10 11:28:52 2022
 
-Copyright (C) 2022 pyprg
+Copyright (C) 2023 pyprg
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -28,8 +28,9 @@ from itertools import chain
 from collections import namedtuple
 from scipy.sparse import coo_matrix
 from egrid.builder import DEFAULT_FACTOR_ID, defk, Loadfactor
-from src.dssex.injections import calculate_cubic_coefficients
-from src.dssex.batch import get_values, get_batches, value_of_voltages
+from dssex.injections import calculate_cubic_coefficients
+from dssex.batch import (
+    get_values, get_batches, value_of_voltages, get_batch_values)
 # square of voltage magnitude, default value, minimum value for load curve,
 #   if value is below _VMINSQR the load curves for P and Q converge
 #   towards a linear load curve which is 0 when V=0; P(V=0)=0, Q(V=0)=0
@@ -412,7 +413,7 @@ def get_load_scaling_factor_data(
 def get_factors(model, count_of_steps=1):
     """Creates identifiers and indices of scaling factors. Creates mapping
     from injections to scaling factors. The mapping is specific for each
-    calculation step, injection and scaled part of power (eiher active or
+    calculation step, injection and scaled part of power (either active or
     reactive power)
 
     Parameters
@@ -449,7 +450,7 @@ def _groupby_step(df):
     return df_.groupby('step')
 
 def _get_values_of_symbols(factor_data, value_of_previous_step):
-    """Returns values for symbols. If a symbol is a variable the value
+    """Returns values for symbols. When a symbol is a variable the value
     is the initial value. Values are either given explicitely or are
     calculated in the previous calculation step.
 
@@ -1121,7 +1122,6 @@ def calculate_power_flow2(
     model: egrid.model.Model
         data of electric grid
     expr: dict
-        optional
         * 'Vnode_syms', casadi.SX, expressions of node Voltages
         * 'Vre_slack_syms', casadi.SX, symbols of slack voltages, real part
         * 'Vim_slack_syms', casadi.SX, symbols of slack voltages,
@@ -1129,8 +1129,9 @@ def calculate_power_flow2(
         * 'position_syms', casadi.SX, symbols of tap positions
         * 'Y_by_V', casadi.SX, expression for Y @ V
     scaling_data: Scalingdata
-        optional
+        
     Inode: casadi.SX (shape n,2)
+        values for slack need to be set to slack voltage
         * Inode[:,0] - Ire, real part of current injected into node
         * Inode[:,1] - Iim, imaginary part of current injected into node
     tappositions: array_like
@@ -1145,16 +1146,15 @@ def calculate_power_flow2(
     tuple
         * bool, success?
         * casadi.DM, float, voltage vector [real parts, imaginary parts]"""
-    Vnode_syms = expr['Vnode_syms']
     Vslack_syms = expr['Vslack_syms'][:,0], expr['Vslack_syms'][:,1]
     parameter_syms=casadi.vertcat(
         *Vslack_syms,
         expr['position_syms'],
         scaling_data.kvars,
         scaling_data.kconsts)
-    slacks = model.slacks
-    Inode_ = _reset_slack_current(slacks.index_of_node, *Vslack_syms, Inode)
-    Inode_ri = vstack(Inode_, 2)
+    Vnode_syms = expr['Vnode_syms']
+    #Inode_ri = vstack(Inode_, 2)
+    Inode_ri = vstack(Inode, 2)
     variable_syms = vstack(Vnode_syms, 2)
     fn_Iresidual = casadi.Function(
         'fn_Iresidual',
@@ -1173,7 +1173,7 @@ def calculate_power_flow2(
         model.branchtaps.position if tappositions is None else tappositions)
     # Vslack must be negative as Vslack_result + Vslack_in_Inode = 0
     #   because the root is searched for with formula: Y * Vresult + Inode = 0
-    Vslack_neg = -slacks.V
+    Vslack_neg = -model.slacks.V
     values_of_parameters=casadi.vertcat(
         np.real(Vslack_neg), np.imag(Vslack_neg),
         tappositions_,
@@ -1220,10 +1220,13 @@ def calculate_power_flow(
     get_scaling_and_injection_data = make_get_scaling_and_injection_data(
         model, const_expr['Vnode_syms'], vminsqr, count_of_steps=1)
     scaling_data, Iinj_data = get_scaling_and_injection_data(step=0)
-    inj_to_node = casadi.SX(model.mnodeinj)
-    Inode = inj_to_node @ Iinj_data[:,:2]
+    Vslack_syms = const_expr['Vslack_syms']
+    Inode_inj = _reset_slack_current(
+        model.slacks.index_of_node, 
+        Vslack_syms[:,0], Vslack_syms[:,1], 
+        casadi.SX(model.mnodeinj) @ Iinj_data[:,:2])
     return calculate_power_flow2(
-        model, const_expr, scaling_data, Inode, tappositions, Vinit)
+        model, const_expr, scaling_data, Inode_inj, tappositions, Vinit)
 
 ##############
 # Estimation #
@@ -2223,7 +2226,11 @@ def get_step_data(
     Stepdata"""
     scaling_data, Iinj_data = (
         expressions['get_scaling_and_injection_data'](step, k_prev))
-    Inode_inj = expressions['inj_to_node'] @ Iinj_data[:,:2]
+    Vslack_syms = expressions['Vslack_syms']
+    Inode_inj = _reset_slack_current(
+        model.slacks.index_of_node, 
+        Vslack_syms[:,0], Vslack_syms[:,1],  
+        expressions['inj_to_node'] @ Iinj_data[:,:2])
     diff_data = get_diff_expressions(
         model, expressions, Iinj_data, objectives)
     expr_of_batches = get_diff_expressions(
@@ -2235,6 +2242,87 @@ def get_step_data(
     return Stepdata(
         model, expressions, scaling_data, diff_data, batch_constraints, 
         Inode_inj, positions)
+
+def get_step_data_fns(model, count_of_steps):
+    """Creates two functions for generating step specific data,
+    'ini_step_data' and 'next_step_data'.
+    Function 'ini_step_data' creates the step_data structure for the first run
+    of function 'estimate'. Function 'next_step_data' for all subsequent runs.
+    
+    Parameters
+    ----------
+    model: egrid.model.Model
+    
+    count_of_steps: int
+        number of estimation steps
+    
+    Returns
+    -------
+    tuple
+        * ini_step_data: function 
+            ()->(Stepdata), optional parameters:
+              objectives: str
+                  optional, default ''
+                  string of characters 'I'|'P'|'Q'|'V' or empty string ''
+              step: int
+                  optional, default 0
+              k_prev: scaling factors calculated by previous step
+                  optional, default None
+              constraints: str
+                  optional, default ''
+                  string of characters 'I'|'P'|'Q'|'V' or empty string ''
+              value_of_constraints: data made by function 'get_batch_values'
+                  optional, default None
+        * next_step_data: function
+            (int, Stepdata, casadi.DM, casadi.DM)->(Stepdata), parameters:
+              step: int
+                  index of optimizatin step
+              step_data: Stepdata
+                  made in previous calculation step
+              voltages_ri: casadi.DM
+                  node voltages calculated by previous calculation step
+              k: casadi.DM
+                  scaling factors calculated by previous calculation step
+              objectives: str (optional)
+                  optional, default ''
+                  string of characters 'I'|'P'|'Q'|'V' or empty string ''
+              constraints: str (optional)
+                  optional, default ''
+                  string of characters 'I'|'P'|'Q'|'V' or empty string ''"""
+    expressions = get_expressions(model, count_of_steps=count_of_steps)
+    make_step_data = partial(get_step_data, model, expressions)
+    def next_step_data(
+            step, step_data, voltages_ri, k, objectives='', constraints=''):
+        """Creates data for function 'estimate'. A previous step must have
+        created step_data.
+        
+        Parameters
+        ----------
+        step: int
+            index of optimizatin step
+        step_data: Stepdata
+            made in previous calculation step
+        voltages_ri: casadi.DM
+            node voltages calculated by previous calculation step
+        k: casadi.DM
+            scaling factors calculated by previous calculation step
+        objectives: str (optional)
+            optional, default ''
+            string of characters 'I'|'P'|'Q'|'V' or empty string ''
+        constraints: str (optional)
+            optional, default ''
+            string of characters 'I'|'P'|'Q'|'V' or empty string ''"""
+        voltages_ri2 = ri_to_ri2(voltages_ri.toarray())
+        kpq, k_var_const = get_k(step_data.scaling_data, k)
+        batch_values = get_batch_values(
+            model, voltages_ri2, kpq, None, constraints)
+        return make_step_data(
+            objectives=objectives, 
+            step=step, 
+            k_prev=k_var_const, 
+            constraints=constraints,
+            values_of_constraints=batch_values)
+    return make_step_data, next_step_data
 
 def estimate(
     model, expressions, scaling_data, diff_data, batch_constraints, Inode_inj,

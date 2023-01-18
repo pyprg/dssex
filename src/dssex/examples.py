@@ -128,136 +128,19 @@ model_entities = [
     ]
 
 
-from dssex.estim2 import (
-    get_expressions, get_step_data, estimate, get_k,
-    ri_to_ri2, get_Vcx_kpq, calculate_power_flow2)
-from dssex.batch import  get_batch_values
+from dssex.estim2 import (estimate, get_Vcx_kpq, get_step_data_fns)
 
 
 count_of_steps = 3
 objectives = ''
 
-def get_step_data_fns(model, count_of_steps):
-    """Creates two functions for generating step specific data,
-    'ini_step_data' and 'next_step_data'.
-    Function 'ini_step_data' creates the step_data structure for the first run
-    of function 'estimate'. Function 'next_step_data' for all subsequent runs.
-    
-    Parameters
-    ----------
-    model: egrid.model.Model
-    
-    count_of_steps: int
-        number of estimation steps
-    
-    Returns
-    -------
-    tuple
-        * make_step_data: function 
-            ()->(Stepdata), optional parameters:
-              objectives: str
-                  default ''
-                  string of characters 'I'|'P'|'Q'|'V' or empty string ''
-              step: int
-                  default 0
-              k_prev: scaling factors calculated by previous step
-                  default None
-              constraints: str
-                  default ''
-                  string of characters 'I'|'P'|'Q'|'V' or empty string ''
-              value_of_constraints: data made by function 'get_batch_values'
-                  default None
-        * next_step_data: function
-            ()->(Stepdata), parameters:
-              step: int
-                  index of optimizatin step
-              step_data: Stepdata
-                  made in previous calculation step
-              voltages_ri: casadi.DM
-                  node voltages calculated by previous calculation step
-              k: casadi.DM
-                  scaling factors calculated by previous calculation step
-              objectives: str (optional)
-                  default ''
-                  string of characters 'I'|'P'|'Q'|'V' or empty string ''
-              constraints: str (optional)
-                  default ''
-                  string of characters 'I'|'P'|'Q'|'V' or empty string ''"""
-    expressions = get_expressions(model, count_of_steps=count_of_steps)
-    make_step_data = partial(get_step_data, model, expressions)
-    def next_step_data(
-            step, step_data, voltages_ri, k, objectives='', constraints=''):
-        voltages_ri2 = ri_to_ri2(voltages_ri.toarray())
-        kpq, k_var_const = get_k(step_data.scaling_data, k)
-        batch_values = get_batch_values(
-            model, voltages_ri2, kpq, None, constraints)
-        return make_step_data(
-            objectives=objectives, 
-            step=step, 
-            k_prev=k_var_const, 
-            constraints=constraints,
-            values_of_constraints=batch_values)
-    return make_step_data, next_step_data
-
-# make_step_data, next_step_data = get_step_data_fns(model, 3)
-# step_data = make_step_data(step=0)
-
-
-
-
 model = make_model(model_entities)
-expressions = get_expressions(model, count_of_steps=count_of_steps)
-make_step_data = partial(get_step_data, model, expressions)
+make_step_data, next_step_data = get_step_data_fns(model, 3)
 
-step_data = make_step_data()
 
-succ, Vnode_ri_ini = calculate_power_flow2(
-    model, expressions, step_data.scaling_data, step_data.Inode_inj, step_data.positions)
-assert succ, 'calculation of power flow is failed'
 
-succ, voltages_ri, k = estimate(*step_data, Vnode_ri_ini)
-
-print('\n',(">> SUCCESS <<" if succ else 'F A I L E D'),'\n')
-# if succ:
-#     voltages_cx, kpq = get_Vcx_kpq(step_data.scaling_data, voltages_ri, k)
-#     print(f'\nvoltages_cx:\n{voltages_cx}')
-#     print(f'\nkpq:\n{kpq}')
-#     result = pfc.calculate_electric_data2(model, voltages_cx, kpq)
-#     result_branch = result.branch()
-#     result_injection = result.injection()
-    # print(f'\nbranches:\n{result.branch()}')
-    # print(f'\ninjections:\n{result.injection()}')
-
-#%%
-
-# voltages_ri2 = ri_to_ri2(voltages_ri.toarray())
-# kpq, k_var_const = get_k(step_data.scaling_data, k)
-# batch_values = get_batch_values(
-#     model, voltages_ri2, kpq, None, '')
-
-model = make_model(model_entities)
-expressions = get_expressions(model, count_of_steps=count_of_steps)
-make_step_data = partial(get_step_data, model, expressions)
-step_data_1 = make_step_data()
-succ, Vnode_ri_ini_1 = calculate_power_flow2(
-    model, 
-    expressions, 
-    step_data_1.scaling_data, 
-    step_data_1.Inode_inj, 
-    step_data_1.positions)
-assert succ, 'calculation of power flow is failed'
- 
-
-succ_1, voltages_ri_1, k_1 = estimate(
-    model=step_data_1.model,
-    expressions=step_data_1.expressions,
-    scaling_data=step_data_1.scaling_data,
-    diff_data=step_data_1.diff_data,
-    batch_constraints=step_data_1.batch_constraints,
-    Inode_inj=step_data_1.Inode_inj,
-    positions=step_data_1.positions,
-    Vnode_ri_ini=voltages_ri)
-
+step_data = make_step_data(step=0)
+succ, voltages_ri, k = estimate(*step_data)
 print('\n',(">> SUCCESS <<" if succ else 'F A I L E D'),'\n')
 if succ:
     voltages_cx, kpq = get_Vcx_kpq(step_data.scaling_data, voltages_ri, k)
@@ -266,6 +149,22 @@ if succ:
     result = pfc.calculate_electric_data2(model, voltages_cx, kpq)
     result_branch = result.branch()
     result_injection = result.injection()
+    # print(f'\nbranches:\n{result.branch()}')
+    # print(f'\ninjections:\n{result.injection()}')
+
+#%%
+ 
+step_data_1 = next_step_data(1, step_data, voltages_ri, k)
+succ_1, voltages_ri_1, k_1 = estimate(*step_data_1, Vnode_ri_ini=voltages_ri)
+
+print('\n',(">> SUCCESS <<" if succ else 'F A I L E D'),'\n')
+if succ:
+    voltages_cx_1, kpq_1 = get_Vcx_kpq(step_data.scaling_data, voltages_ri, k)
+    print(f'\nvoltages_cx:\n{voltages_cx}')
+    print(f'\nkpq:\n{kpq}')
+    result_1 = pfc.calculate_electric_data2(model, voltages_cx_1, kpq_1)
+    result_branch_1 = result.branch()
+    result_injection_1 = result.injection()
 #%% scale load in order to meet values for active power P
 # model_PQ_measurements = [
 #      # measured P/Q pair
