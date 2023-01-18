@@ -464,7 +464,7 @@ class Estimation(unittest.TestCase):
             grid.Link(objid='consumer', part='p', id='kp'))
         expressions = estim.get_expressions(model, count_of_steps=1)
         estimation_data = estim.get_step_data(
-            model, expressions, 0, quantities_of_objective='P')
+            model, expressions, objectives='P')
         succ, x_V, x_scaling = estim.estimate(*estimation_data)
         self.assertTrue(succ, 'estimation succeeds')
         V, k = estim.get_Vcx_kpq(estimation_data[2], x_V, x_scaling)
@@ -496,7 +496,7 @@ class Estimation(unittest.TestCase):
             grid.Link(objid='consumer', part='p', id='kp'))
         expressions = estim.get_expressions(model, count_of_steps=1)
         estimation_data = estim.get_step_data(
-            model, expressions, 0, quantities_of_objective='P')
+            model, expressions, objectives='P')
         succ, x_V, x_scaling = estim.estimate(*estimation_data)
         self.assertTrue(succ, 'estimation succeeds')
         V, k = estim.get_Vcx_kpq(estimation_data[2], x_V, x_scaling)
@@ -528,7 +528,7 @@ class Estimation(unittest.TestCase):
             grid.Link(objid='consumer', part='q', id='kq'))
         expressions = estim.get_expressions(model, count_of_steps=1)
         estimation_data = estim.get_step_data(
-            model, expressions, 0, quantities_of_objective='Q')
+            model, expressions, objectives='Q')
         succ, x_V, x_scaling = estim.estimate(*estimation_data)
         self.assertTrue(succ, 'estimation succeeds')
         V, k = estim.get_Vcx_kpq(estimation_data[2], x_V, x_scaling)
@@ -560,7 +560,7 @@ class Estimation(unittest.TestCase):
             grid.Link(objid='consumer', part='q', id='kq'))
         expressions = estim.get_expressions(model, count_of_steps=1)
         estimation_data = estim.get_step_data(
-            model, expressions, 0, quantities_of_objective='Q')
+            model, expressions, objectives='Q')
         succ, x_V, x_scaling = estim.estimate(*estimation_data)
         self.assertTrue(succ, 'estimation succeeds')
         V, k = estim.get_Vcx_kpq(estimation_data[2], x_V, x_scaling)
@@ -592,7 +592,7 @@ class Estimation(unittest.TestCase):
             grid.Link(objid='consumer', part='pq', id='kpq'))
         expressions = estim.get_expressions(model, count_of_steps=1)
         estimation_data = estim.get_step_data(
-            model, expressions, 0, quantities_of_objective='I')
+            model, expressions, objectives='I')
         succ, x_V, x_scaling = estim.estimate(*estimation_data)
         self.assertTrue(succ, 'estimation succeeds')
         V, k = estim.get_Vcx_kpq(estimation_data[2], x_V, x_scaling)
@@ -624,7 +624,7 @@ class Estimation(unittest.TestCase):
             grid.Link(objid='consumer', part='pq', id='kpq'))
         expressions = estim.get_expressions(model, count_of_steps=1)
         estimation_data = estim.get_step_data(
-            model, expressions, 0, quantities_of_objective='I')
+            model, expressions, objectives='I')
         succ, x_V, x_scaling = estim.estimate(*estimation_data)
         self.assertTrue(succ, 'estimation succeeds')
         V, k = estim.get_Vcx_kpq(estimation_data[2], x_V, x_scaling)
@@ -655,7 +655,7 @@ class Estimation(unittest.TestCase):
             grid.Link(objid='consumer', part='q', id='kq'))
         expressions = estim.get_expressions(model, count_of_steps=1)
         estimation_data = estim.get_step_data(
-            model, expressions, 0, quantities_of_objective='V')
+            model, expressions, objectives='V')
         succ, x_V, x_scaling = estim.estimate(*estimation_data)
         self.assertTrue(succ, 'estimation succeeds')
         V, k = estim.get_Vcx_kpq(estimation_data[2], x_V, x_scaling)

@@ -475,7 +475,7 @@ def _get_values_of_symbols(factor_data, value_of_previous_step):
     # values calculated in previous step
     calc = factor_data[~is_given]
     if len(calc):
-        assert (0 < value_of_previous_step.size), \
+        assert (0 < value_of_previous_step.size1()), \
             'missing value_of_previous_step'
         values[calc.index_of_symbol] = (
             value_of_previous_step[calc.index_of_source.astype(int)])
@@ -699,10 +699,10 @@ def get_k(scaling_data, x_scaling):
     tuple
         * numpy.array (n,2), kp, kq for each injection
         * casadi.DM (m,1) kvar/const"""
-    k_var_const = (
-        casadi.vertcat(x_scaling, scaling_data.values_of_consts).toarray())
-    kp = k_var_const[scaling_data.var_const_to_kp]
-    kq = k_var_const[scaling_data.var_const_to_kq]
+    k_var_const = casadi.vertcat(x_scaling, scaling_data.values_of_consts)
+    k_var_const_arr = k_var_const.toarray()
+    kp = k_var_const_arr[scaling_data.var_const_to_kp]
+    kq = k_var_const_arr[scaling_data.var_const_to_kq]
     return np.hstack([kp, kq]), k_var_const[scaling_data.var_const_to_factor]
 
 def make_get_scaling_data(model, count_of_steps=1):
@@ -1971,9 +1971,9 @@ def get_optimize(model, expressions, positions=None):
             expressions['Y_by_V'] + vstack(Inode_inj), constraints)
         nlp = {'x': syms, 'f': objective, 'g': constraints_, 'p': params}
         solver = casadi.nlpsol('solver', 'ipopt', nlp)
-        # initial values of desision variables
+        # initial values of decision variables
         ini = casadi.vertcat(Vnode_ri_ini, scaling_data.values_of_vars)
-        # limits of desision variables
+        # limits of decision variables
         lbx = casadi.vertcat(Vmin, scaling_data.kvar_min)
         ubx = casadi.vertcat(Vmax, scaling_data.kvar_max)
         # calculate
@@ -2109,10 +2109,60 @@ def get_calculate_from_result(model, expressions, scaling_data, x):
 # convenience functions for easier handling of estimation
 #
 
+Stepdata = namedtuple(
+    'Stepdata',
+    'model expressions scaling_data diff_data batch_constraints '
+    'Inode_inj positions')
+Stepdata.__doc__ = """Data for calling function 'estimate'.
+
+Parameters
+----------
+model: egrid.model.Model
+    data of electric grid
+expressions: dict
+    * 'Vnode_syms', casadi.SX, expressions of node Voltages
+    * 'Vslack_syms', casadi.SX, symbols of slack voltages,
+       Vslack_syms[:,0] real part, Vslack_syms[:,1] imaginary part
+    * 'position_syms', casadi.SX, symbols of tap positions
+    * 'gb_mn_tot', conductance g / susceptance b per branch terminal
+        * gb_mn_tot[:,0] g_mn, mutual conductance
+        * gb_mn_tot[:,1] b_mn, mutual susceptance
+        * gb_mn_tot[:,2] g_tot, self conductance + mutual conductance
+        * gb_mn_tot[:,3] b_tot, self susceptance + mutual susceptance
+    * 'Y_by_V', casadi.SX, expression for Y @ V
+    * 'get_scaling_and_injection_data', function
+      (int, casadi.DM) -> (tuple - Scalingdata, casadi.SX)
+      which is a function
+      (index_of_step, scaling_factors_of_previous_step)
+        -> (tuple - Scalingdata, injection_data)
+    * 'inj_to_node', casadi.SX, matrix, maps from
+      injections to power flow calculation nodes
+scaling_data: Scalingdata
+    * .kvars, casadi.SX, column vector, symbols for variables
+      of scaling factors
+    * .kconsts, casadi.SX, column vector, symbols for constants
+      of scaling factors
+    * .values_of_vars, casadi.DM, column vector, initial values
+      for kvars
+    * .values_of_consts, casadi.DM, column vector, values for consts
+diff_data: tuple
+    data for objective function to be minimized
+    table, four column vectors
+    * quantities, list of string
+    * id_of_batch, list of string
+    * value, casadi.DM, vector (shape n,1)
+    * expression, casadi.SX, vector (shape n,1)
+batch_constraints: casadi.SX (shape m,1)
+    constraints for keeping quantities calculated in previous step constant
+Inode_inj: casadi.SX (shape n,2)
+    * Inode_inj[:,0] - Ire, real part of current injected into node
+    * Inode_inj[:,1] - Iim, imaginary part of current injected into node
+positions: array_like
+    int, positions of taps, can be None"""
+
 def get_step_data(
-    model, expressions, step=0, k_prev=_DM_0r1c, 
-    quantities_of_objective='', quantities_of_constraints='', 
-    values_of_constraints=None, positions=None):
+    model, expressions, objectives='', step=0, k_prev=_DM_0r1c, 
+    constraints='', values_of_constraints=None, positions=None):
     """Prepares data for call of function estimate.
 
     Parameters
@@ -2137,19 +2187,19 @@ def get_step_data(
             -> (tuple - Scalingdata, injection_data)
         * 'inj_to_node', casadi.SX, matrix, maps from
           injections to power flow calculation nodes
-    step: int
-        index of estimation step
-    k_prev: casadi.DM
-        optional
-        result output of factors (only) calculated in previous step, if any
-    quantities_of_objective: str
+    objectives: str
         optional
         string of characters 'I'|'P'|'Q'|'V' or empty string ''
         addresses differences of calculated and given values to be minimized,
         the characters are symbols for given current magnitude, active power,
         reactive power or magnitude of voltage,
         case insensitive, other characters are ignored
-    quantities_of_constraints: str
+    step: int
+        index of estimation step
+    k_prev: casadi.DM
+        optional
+        result output of factors (only) calculated in previous step, if any
+    constraints: str
         optional
         string of characters 'I'|'P'|'Q'|'V' or empty string ''
         addresses quantities of batches (measured values or setpoints) 
@@ -2163,69 +2213,26 @@ def get_step_data(
         * [0] numpy.array<str>, quantities, 
         * [1] numpy.array<str>, id_of_batch
         * [2] numpy.array<float>, vector (shape n,1), value
-        values for constraints (refer to argument 'quantities_of_constraints')
+        values for constraints (refer to argument 'constraints')
     positions: array_like
         optional
         int, positions of taps
 
     Returns
     -------
-    model: egrid.model.Model
-        data of electric grid
-    expressions: dict
-        * 'Vnode_syms', casadi.SX, expressions of node Voltages
-        * 'Vslack_syms', casadi.SX, symbols of slack voltages,
-           Vslack_syms[:,0] real part, Vslack_syms[:,1] imaginary part
-        * 'position_syms', casadi.SX, symbols of tap positions
-        * 'gb_mn_tot', conductance g / susceptance b per branch terminal
-            * gb_mn_tot[:,0] g_mn, mutual conductance
-            * gb_mn_tot[:,1] b_mn, mutual susceptance
-            * gb_mn_tot[:,2] g_tot, self conductance + mutual conductance
-            * gb_mn_tot[:,3] b_tot, self susceptance + mutual susceptance
-        * 'Y_by_V', casadi.SX, expression for Y @ V
-        * 'get_scaling_and_injection_data', function
-          (int, casadi.DM) -> (tuple - Scalingdata, casadi.SX)
-          which is a function
-          (index_of_step, scaling_factors_of_previous_step)
-            -> (tuple - Scalingdata, injection_data)
-        * 'inj_to_node', casadi.SX, matrix, maps from
-          injections to power flow calculation nodes
-    scaling_data: Scalingdata
-        * .kvars, casadi.SX, column vector, symbols for variables
-          of scaling factors
-        * .kconsts, casadi.SX, column vector, symbols for constants
-          of scaling factors
-        * .values_of_vars, casadi.DM, column vector, initial values
-          for kvars
-        * .values_of_consts, casadi.DM, column vector, values for consts
-    diff_data: tuple
-        data for objective function to be minimized
-        table, four column vectors
-        * quantities, list of string
-        * id_of_batch, list of string
-        * value, casadi.DM, vector (shape n,1)
-        * expression, casadi.SX, vector (shape n,1)
-    batch_constraints: casadi.SX (shape m,1)
-        constraints for keeping quantities calculated in previous step constant
-    Vnode_ri_ini: array_like (shape 2n,1)
-        initial node voltages separated real and imaginary values
-    Inode_inj: casadi.SX (shape n,2)
-        * Inode_inj[:,0] - Ire, real part of current injected into node
-        * Inode_inj[:,1] - Iim, imaginary part of current injected into node
-    positions: array_like
-        int, positions of taps, can be None"""
+    Stepdata"""
     scaling_data, Iinj_data = (
         expressions['get_scaling_and_injection_data'](step, k_prev))
     Inode_inj = expressions['inj_to_node'] @ Iinj_data[:,:2]
     diff_data = get_diff_expressions(
-        model, expressions, Iinj_data, quantities_of_objective)
+        model, expressions, Iinj_data, objectives)
     expr_of_batches = get_diff_expressions(
-        model, expressions, Iinj_data, quantities_of_constraints)
+        model, expressions, Iinj_data, constraints)
     batch_constraints = (
         _SX_0r1c
         if values_of_constraints is None or len(expr_of_batches[0])==0 else
         get_batch_constraints(values_of_constraints, expr_of_batches))
-    return (
+    return Stepdata(
         model, expressions, scaling_data, diff_data, batch_constraints, 
         Inode_inj, positions)
 
