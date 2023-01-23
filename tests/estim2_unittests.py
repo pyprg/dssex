@@ -463,11 +463,11 @@ class Estimation(unittest.TestCase):
             grid.Defk('kp'),
             grid.Link(objid='consumer', part='p', id='kp'))
         expressions = estim.get_expressions(model, count_of_steps=1)
-        estimation_data = estim.get_step_data(
+        step_data = estim.get_step_data(
             model, expressions, objectives='P')
-        succ, x_V, x_scaling = estim.estimate(*estimation_data)
+        succ, x_V, x_scaling = estim.estimate(*step_data)
         self.assertTrue(succ, 'estimation succeeds')
-        V, k = estim.get_Vcx_kpq(estimation_data[2], x_V, x_scaling)
+        V, k = estim.get_Vcx_kpq(step_data.scaling_data, x_V, x_scaling)
         ed = pfc.calculate_electric_data2(model, V, k)
         self.assertAlmostEqual(
             # exclude slacks
@@ -495,11 +495,11 @@ class Estimation(unittest.TestCase):
             grid.Defk('kp'),
             grid.Link(objid='consumer', part='p', id='kp'))
         expressions = estim.get_expressions(model, count_of_steps=1)
-        estimation_data = estim.get_step_data(
+        step_data = estim.get_step_data(
             model, expressions, objectives='P')
-        succ, x_V, x_scaling = estim.estimate(*estimation_data)
+        succ, x_V, x_scaling = estim.estimate(*step_data)
         self.assertTrue(succ, 'estimation succeeds')
-        V, k = estim.get_Vcx_kpq(estimation_data[2], x_V, x_scaling)
+        V, k = estim.get_Vcx_kpq(step_data.scaling_data, x_V, x_scaling)
         ed = pfc.calculate_electric_data2(model, V, k)
         self.assertAlmostEqual(
             # exclude slacks
@@ -527,11 +527,11 @@ class Estimation(unittest.TestCase):
             grid.Defk('kq'),
             grid.Link(objid='consumer', part='q', id='kq'))
         expressions = estim.get_expressions(model, count_of_steps=1)
-        estimation_data = estim.get_step_data(
+        step_data = estim.get_step_data(
             model, expressions, objectives='Q')
-        succ, x_V, x_scaling = estim.estimate(*estimation_data)
+        succ, x_V, x_scaling = estim.estimate(*step_data)
         self.assertTrue(succ, 'estimation succeeds')
-        V, k = estim.get_Vcx_kpq(estimation_data[2], x_V, x_scaling)
+        V, k = estim.get_Vcx_kpq(step_data.scaling_data, x_V, x_scaling)
         ed = pfc.calculate_electric_data2(model, V, k)
         self.assertAlmostEqual(
             # exclude slacks
@@ -559,11 +559,11 @@ class Estimation(unittest.TestCase):
             grid.Defk('kq'),
             grid.Link(objid='consumer', part='q', id='kq'))
         expressions = estim.get_expressions(model, count_of_steps=1)
-        estimation_data = estim.get_step_data(
+        step_data = estim.get_step_data(
             model, expressions, objectives='Q')
-        succ, x_V, x_scaling = estim.estimate(*estimation_data)
+        succ, x_V, x_scaling = estim.estimate(*step_data)
         self.assertTrue(succ, 'estimation succeeds')
-        V, k = estim.get_Vcx_kpq(estimation_data[2], x_V, x_scaling)
+        V, k = estim.get_Vcx_kpq(step_data.scaling_data, x_V, x_scaling)
         ed = pfc.calculate_electric_data2(model, V, k)
         self.assertAlmostEqual(
             # exclude slacks
@@ -591,11 +591,11 @@ class Estimation(unittest.TestCase):
             grid.Defk('kpq'),
             grid.Link(objid='consumer', part='pq', id='kpq'))
         expressions = estim.get_expressions(model, count_of_steps=1)
-        estimation_data = estim.get_step_data(
+        step_data = estim.get_step_data(
             model, expressions, objectives='I')
-        succ, x_V, x_scaling = estim.estimate(*estimation_data)
+        succ, x_V, x_scaling = estim.estimate(*step_data)
         self.assertTrue(succ, 'estimation succeeds')
-        V, k = estim.get_Vcx_kpq(estimation_data[2], x_V, x_scaling)
+        V, k = estim.get_Vcx_kpq(step_data.scaling_data, x_V, x_scaling)
         ed = pfc.calculate_electric_data2(model, V, k)
         self.assertAlmostEqual(
             # exclude slacks
@@ -623,11 +623,11 @@ class Estimation(unittest.TestCase):
             grid.Defk('kpq'),
             grid.Link(objid='consumer', part='pq', id='kpq'))
         expressions = estim.get_expressions(model, count_of_steps=1)
-        estimation_data = estim.get_step_data(
+        step_data = estim.get_step_data(
             model, expressions, objectives='I')
-        succ, x_V, x_scaling = estim.estimate(*estimation_data)
+        succ, x_V, x_scaling = estim.estimate(*step_data)
         self.assertTrue(succ, 'estimation succeeds')
-        V, k = estim.get_Vcx_kpq(estimation_data[2], x_V, x_scaling)
+        V, k = estim.get_Vcx_kpq(step_data.scaling_data, x_V, x_scaling)
         ed = pfc.calculate_electric_data2(model, V, k)
         self.assertAlmostEqual(
             # exclude slacks
@@ -654,11 +654,11 @@ class Estimation(unittest.TestCase):
             grid.Defk('kq'),
             grid.Link(objid='consumer', part='q', id='kq'))
         expressions = estim.get_expressions(model, count_of_steps=1)
-        estimation_data = estim.get_step_data(
+        step_data = estim.get_step_data(
             model, expressions, objectives='V')
-        succ, x_V, x_scaling = estim.estimate(*estimation_data)
+        succ, x_V, x_scaling = estim.estimate(*step_data)
         self.assertTrue(succ, 'estimation succeeds')
-        V, k = estim.get_Vcx_kpq(estimation_data[2], x_V, x_scaling)
+        V, k = estim.get_Vcx_kpq(step_data.scaling_data, x_V, x_scaling)
         ed = pfc.calculate_electric_data2(model, V, k)
         self.assertAlmostEqual(
             # exclude slacks

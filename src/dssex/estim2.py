@@ -2114,8 +2114,8 @@ def get_calculate_from_result(model, expressions, scaling_data, x):
 
 Stepdata = namedtuple(
     'Stepdata',
-    'model expressions scaling_data diff_data batch_constraints '
-    'Inode_inj positions')
+    'model expressions scaling_data Inode_inj positions diff_data '
+    'constraints')
 Stepdata.__doc__ = """Data for calling function 'estimate'.
 
 Parameters
@@ -2148,6 +2148,11 @@ scaling_data: Scalingdata
     * .values_of_vars, casadi.DM, column vector, initial values
       for kvars
     * .values_of_consts, casadi.DM, column vector, values for consts
+Inode_inj: casadi.SX (shape n,2)
+    * Inode_inj[:,0] - Ire, real part of current injected into node
+    * Inode_inj[:,1] - Iim, imaginary part of current injected into node
+positions: array_like
+    int, positions of taps, can be None
 diff_data: tuple
     data for objective function to be minimized
     table, four column vectors
@@ -2155,13 +2160,8 @@ diff_data: tuple
     * id_of_batch, list of string
     * value, casadi.DM, vector (shape n,1)
     * expression, casadi.SX, vector (shape n,1)
-batch_constraints: casadi.SX (shape m,1)
-    constraints for keeping quantities calculated in previous step constant
-Inode_inj: casadi.SX (shape n,2)
-    * Inode_inj[:,0] - Ire, real part of current injected into node
-    * Inode_inj[:,1] - Iim, imaginary part of current injected into node
-positions: array_like
-    int, positions of taps, can be None"""
+constraints: casadi.SX (shape m,1)
+    constraints for keeping quantities calculated in previous step constant"""
 
 def get_step_data(
     model, expressions, objectives='', step=0, k_prev=_DM_0r1c, 
@@ -2240,8 +2240,8 @@ def get_step_data(
         if values_of_constraints is None or len(expr_of_batches[0])==0 else
         get_batch_constraints(values_of_constraints, expr_of_batches))
     return Stepdata(
-        model, expressions, scaling_data, diff_data, batch_constraints, 
-        Inode_inj, positions)
+        model, expressions, scaling_data, Inode_inj, positions, diff_data, 
+        batch_constraints)
 
 def get_step_data_fns(model, count_of_steps):
     """Creates two functions for generating step specific data,
@@ -2263,7 +2263,8 @@ def get_step_data_fns(model, count_of_steps):
             ()->(Stepdata), optional parameters:
               objectives: str
                   optional, default ''
-                  string of characters 'I'|'P'|'Q'|'V' or empty string ''
+                  string of characters 'I'|'P'|'Q'|'V' or empty string '',
+                  addresses quantities (of measurements/setpoints)
               step: int
                   optional, default 0
               k_prev: scaling factors calculated by previous step
@@ -2325,8 +2326,8 @@ def get_step_data_fns(model, count_of_steps):
     return make_step_data, next_step_data
 
 def estimate(
-    model, expressions, scaling_data, diff_data, batch_constraints, Inode_inj,
-    positions, Vnode_ri_ini=None):
+    model, expressions, scaling_data, Inode_inj, positions, diff_data, 
+    constraints, Vnode_ri_ini=None):
     """Optimizes.
 
     Parameters
@@ -2346,19 +2347,24 @@ def estimate(
         * .values_of_vars, casadi.DM, column vector, initial values
           for kvars
         * .values_of_consts, casadi.DM, column vector, values for consts
-    diff_data: tuple
-        data for objective function
-        table, four column vectors
-        * quantities, list of string
-        * id_of_batch, list of string
-        * value, casadi.DM, vector (shape n,1)
-        * expression, casadi.SX, vector (shape n,1)
     Inode_inj: casadi.SX (shape n,2)
         * Inode_inj[:,0] - Ire, real part of current injected into node
         * Inode_inj[:,1] - Iim, imaginary part of current injected into node
     positions: array_like
         optional
         int, positions of taps
+    constraints: casadi.SX
+        expressions for additional constraints, values to be kept zero
+        (default constraints are Inode==0)
+    diff_data: tuple
+        data for objective function
+        table, four column vectors
+        * quantities, list of strings
+        * id_of_batch, list of strings
+        * value, casadi.DM, vector (shape n,1)
+        * expression, casadi.SX, vector (shape n,1)
+    batch_constraints:
+        
     Vnode_ri_ini: array_like (shape 2n,1)
         initial node voltages separated real and imaginary values
 
@@ -2374,10 +2380,10 @@ def estimate(
         # power flow calculation for initial voltages
         succ, Vnode_ri_ini = calculate_power_flow2(
             model, expressions, scaling_data, Inode_inj, positions)
-        assert succ, 'calculation of power flow is failed'
+        assert succ, 'calculation of power flow failed'
     optimize = get_optimize(model, expressions, positions)
     succ, x = optimize(
-        Vnode_ri_ini, scaling_data, Inode_inj, diff_data, batch_constraints)
+        Vnode_ri_ini, scaling_data, Inode_inj, diff_data, constraints)
     # result processing
     count_of_Vvalues = 2 * model.shape_of_Y[0]
     return (
