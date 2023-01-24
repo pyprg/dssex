@@ -1129,7 +1129,10 @@ def calculate_power_flow2(
         * 'position_syms', casadi.SX, symbols of tap positions
         * 'Y_by_V', casadi.SX, expression for Y @ V
     scaling_data: Scalingdata
-        
+        * .kvars, casadi.SX, symbols of variable scaling factors
+        * .kconsts, casadi.SX symbols of constant scaling factors
+        * .values_of_vars
+        * .values_of_consts
     Inode: casadi.SX (shape n,2)
         values for slack need to be set to slack voltage
         * Inode[:,0] - Ire, real part of current injected into node
@@ -2164,7 +2167,7 @@ constraints: casadi.SX (shape m,1)
     constraints for keeping quantities calculated in previous step constant"""
 
 def get_step_data(
-    model, expressions, objectives='', step=0, k_prev=_DM_0r1c, 
+    model, expressions, step=0, k_prev=_DM_0r1c, objectives='', 
     constraints='', values_of_constraints=None, positions=None):
     """Prepares data for call of function estimate.
 
@@ -2190,6 +2193,11 @@ def get_step_data(
             -> (tuple - Scalingdata, injection_data)
         * 'inj_to_node', casadi.SX, matrix, maps from
           injections to power flow calculation nodes
+    step: int
+        index of estimation step
+    k_prev: casadi.DM
+        optional
+        result output of factors (only) calculated in previous step, if any
     objectives: str
         optional
         string of characters 'I'|'P'|'Q'|'V' or empty string ''
@@ -2197,11 +2205,6 @@ def get_step_data(
         the characters are symbols for given current magnitude, active power,
         reactive power or magnitude of voltage,
         case insensitive, other characters are ignored
-    step: int
-        index of estimation step
-    k_prev: casadi.DM
-        optional
-        result output of factors (only) calculated in previous step, if any
     constraints: str
         optional
         string of characters 'I'|'P'|'Q'|'V' or empty string ''
@@ -2240,8 +2243,8 @@ def get_step_data(
         if values_of_constraints is None or len(expr_of_batches[0])==0 else
         get_batch_constraints(values_of_constraints, expr_of_batches))
     return Stepdata(
-        model, expressions, scaling_data, Inode_inj, positions, diff_data, 
-        batch_constraints)
+        model, expressions, scaling_data, Inode_inj, positions, 
+        diff_data, batch_constraints)
 
 def get_step_data_fns(model, count_of_steps):
     """Creates two functions for generating step specific data,
@@ -2316,19 +2319,20 @@ def get_step_data_fns(model, count_of_steps):
         voltages_ri2 = ri_to_ri2(voltages_ri.toarray())
         kpq, k_var_const = get_k(step_data.scaling_data, k)
         batch_values = get_batch_values(
-            model, voltages_ri2, kpq, None, constraints)
+            model, voltages_ri2, kpq, step_data.positions, constraints)
         return make_step_data(
-            objectives=objectives, 
             step=step, 
             k_prev=k_var_const, 
+            objectives=objectives, 
             constraints=constraints,
-            values_of_constraints=batch_values)
+            values_of_constraints=batch_values,
+            positions=step_data.positions)
     return make_step_data, next_step_data
 
 def estimate(
     model, expressions, scaling_data, Inode_inj, positions, diff_data, 
     constraints, Vnode_ri_ini=None):
-    """Optimizes.
+    """Runs one optimization step. Calculates initial voltages if not provided.
 
     Parameters
     ----------
@@ -2353,9 +2357,6 @@ def estimate(
     positions: array_like
         optional
         int, positions of taps
-    constraints: casadi.SX
-        expressions for additional constraints, values to be kept zero
-        (default constraints are Inode==0)
     diff_data: tuple
         data for objective function
         table, four column vectors
@@ -2363,9 +2364,11 @@ def estimate(
         * id_of_batch, list of strings
         * value, casadi.DM, vector (shape n,1)
         * expression, casadi.SX, vector (shape n,1)
-    batch_constraints:
-        
+    constraints: casadi.SX
+        expressions for additional constraints, values to be kept zero
+        (default constraints are Inode==0)
     Vnode_ri_ini: array_like (shape 2n,1)
+        optional, default is None
         initial node voltages separated real and imaginary values
 
     Returns
@@ -2391,7 +2394,70 @@ def estimate(
         if count_of_Vvalues < x.size1() else
         (succ, x, _DM_0r1c))
 
-def get_Vcx_kpq(scaling_data, x_V, x_scaling):
+def calculate(
+    model, step_params=(), positions=None, vminsqr=_VMINSQR):
+    """Estimates grid status stepwise.
+
+    Parameters
+    ----------
+    model: egrid.model.Model
+
+    step_params: array_like
+        dict {'objectives': objectives, 'constraints': constraints}
+            if empty the function calculates power flow,
+            each dict triggers an estimation step
+        * objectives, ''|'P'|'Q'|'I'|'V' (string or tuple of characters)
+          'P' - objective function is created with terms for active power
+          'Q' - objective function is created with terms for reactive power
+          'I' - objective function is created with terms for electric current
+          'V' - objective function is created with terms for voltage
+        * constraints, ''|'P'|'Q'|'I'|'V' (string or tuple of characters)
+          'P' - adds constraints keeping the initial values
+                of active powers at the location of given values
+          'Q' - adds constraints keeping the initial values
+                of reactive powers at the location of given values
+          'I' - adds constraints keeping the initial values
+                of electric current at the location of given values
+          'V' - adds constraints keeping the initial values
+                of voltages at the location of given values
+    positions: array_like
+        optional
+        int, positions of taps
+    vminsqr: float (default _VMINSQR)
+        minimum
+
+    Yields
+    ------
+    tuple
+        * int, index of estimation step,
+          (initial power flow calculation result is -1, first estimation is 0)
+        * bool, success?
+        * voltages_cx, casadi.DM (shape 2n,1)
+            calculated node voltages, real voltages then imaginary voltages
+        * k, casadi.DM (shape m,1)
+            scaling factors for injections
+        * scaling_data, Scalingdata
+            scaling data of step"""
+    make_step_data, next_step_data = get_step_data_fns(
+        model, len(step_params))
+    step_data = make_step_data(step=0, positions=positions)
+    scaling_data = step_data.scaling_data
+    # power flow calculation for initial voltages
+    succ, voltages_ri = calculate_power_flow2(
+        model, step_data.expressions, scaling_data, 
+        step_data.Inode_inj, positions)
+    k = scaling_data.values_of_vars
+    yield -1, succ, voltages_ri, k, step_data.scaling_data
+    for step, kv in enumerate(step_params):
+        objectives = kv.get('objectives', '')
+        constraints = kv.get('constraints', '')
+        step_data = next_step_data(
+            step, step_data, voltages_ri, k, objectives=objectives, 
+            constraints=constraints)
+        succ, voltages_ri, k = estimate(*step_data, voltages_ri)
+        yield step, succ, voltages_ri, k, step_data.scaling_data
+
+def get_Vcx_kpq(scaling_data, voltages_ri, k):
     """Helper. Processes results of estimation.
 
     Parameters
@@ -2408,17 +2474,64 @@ def get_Vcx_kpq(scaling_data, x_V, x_scaling):
         * .var_const_to_kq
             int, converts var_const to kq, one reactive power scaling factor
             for each injection (var_const[var_const_to_kq])
-    x_V : casadi.DM
+    voltages_ri : casadi.DM (shape 2n,1)
         real part of node voltages, imaginary part of node voltages
-    x_scaling : casasdi.DM
+    k : casasdi.DM
         scaling factors
 
     Returns
     -------
     V : numpy.array (shape n,1), complex
         node voltages
-    k : numpy.array (shape m,2), float
+    kpq: numpy.array (shape m,2), float
         scaling factors per injection"""
-    k, _ = get_k(scaling_data, x_scaling)
-    V = ri_to_complex(x_V)
-    return V, k
+    kpq, _ = get_k(scaling_data, k)
+    V = ri_to_complex(voltages_ri)
+    return V, kpq
+
+def calculate2(
+    model, step_params=(), positions=None, vminsqr=_VMINSQR):
+    """Estimates grid status stepwise.
+
+    Parameters
+    ----------
+    model: egrid.model.Model
+
+    step_params: array_like
+        dict {'objectives': objectives, 'constraints': constraints}
+            if empty the function calculates power flow,
+            each dict triggers an estimation step
+        * objectives, ''|'P'|'Q'|'I'|'V' (string or tuple of characters)
+          'P' - objective function is created with terms for active power
+          'Q' - objective function is created with terms for reactive power
+          'I' - objective function is created with terms for electric current
+          'V' - objective function is created with terms for voltage
+        * constraints, ''|'P'|'Q'|'I'|'V' (string or tuple of characters)
+          'P' - adds constraints keeping the initial values
+                of active powers at the location of given values
+          'Q' - adds constraints keeping the initial values
+                of reactive powers at the location of given values
+          'I' - adds constraints keeping the initial values
+                of electric current at the location of given values
+          'V' - adds constraints keeping the initial values
+                of voltages at the location of given values
+    positions: array_like
+        optional
+        int, positions of taps
+    vminsqr: float (default _VMINSQR)
+        minimum
+
+    Yields
+    ------
+    tuple
+        * int, index of estimation step,
+          (initial power flow calculation result is -1, first estimation is 0)
+        * bool, success?
+        * voltages_cx : numpy.array, complex (shape n,1)
+            calculated complex node voltages
+        * pq_factors : numpy.array, float (shape m,2)
+            scaling factors for injections"""
+    return (
+        (step, succ, *get_Vcx_kpq(scaling_data, v_ri, k))
+        for step, succ, v_ri, k, scaling_data in calculate(
+            model, step_params, positions, vminsqr))

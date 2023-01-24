@@ -19,9 +19,6 @@ Created on Sun Aug  8 08:36:10 2021
 
 @author: pyprg
 """
-import os, sys
-_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-sys.path.insert(0, _path)
 import dssex.present as pr
 import dssex.pfcnum as pfc
 from functools import partial
@@ -128,7 +125,8 @@ model_entities = [
     ]
 
 
-from dssex.estim2 import (estimate, get_Vcx_kpq, get_step_data_fns)
+from dssex.estim2 import (estimate, get_Vcx_kpq, get_step_data_fns,
+    get_expressions, calculate_power_flow2, calculate, calculate2)
 
 
 count_of_steps = 3
@@ -159,26 +157,27 @@ succ_1, voltages_ri_1, k_1 = estimate(*step_data_1, Vnode_ri_ini=voltages_ri)
 
 print('\n',(">> SUCCESS <<" if succ else 'F A I L E D'),'\n')
 if succ:
-    voltages_cx_1, kpq_1 = get_Vcx_kpq(step_data.scaling_data, voltages_ri, k)
+    voltages_cx_1, kpq_1 = get_Vcx_kpq(
+        step_data_1.scaling_data, voltages_ri, k)
     print(f'\nvoltages_cx:\n{voltages_cx}')
     print(f'\nkpq:\n{kpq}')
     result_1 = pfc.calculate_electric_data2(model, voltages_cx_1, kpq_1)
     result_branch_1 = result.branch()
     result_injection_1 = result.injection()
 #%% scale load in order to meet values for active power P
-# model_PQ_measurements = [
-#      # measured P/Q pair
-#      PValue(id_of_batch='pq_line_0', P=30.),
-#      QValue(id_of_batch='pq_line_0', Q=8.),
-#      # assign pq_line_0 to terminal
-#      Output(id_of_batch='pq_line_0', id_of_node='n_0', id_of_device='line_0')]
-# model_scale_p = [
-#      # define a scaling factor
-#      Defk(step=0, id='kp'),
-#      # link the factor to an injection
-#      Link(step=0, objid='consumer_0', part='p', id='kp')]
-# model01 = make_model(model_entities, model_PQ_measurements, model_scale_p)
-# #%%
+
+step_params = [
+    {'objectives': 'P'},
+    {'objectives': 'P'}
+    ]
+
+for step, succ, voltages_cx, kpq in calculate2(model, step_params):
+    print(
+        f'\nstep: {step} {">> SUCCESS <<" if succ else "-F-A-I-L-E-D-"}\n'
+        f'voltages_cx:\n{voltages_cx}\n'
+        f'kpq:\n{kpq}\n')
+
+#%%
 # results01 = [*calculate(model01, parameters_of_steps=[{'objectives': 'P'}])]
 # # print the result
 # pr.print_estim_results(results01)
@@ -197,7 +196,7 @@ if succ:
 # # print the result
 # pr.print_estim_results(results02)
 # pr.print_measurements(results02)
-# #%% scale load with active power P and reactive power Q
+#%% scale load with active power P and reactive power Q
 # model03 = make_model(
 #     model_entities,
 #     model_PQ_measurements,
@@ -207,7 +206,7 @@ if succ:
 # # print the result
 # pr.print_estim_results(results03)
 # pr.print_measurements(results03)
-# #%% PQ-generator
+#%% PQ-generator
 # # node: 0               1               2
 # #
 # #       |     line_0    |     line_1    |

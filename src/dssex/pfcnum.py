@@ -28,9 +28,9 @@ from operator import itemgetter
 from scipy.sparse import \
     csc_array, coo_matrix, bmat, diags, csc_matrix, vstack#, hstack
 from scipy.sparse.linalg import splu
-from src.dssex.injections import get_polynomial_coefficients
-from src.dssex.util import get_tap_factors, eval_residual_current
-from src.dssex.util import get_results as util_get_results
+from dssex.injections import get_polynomial_coefficients
+from dssex.util import \
+    get_tap_factors, eval_residual_current, get_results as util_get_results
 
 # square of voltage magnitude, minimum value for load curve, 
 #   if value is below _VMINSQR the load curves for P and Q converge

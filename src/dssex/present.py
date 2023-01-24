@@ -47,10 +47,10 @@ def _create_vnode_value_frame(Vsymbols, vnode_vals):
     -------
     pandas.DataFrame (id_of_node)
         * .Vabs, float"""
-    return pd.DataFrame(
-        {'id_of_node': Vsymbols.id_of_node,
-         'Vabs': vnode_vals.reshape(-1)},
-        index=Vsymbols.index.rename('index_of_node'))
+    # return pd.DataFrame(
+    #     {'id_of_node': Vsymbols.id_of_node,
+    #      'Vabs': vnode_vals.reshape(-1)},
+    #     index=Vsymbols.index.rename('index_of_node'))
 
 def _add_VIPQ(df, values):
     Isqr = np.power(values[:,1:3], 2)
@@ -117,10 +117,10 @@ def _create_injection_value_frame(injection_data, injection_vals):
     pandas.DataFrame (index of injection)
         * .id_of_injection, str, unique identifier
         [all input fields]"""
-    injection_values = _add_VIPQkpkq(
-        injection_data[['id']].copy(), injection_vals)
-    injection_values.index.set_names('index_of_injection', inplace=True)
-    return injection_values
+    # injection_values = _add_VIPQkpkq(
+    #     injection_data[['id']].copy(), injection_vals)
+    # injection_values.index.set_names('index_of_injection', inplace=True)
+    # return injection_values
 
 def get_branch_values(terminal_values):
     """Arranges branch terminal data per branch. Calculates active and
@@ -141,7 +141,7 @@ def get_branch_values(terminal_values):
     pandas.DataFrame (index of branch)
         * .id_of_branch, str, unique identifier
         * .Vabs_A, float, voltage magnitude at node A
-        * .Vabs_B, float, voltage magnitude at node A
+        * .Vabs_B, float, voltage magnitude at node B
         * .Iabs_A, float, magnitude of current flow into terminal A
         * .Iabs_B, float, magnitude of current flow into terminal B
         * .P_A, float, active power flow into terminal A

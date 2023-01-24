@@ -13,7 +13,7 @@ from pfcsymb import calculate_power_flow as cpfsymb
 from pfcsymb import eval_residual_current as eval_symb
 from pfcnum import calculate_power_flow as cpfnum
 from pfcnum import get_injected_power_fn
-from src.dssex.util import get_results, get_residual_current_fn
+from dssex.util import get_results, get_residual_current_fn
 
 # Always use a decimal point for floats. Now and then processing ints
 # fails with casadi/pandas/numpy.

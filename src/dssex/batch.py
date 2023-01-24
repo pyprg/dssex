@@ -22,7 +22,7 @@ import numpy as np
 from functools import partial
 from collections import defaultdict
 from pandas import concat
-from src.dssex.injections import calculate_cubic_coefficients
+from dssex.injections import calculate_cubic_coefficients
 # square of voltage magnitude, minimum value for load curve,
 #   if value is below _VMINSQR the load curves for P and Q converge
 #   towards a linear load curve which is 0 when V=0; P(V=0)=0, Q(V=0)=0
