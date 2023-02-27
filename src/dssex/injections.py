@@ -29,19 +29,19 @@ def get_coefficients_matrix(x1_sqr):
     function interpolation
     ::
         f(x) = Ax³ + Bx² + Cx; f(0)=0
-    The returned matrix M is used for the calculation of the coefficents 
+    The returned matrix M is used for the calculation of the coefficents
     A, B and C.
     ::
         M x coefficients = V
         with V = [y, dy/dx_0, dy/dx_1]
              dy/dx_0 derivative at x=0
              dy/dx_1 derivative at x=x1
-    
+
     Parameters
     ----------
     x1_sqr: float
         square of x1 (== x1 * x1)
-    
+
     Returns
     -------
     numpy.array (shape 3,3)"""
@@ -53,15 +53,15 @@ def get_coefficients_matrix(x1_sqr):
         [3.*x1_sqr,  2.*x1, 1.]]) # df(x1)/dx
 
 def make_calculate_coefficients(x1_sqr):
-    """Creates a factory function for the calculation of coefficients for 
+    """Creates a factory function for the calculation of coefficients for
     cubic polynomials.
     (numpy.array<float> shape r,c) -> (numpy.array<float> (shape r,3,c)).
     The returned function creates an array of shape (3,1) for each scalar.
-    
+
     Parameters
     ----------
     x1_sqr: float
-    
+
     Returns
     -------
     function
@@ -73,22 +73,22 @@ def make_calculate_coefficients(x1_sqr):
         """Calculates three coefficients for a cubic polynomial.
         ::
             p(x) = Ax³ + Bx² + Cx
-        
+
         The following parameters of the function are given.
         ::
             f(x) = x**exp function used for calculation of value and
-                            derivative in x1 (x1 is upper limit of the 
+                            derivative in x1 (x1 is upper limit of the
                             interpolation interval [0...x1])
             p(x1) = y1
             dp(x1)/dx = exp * x1**(exp-1)
             p(0) = 0
             dp(0)/dx = 1
-        
+
         Parameters
         ----------
         exp: float
             exponent for function x**exp
-        
+
         Returns
         -------
         numpy.array (3,1)"""
@@ -106,24 +106,24 @@ def calculate_cubic_coefficients(x1_sqr, exp):
     """Calculates three coefficients for a cubic polynomial.
     ::
         p(x) = Ax³ + Bx² + Cx
-    
+
     The following parameters of the function are given.
     ::
         f(x) = x**exp function used for calculation of value and
-                        derivative in x1 (x1 is upper limit of the 
+                        derivative in x1 (x1 is upper limit of the
                         interpolation interval [0...x1])
         p(x1) = y1
         dp(x1)/dx = exp * x1**(exp-1)
         p(0) = 0
         dp(0)/dx = 1
-    
+
     Parameters
     ----------
     x1_sqr: float
-    
+
     exp: float
         exponent for function x**exp
-    
+
     Returns
     -------
     numpy.array (3,1)"""
@@ -131,14 +131,14 @@ def calculate_cubic_coefficients(x1_sqr, exp):
 
 def calc_dx(x, exp):
     """Calculates the derivative of exponential power function at x.
-    
+
     Parameters
     ----------
     x: float
         magnitude
     exp: float
         exponent
-    
+
     Returns
     -------
     float"""
@@ -146,7 +146,7 @@ def calc_dx(x, exp):
 
 def get_polynomial_coefficients(x1_sqr, exp, dydx_0=1.):
     """Calculates coefficients of polynomials for interpolation.
-    
+
     Parameters
     ----------
     x1_sqr: float
@@ -155,7 +155,7 @@ def get_polynomial_coefficients(x1_sqr, exp, dydx_0=1.):
         float, exponents of function 'load over voltage'
     dydx_0: float
         df(0) / dx
-    
+
     Returns
     -------
     numpy.array
@@ -170,7 +170,7 @@ def get_polynomial_coefficients(x1_sqr, exp, dydx_0=1.):
 
 def polynome(x1, exp, x):
     """Function for checking the polynome.
-    
+
     Parameters
     ----------
     x1: float
@@ -188,11 +188,11 @@ def interpolate(x1, exp, x):
     """Function for checking the interpolation concept.
     the function x**exp shall be interpolated near x~0 that y->0 for x=0.
     The function is interpolated with a polynome of third order.
-    
+
     Parameters
     ----------
     x1: float
-        upper limit of interpolation, above the limit y is according to 
+        upper limit of interpolation, above the limit y is according to
         the original function, below is interpolated
     exp: float
         exponent of original function
@@ -203,7 +203,7 @@ def interpolate(x1, exp, x):
 def add_interpol_coeff_to_injections(injections, vminsqr):
     """Adds polynomial coefficients to injections for linear interpolation
     of power around |V|² ~ 0.
-    
+
     Parameters
     ----------
     injections: pandas.DataFrame
@@ -211,7 +211,7 @@ def add_interpol_coeff_to_injections(injections, vminsqr):
         * .Exp_v_q
     vminsqr: float
         upper limit of interpolation
-        
+
     Returns
     -------
     pandas.DataFrame

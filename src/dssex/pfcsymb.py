@@ -9,11 +9,11 @@ import numpy as np
 from collections import namedtuple
 from dssex.injections import get_polynomial_coefficients
 
-# square of voltage magnitude, minimum value for load curve, 
+# square of voltage magnitude, minimum value for load curve,
 #   if value is below _VMINSQR the load curves for P and Q converge
 #   towards a linear load curve which is 0 when V=0; P(V=0)=0, Q(V=0)=0
 _VMINSQR = 0.8**2
-# value of zero check, used for load curve calculation    
+# value of zero check, used for load curve calculation
 _EPSILON = 1e-12
 
 Vvar = namedtuple(
@@ -27,7 +27,7 @@ Vslackvar = namedtuple(
 def get_tap_factors(branchtaps, pos):
     """Creates vars for tap positions, expressions for longitudinal and
     transversal factors of branches.
-    
+
     Parameters
     ----------
     branchtaps: pandas.DataFrame (id of taps)
@@ -35,7 +35,7 @@ def get_tap_factors(branchtaps, pos):
         * .positionneutral, int
     pos: casadi.SX
         vector of positions for terms with tap
-    
+
     Returns
     -------
     tuple
@@ -53,18 +53,18 @@ def create_gb(terms, count_of_nodes, flo, ftr):
     """Generates a conductance-susceptance matrix of branches equivalent to
     branch-admittance matrix. M[n,n] of slack nodes is set to 1, other
     values of slack nodes are zero.
-    
+
     Parameters
     ----------
     terms: pandas.DataFrame
-    
+
     count_of_nodes: int
         number of power flow calculation nodes
     flo: casadi.SX, vector
         longitudinal taps factor, sparse for terminals with taps
     ftr: casadi.SX, vector
         transversal taps factor, sparse for terminals with taps
-    
+
     Returns
     -------
     tuple
@@ -102,16 +102,16 @@ def create_gb(terms, count_of_nodes, flo, ftr):
 def create_gb_matrix(model, pos):
     """Generates a conductance-susceptance matrix of branches equivalent to
     branch-admittance matrix. M[n,n] of slack nodes is set to 1, other
-    values of slack nodes are zero. Hence, the returned 
+    values of slack nodes are zero. Hence, the returned
     matrix is unsymmetrical.
-    
+
     Parameters
     ----------
     model: egrid.model.Model
-    
+
     pos: casadi.SX
         vector of position variables, one variable for each terminal with taps
-    
+
     Returns
     -------
     casadi.SX"""
@@ -123,10 +123,10 @@ def create_gb_matrix(model, pos):
     count_of_slacks = model.count_of_slacks
     diag = casadi.Sparsity.diag(count_of_slacks, count_of_nodes)
     G_ = casadi.vertcat(
-        diag, 
+        diag,
         G[count_of_slacks:, :])
     B_ = casadi.vertcat(
-        casadi.SX(count_of_slacks, count_of_nodes), 
+        casadi.SX(count_of_slacks, count_of_nodes),
         B[count_of_slacks:, :])
     return casadi.blockcat([[G_, -B_], [B_,  G_]])
 
@@ -134,14 +134,14 @@ def create_branch_gb_matrix2(model, pos):
     """Generates a conductance-susceptance matrix of branches equivalent to
     branch-admittance matrix. Removes slack rows and columns
     The returned matrix is symmetric. Additionally returns columns of slacks.
-    
+
     Parameters
     ----------
     model: egrid.model.Model
-    
+
     pos: casadi.SX
         vector of position variables, one variable for each terminal with taps
-    
+
     Returns
     -------
     tuple
@@ -156,18 +156,18 @@ def create_branch_gb_matrix2(model, pos):
     G_ = G[count_of_slacks:, count_of_slacks:]
     B_ = B[count_of_slacks:, count_of_slacks:]
     return  (
-        casadi.blockcat([[G_, -B_], [B_,  G_]]), 
+        casadi.blockcat([[G_, -B_], [B_,  G_]]),
         G[count_of_slacks:, :count_of_slacks],
         B[count_of_slacks:, :count_of_slacks])
 
 def create_Vvars(count_of_nodes):
     """Creates casadi.SX for voltages.
-    
+
     Parameters
     ----------
     count_of_nodes: int
         number of pfc-nodes
-    
+
     Returns
     -------
     Vvar
@@ -187,12 +187,12 @@ def create_Vvars(count_of_nodes):
 
 def create_Vslackvars(count_of_slacks):
     """Creates casadi.SX for voltages.
-    
+
     Parameters
     ----------
     count_of_slacks: int
         number of slack busbars
-    
+
     Returns
     -------
     Vvar
@@ -267,7 +267,7 @@ def get_injected_squared_current(V, Vinj_sqr, Mnodeinj, P10, Q10):
         voltage exponents of reactive power per injection
     Q10: numpy.array, float
         active power per injection
-        
+
     Returns
     -------
     tuple
@@ -291,7 +291,7 @@ def get_injected_power_per_node(
         |   | = |                                            |
         | Q |   | (Vre ** 2 + Vim ** 2) ** (Expvq / 2) * Q10 |
         +- -+   +-                                          -+
-        
+
     Parameters
     ----------
     Vinj_sqr: casadi.SX
@@ -306,7 +306,7 @@ def get_injected_power_per_node(
         voltage exponents of reactive power per injection
     Q10: numpy.array, float
         active power per injection
-        
+
     Returns
     -------
     tuple
@@ -379,7 +379,7 @@ def get_injected_original_current(
         voltage exponents of reactive power per injection
     Q10: numpy.array, float
         active power per injection
-        
+
     Returns
     -------
     tuple
@@ -395,7 +395,7 @@ def get_injected_interpolated_current(
         V, Vinj_sqr, Mnodeinj, exp_v_p, P10, exp_v_q, Q10):
     """Interpolates injected current for V < _VMINSQR. Calculates values
     per node.
-    
+
     Parameters
     ----------
     V: Vvar
@@ -412,7 +412,7 @@ def get_injected_interpolated_current(
         voltage exponents of reactive power per injection
     Q10: numpy.array, float
         active power per injection
-        
+
     Returns
     -------
     tuple
@@ -424,7 +424,7 @@ def get_injected_interpolated_current(
     pc = get_polynomial_coefficients(_VMINSQR, exp_v_p)
     qc = get_polynomial_coefficients(_VMINSQR, exp_v_q)
     fpinj = (pc[:,0]*Vinj_cub + pc[:,1]*Vinj_sqr + pc[:,2]*Vinj)
-    fqinj = (qc[:,0]*Vinj_cub + qc[:,1]*Vinj_sqr + qc[:,2]*Vinj) 
+    fqinj = (qc[:,0]*Vinj_cub + qc[:,1]*Vinj_sqr + qc[:,2]*Vinj)
     # per node
     pnodeexpr = Mnodeinj @ (fpinj * P10)
     qnodeexpr = Mnodeinj @ (fqinj * Q10)
@@ -438,11 +438,11 @@ def get_injected_interpolated_current(
 def get_injected_current(
         matrix_nodeinj, V, injections, pq_factors=None, loadcurve='original'):
     """Creates a vector of injected node current.
-    
+
     Parameters
     ----------
     Mnodeinj: matrix
-        
+
     V: Vvar
         * .re, casadi.SX, vector, real part of node voltage
         * .im, casadi.SX, vector, imaginary part of node voltage
@@ -473,7 +473,7 @@ def get_injected_current(
         Q10 *= pq_factors[:,1]
     control_character = loadcurve[:1].lower() # first character only
     if control_character == 's':
-        return get_injected_squared_current(V, Vinj_sqr, Mnodeinj, P10, Q10)         
+        return get_injected_squared_current(V, Vinj_sqr, Mnodeinj, P10, Q10)
     exp_v_p = injections.Exp_v_p.copy()
     exp_v_q = injections.Exp_v_q.copy()
     Ire, Iim = get_injected_original_current(
@@ -486,20 +486,20 @@ def get_injected_current(
     interpolate = V.sqr < _VMINSQR
     Inode_re = casadi.if_else(interpolate, Ire_ip, Ire)
     Inode_im = casadi.if_else(interpolate, Iim_ip, Iim)
-    return Inode_re, Inode_im    
+    return Inode_re, Inode_im
 
 def build_injected_current_fn(model, pq_factors=None, loadcurve='original'):
     """Creates a function for calculating the injected current per node.
-    
+
     Parameters
     ----------
     model: egrid.model.Model
-    
+
     pq_factors: numpy.array, float, (nx2)
         factors for active and reactive power of loads
     loadcurve: 'original' | 'interpolated' | 'square'
         default is 'original', just first letter is used
-    
+
     Returns
     -------
     casadi.Function
@@ -516,11 +516,11 @@ def build_injected_current_fn(model, pq_factors=None, loadcurve='original'):
 
 def create_vars(model):
     """Creates variables for node voltages, slack voltages and tappositions
-    
+
     Parameters
     ----------
     model: egrid.model.Model
-    
+
     Returns
     -------
     tuple
@@ -536,16 +536,16 @@ def create_vars(model):
 def build_residual_fn(model, pq_factors=None, loadcurve='original'):
     """Creates function for calculating the residual node current. The
     returned function can be used for root-finding.
-    
+
     Parameters
     ----------
     model: egrid.model.Model
-    
+
     pq_factors: numpy.array, float, (nx2)
         factors for active and reactive power of loads
     loadcurve: 'original' | 'interpolated' | 'square'
         default is 'original', just first letter is used
-    
+
     Returns
     -------
     casadi.Function"""
@@ -555,7 +555,7 @@ def build_residual_fn(model, pq_factors=None, loadcurve='original'):
     # injected current
     injections = model.injections
     Inode_re, Inode_im = get_injected_current(
-        model.mnodeinj, V, injections[~injections.is_slack], 
+        model.mnodeinj, V, injections[~injections.is_slack],
         pq_factors, loadcurve)
     # modify Inode of slacks
     index_of_slack = model.slacks.index_of_node
@@ -570,7 +570,7 @@ def build_residual_fn(model, pq_factors=None, loadcurve='original'):
 
 def build_objective(model, gb_matrix, V, count_of_slacks, pq_factors=None):
     """Creates expression for solving the power flow problem by minimization.
-    
+
     Parameters
     ----------
     model: egrid.model.Model
@@ -583,7 +583,7 @@ def build_objective(model, gb_matrix, V, count_of_slacks, pq_factors=None):
         number of slack-nodes
     pq_factors: numpy.array, float, (nx2)
         factors for active and reactive power of loads
-    
+
     Returns
     -------
     casadi.SX, expression to be minimized"""
@@ -595,10 +595,10 @@ def build_objective(model, gb_matrix, V, count_of_slacks, pq_factors=None):
     I = casadi.vertcat(Inode_re, Inode_im)[count_of_slacks:, :]
     Ires = ((gb_matrix[count_of_slacks:, :] @ V.reim) + I)
     return casadi.norm_2(Ires)
-    
+
 def find_root(fn_residual, tappositions, Vslack, init):
     """Finds root of fn_residual.
-    
+
     Parameters
     ----------
     fn_residual: casadi.Function
@@ -609,12 +609,12 @@ def find_root(fn_residual, tappositions, Vslack, init):
         values for slack voltages (parameter), n: number of slacks
     init: array_like, shape (n, 1) of float
         vector of initial values for decision variables
-    
+
     Returns
     -------
     tuple
         * success?, bool
-        * casadi.DM, voltage vector of floats, shape (2n,1), 
+        * casadi.DM, voltage vector of floats, shape (2n,1),
           n real parts followed by n imaginary parts"""
     values_of_params = casadi.horzcat(
         np.real(Vslack), np.imag(Vslack), tappositions)
@@ -624,13 +624,13 @@ def find_root(fn_residual, tappositions, Vslack, init):
         return True, rf(init, values_of_params)
     except:
         return False, casadi.DM(init)
-    
+
 def calculate_power_flow(
-        precision, max_iter, model, 
-        Vslack=None, tappositions=None, Vinit=None, 
+        precision, max_iter, model,
+        Vslack=None, tappositions=None, Vinit=None,
         pq_factors=None, loadcurve='original'):
     """Power flow calculating function.
-    
+
     Parameters
     ----------
     precision: float (not used)
@@ -638,19 +638,19 @@ def calculate_power_flow(
     max_iter: int (not used)
         limit of iteration count
     model: egrid.model.Model
-    
+
     Vslack: array_like, complex
         vector of voltages at slacks, default model.slacks.V
     tappositions: array_like, int
         vector of tap positions, default model.branchtaps.position
     Vinit: array_like, float
-        start value of iteration, node voltage vector, 
+        start value of iteration, node voltage vector,
         real parts then imaginary parts
     pq_factors: numpy.array, float, (nx2)
         factors for active and reactive power of loads
     loadcurve: 'original' | 'interpolated' | 'square'
         default is 'original', just first letter is used
-    
+
     Returns
     -------
     tuple
@@ -663,29 +663,29 @@ def calculate_power_flow(
     success, voltages = find_root(
         fn_Iresidual, tappositions_, Vslack_, Vinit)
     return success, np.hstack(np.vsplit(voltages, 2)).view(dtype=np.complex128)
-    
+
 def eval_residual_current(
-        model, pq_factors=None, loadcurve=None, 
+        model, pq_factors=None, loadcurve=None,
         tappositions=None, Vslack=None, V=None):
     """Function for evaluating a power flow solution. Calculates
-    the complex residual node current. 
+    the complex residual node current.
     Not intended to be used inside a solver loop.
-    
+
     Parameters
     ----------
     model: egrid.model.Model
-    
+
     pq_factors: numpy.array
         float
     loadcurve: 'original' | 'interpolated' | 'square'
-    
+
     tappositions: numyp.array
         int
     Vslack: array_like
         complex
     V: numpy.array
         complex
-    
+
     Returns
     -------
     numpy.array

@@ -23,9 +23,8 @@ import context # adds parent folder of dssex to search path
 import numpy as np
 import pandas as pd
 import egrid.builder as grid
-import dssex.util as util
 import dssex.pfcnum as pfc
-import dssex.estim2 as estim
+import dssex.estim as estim
 import dssex.batch as batch
 from functools import partial
 from numpy.linalg import norm
@@ -105,12 +104,12 @@ class Batch(unittest.TestCase):
             model.injections,
             pq_factors=pq_factors,
             loadcurve='interpolated')
-        Inode = util.eval_residual_current(
+        Inode = pfc.eval_residual_current(
             model, get_injected_power, Vnode=vnode_cx)
         # without slack node, slack is at index 0
         max_dev = norm(Inode[model.count_of_slacks:], np.inf)
         self.assertLess(max_dev, 3e-8, 'residual node current is 0')
-        ed = pfc.calculate_electric_data2(model, vnode_cx, pq_factors)
+        ed = pfc.calculate_electric_data(model, vnode_cx, pq_factors)
         # act
         batch_values = batch.get_batch_values(
             model, vnode_ri2, pq_factors, None, 'IPQV')

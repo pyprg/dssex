@@ -68,7 +68,7 @@ values or setpoints as accurately as possible. **dssex** creates a
 'non-linear program' consisting of constraint formulations and an
 objective function.
 
-The objective funtion is the sum of terms having the structure
+The objective function is the sum of terms having the structure
 (measured_value_or_setpoint - calculated_value)\*\*2. The search is
 an iterative process requiring a start value. A part of the constraints
 are the power flow relations. The sum of current flowing through branches
@@ -81,19 +81,19 @@ into a node equals the injected current&nbsp;- except for slacks.
 Scaling factors and node voltages are the results of the optimization process.
 Variables for voltages and factors are named decision variables. The injected
 node current I is expressed in terms of the node voltages and scaling factors.
-The objective function is also expressed in decision
-variables and attributes of the devices and the topology. P_caluculated
-in the term of an active power measurement at the terminals of a branch
-(P_measured - P_calculated)\*\*2, for example, is expressed in decision
-variables of the node voltages and admittance values of the branch.
+The objective function is also expressed in decision variables and attributes 
+of the devices and the topology. P_calculated in the term of an active power 
+measurement at the terminals of a branch (P_measured - P_calculated)\*\*2, 
+for example, is expressed in decision variables of the node voltages and 
+admittance values of the branch.
 
 Initial node voltages for the optimization process are currently calculated
 by a rootfinding function created and solved by CasADi (using IPOPT).
 
 The complete estimation process can consist of several minimization steps.
-Each step has a specific objective funtion. E.g. after
-opimizing towards P/Q measurements the next step might optimize to meet the
-voltage measurements/setpoints. P and Q values of the first step can be
+Each step has a specific objective funtion. E.g. after opimizing towards 
+P/Q measurements the next step might optimize to meet the voltage 
+measurements/setpoints. P and Q values of the first step can be
 fixed by adding constraints accordingly. A separate handling of flow and
 voltage measurements and optimization of additional criteria is thus possible.
 This split avoids numeric problems created by different magnitudes of
@@ -103,8 +103,8 @@ Including additional (consistent) measurements shall yield better results.
 ## Separate Real and Imaginary Parts
 
 The non-linear solver and the CasADi-package do not support complex numbers.
-That is why the complex calculation is processed with separate real and
-imaginary parts. Each complex number is transformed in a 2x2-matrix:
+Hence, complex values are calculated with separate real andimaginary parts. 
+Each complex number is transformed in a 2x2-matrix:
 
          +-      -+
          | Re -Im |          C  - complex number
