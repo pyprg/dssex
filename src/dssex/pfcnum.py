@@ -1064,7 +1064,7 @@ def eval_residual_current(
 Electric_data = namedtuple(
     'Electric_data',
     'branch injection node residual_node_current')
-Electric_data.__doc__ = """ Functions for calculating electric data for
+Electric_data.__doc__ = """Functions for calculating electric data for
 branches, injections and nodes from power flow or estimation results.
 
 Parameters
