@@ -2,7 +2,7 @@
 """
 Created on Sat Sep 10 11:28:52 2022
 
-Copyright (C) 2023 pyprg
+Copyright (C) 2022, 2023 pyprg
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -1054,10 +1054,10 @@ def make_get_scaling_and_injection_data(
             [:,0] Ire, current, real part
             [:,1] Iim, current, imaginary part
             [:,2] Pscaled, active power P10 multiplied by scaling factor kp
-            [:,3] Pip, active power interpolated
-            [:,4] Qscaled, reactive power Q10 multiplied by scaling factor kq
+            [:,3] Qscaled, reactive power Q10 multiplied by scaling factor kq
+            [:,4] Pip, active power interpolated
             [:,5] Qip, reactive power interpolated
-            [:,6] Vabs_sqr, square of voltage magnitude at injections
+            [:,6] Vabs_sqr, square of voltage magnitude
             [:,7] interpolate?"""
     get_scaling_data = make_get_scaling_data(model, count_of_steps)
     injections = model.injections

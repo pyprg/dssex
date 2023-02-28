@@ -1,5 +1,20 @@
 # -*- coding: utf-8 -*-
 """
+Copyright (C) 2022 pyprg
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 Created on Sat Mar 26 11:49:05 2022
 
 @author: pyprg
@@ -103,7 +118,7 @@ def create_gb_matrix(model, pos):
     """Generates a conductance-susceptance matrix of branches equivalent to
     branch-admittance matrix. M[n,n] of slack nodes is set to 1, other
     values of slack nodes are zero. Hence, the returned
-    matrix is unsymmetrical.
+    matrix is unsymmetric.
 
     Parameters
     ----------
@@ -534,7 +549,7 @@ def create_vars(model):
     return V, Vslack, pos
 
 def build_residual_fn(model, pq_factors=None, loadcurve='original'):
-    """Creates function for calculating the residual node current. The
+    """Creates a function for calculating the residual node current. The
     returned function can be used for root-finding.
 
     Parameters

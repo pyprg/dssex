@@ -539,7 +539,7 @@ def _create_gb_of_terminals_n(branchterminals, branchtaps, positions=None):
 
 def _get_branch_flow_values(
         branchtaps, positions, vnode_ri2, branchterminals):
-    """Calculates current, active and reactive power flow into branch from
+    """Calculates current, active and reactive power flow into branches from
     given terminals. 'branchterminals' is a subset, all other arguments are
     complete.
 
@@ -666,14 +666,12 @@ def _get_batch_flow_values(
 
 def get_batch_values(
     model, Vnode_ri2, kpq, positions=None, quantities='', vminsqr=_VMINSQR):
-    """The model stores given values separated for
-    I (magnitude of electric current), P (active power), Q (reactive power) and
-    V (magnitude of voltage). Provided, node voltages, scaling factors and
-    tappositions are results and parameters of a power flow calculation
-    over model this function returns calculated values for the selected
-    quantities of given values. For instance, if quantity is 'P' the function
-    returns the active power according to the power flow calculation for the
-    locations of the active power values given by the model.
+    """Provided, node voltages, scaling factors and tappositions are results
+    and parameters of a power flow calculation with the grid-data of the model,
+    'get_batch_values' returns calculated values for the selected quantities.
+    For instance, if quantity is 'P' the function returns the active power
+    according to the power flow calculation at the terminals active power
+    values (table 'PValues') are given for by the model.
 
     Parameters
     ----------
@@ -698,7 +696,7 @@ def get_batch_values(
     Returns
     -------
     tuple
-        * quantities, numpy.array<str>
+        * quantity, numpy.array<str>
         * id_of_batch, numpy.array<str>
         * value, numpy.array<float>, vector (shape n,1)"""
     Vabs_sqr = np.sum(Vnode_ri2 * Vnode_ri2, axis=1)
