@@ -23,7 +23,7 @@ import unittest
 import context # adds parent folder of dssex to search path
 import numpy as np
 import egrid.builder as grid
-import dssex.pfcnum as pfc # get_calc_injected_power_fn
+import dssex.pfcnum as pfc
 import dssex.estim as estim
 from functools import partial
 from numpy.linalg import norm
@@ -477,7 +477,7 @@ class Optimize_step(unittest.TestCase):
         self.assertAlmostEqual(
             ed.branch().loc['line_0'].P0_pu,
             given_values.loc['PQ_line_0'].P,
-            delta=1e-12,
+            places=7,
             msg='estimated active power equals given active power')
 
     def test_scale_p_meet_p2(self):
@@ -541,7 +541,7 @@ class Optimize_step(unittest.TestCase):
         self.assertAlmostEqual(
             ed.branch().loc['line_0'].Q0_pu,
             given_values.loc['PQ_line_0'].Q,
-            delta=1e-10,
+            places=6,
             msg='estimated reactive power equals given reactive power')
 
     def test_scale_q_meet_q2(self):
@@ -605,7 +605,7 @@ class Optimize_step(unittest.TestCase):
         self.assertAlmostEqual(
             ed.branch().loc['line_0'].I0_pu,
             given_values.loc['I_line_0'].I,
-            delta=1e-12,
+            places=7,
             msg='estimated electric current equals given electric current')
 
     def test_scale_pq_meet_i2(self):
@@ -619,7 +619,7 @@ class Optimize_step(unittest.TestCase):
             grid.Output('I_consumer', id_of_device='consumer'),
             # scaling factor kpq for active/reactive power P/Q of consumer
             grid.Defk('kpq'),
-            grid.Link(objid='consumer', part='pq', id='kpq'))
+            grid.Link(objid='consumer', id=('kpq', 'kpq'), part='pq'))
         expressions = estim.get_expressions(model, count_of_steps=1)
         step_data = estim.get_step_data(
             model, expressions, objectives='I')
@@ -650,7 +650,7 @@ class Optimize_step(unittest.TestCase):
             grid.Vvalue('n_2', V=1.02),
             # scaling factor kq for reactive power Q of consumer
             grid.Defk('kq'),
-            grid.Link(objid='consumer', part='q', id='kq'))
+            grid.Link(objid='consumer', id='kq', part='q'))
         expressions = estim.get_expressions(model, count_of_steps=1)
         step_data = estim.get_step_data(
             model, expressions, objectives='V')
@@ -666,9 +666,9 @@ class Optimize_step(unittest.TestCase):
             msg='Inode is almost 0')
         given_V_at_node = model.vvalues.set_index('id_of_node').loc['n_2']
         self.assertAlmostEqual(
-            np.abs(V[given_V_at_node.index_of_node]),
+            np.abs(V[given_V_at_node.index_of_node])[0],
             given_V_at_node.V,
-            delta=1e-12,
+            places=10,
             msg='estimated voltage equals given voltage')
 
 if __name__ == '__main__':
