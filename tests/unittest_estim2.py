@@ -21,11 +21,11 @@ Created on Tue Feb 28 00:01:32 2023
 """
 import unittest
 import numpy as np
-from numpy.testing import assert_array_almost_equal
 import context # adds parent folder of dssex to search path
 import egrid.builder as grid
 import dssex.estim as estim
 import dssex.pfcnum as pfc
+from numpy.testing import assert_array_almost_equal
 from numpy.linalg import norm
 from egrid import make_model
 

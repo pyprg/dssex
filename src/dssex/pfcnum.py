@@ -832,6 +832,7 @@ def get_y_branches(model, terms, term_is_at_A, pos):
     Returns
     -------
     numpy.array, complex, shape=(:, 2, 2)"""
+    #foffd = get_tap_factors(model.branchtaps, pos.to_numpy())
     foffd = get_tap_factors(model.branchtaps, pos)
     y_lo, y_tot = get_y_terms(terms, foffd)
     return get_branch_admittance_matrices(y_lo, y_tot, term_is_at_A)
@@ -949,7 +950,7 @@ def get_residual_current(model, get_injected_power, Y, Vnode):
 
     Returns
     -------
-    numpy.array
+    numpy.ndarray
         complex, residual of node current"""
     V_ =  Vnode.reshape(-1, 1)
     Inode = Y @ V_
@@ -1001,7 +1002,7 @@ def get_residual_current_fn(model, get_injected_power, tappositions=None):
     Returns
     -------
     function
-        (numpy.array<complex>) -> (numpy.array<complex>)
+        (numpy.array<complex>) -> (numpy.ndarray<complex>)
         (voltage_of_nodes) -> (current_of_node)"""
     tappositions_ = model.branchtaps.position \
         if tappositions is None else tappositions
@@ -1055,7 +1056,7 @@ def eval_residual_current(
 
     Returns
     -------
-    numpy.array
+    numpy.ndarray
         complex, residual node current"""
     return (
         get_residual_current_fn(model, get_injected_power, tappositions)(Vnode)
@@ -1107,7 +1108,8 @@ def calculate_electric_data(
     Electric_data
         * .branch, function (array_like<str>)->(pandas.DataFrame)
         * .injection, function (array_like<str>)->(pandas.DataFrame)
-        * .residual_node_current, function ()->(numpy.array<complex>)"""
+        * .node, function ()->(pandas.DataFrame)
+        * .residual_node_current, function ()->(numpy.ndarray<complex>)"""
     from pandas import DataFrame as DF
     tappositions_ = (
         model.branchtaps.position if tappositions is None else tappositions)
