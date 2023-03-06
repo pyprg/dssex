@@ -697,19 +697,13 @@ class Estimate_branch_injection(unittest.TestCase):
             # scaling, define scaling factors
             grid.Defk(id='kq', step=0),
             # link scaling factors to active and reactive power of consumer
-            grid.Link(
-                objid='consumer',
-                id='kq',
-                part='q',
-                step=0),
-            # measurements
+            grid.Link( objid='consumer', id='kq', part='q', step=0),
+            # measurement/setpoint
             grid.Vvalue(id_of_node='n_2', V=Vval))
         init, res = estim.estimate(
-            model,
-            step_params=[dict(objectives='V')])
+            model, step_params=[dict(objectives='V')])
         # check
-        self.assertEqual(
-            res[1], True, 'estimate succeeds')
+        self.assertEqual(res[1], True, 'estimate succeeds')
         ed = pfc.calculate_electric_data(model, res[2], res[3])
         # maximum of residual node currents without slacknode
         max_dev = norm(

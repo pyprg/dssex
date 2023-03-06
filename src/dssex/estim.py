@@ -1899,7 +1899,7 @@ def get_batch_constraints(values_of_constraints, expressions_of_batches):
     return _SX_0r1c
 
 def get_optimize_vk(model, expressions, positions=None):
-    """Prepares the function optimizing node voltages and scaling factors.
+    """Prepares the function which optimizes node voltages and scaling factors.
 
     Parameters
     ----------
@@ -1985,9 +1985,101 @@ def get_optimize_vk(model, expressions, positions=None):
         # calculate
         r = solver(
             x0=ini, p=values_of_parameters, lbg=0, ubg=0, lbx=lbx, ubx=ubx)
-        # r = solver(
-        #     x0=ini, p=values_of_parameters, lbg=0, ubg=0)
         return solver.stats()['success'], r['x']
+    return optimize_vk
+
+def _rm_slack_entries(expr, count_of_slacks):
+    """Removes rows of slack nodes.
+
+    Parameters
+    ----------
+    expr: casadi.SX
+
+    count_of_slacks: int
+        number of slack nodes
+
+    Returns
+    -------
+    casadi.SX"""
+    rows = expr.size1()
+    upper, lower = casadi.vertsplit(expr, [0, rows//2, rows])
+    return casadi.vertcat(
+        upper[count_of_slacks:, :], lower[count_of_slacks:, :])
+
+def get_optimize_vk2(model, expressions, positions=None):
+    """Prepares the function which optimizes node voltages and scaling factors.
+    Processes slack differently than function 'get_optimize_vk'. Slackrows
+    are removed from admittance matrix. Slackvoltages are parameters.
+
+    Parameters
+    ----------
+    model: egrid.model.Model
+        data of electric grid
+    expressions : dict
+        estimation data
+        * 'Vnode_syms', casadi.SX (shape n,2)
+        * 'Vslack_syms', casadi.SX (shape n,2)
+        * 'position_syms', casadi.SX (shape n,1)
+    positions: array_like
+        optional
+        int, positions of taps
+
+    Returns
+    -------
+    function"""
+    # setup solver
+    vexpr = expressions['Vnode_syms']
+    count_of_slacks = model.count_of_slacks
+    vparam = vexpr[:count_of_slacks, :2]
+    Vparam_ri_syms = vstack(vparam)
+    vvar = vexpr[count_of_slacks:, :2]
+    Vnode_ri_syms = vstack(vvar)
+    params_ = casadi.vertcat(
+        vstack(Vparam_ri_syms), expressions['position_syms'])
+    # parameters
+    positions_ = model.branchtaps.position if positions is None else positions
+    Vslacks = model.slacks.V
+    Vre_slack = np.real(Vslacks)
+    Vim_slack = np.imag(Vslacks)
+    values_of_parameters_ = casadi.vertcat(
+        Vre_slack, Vim_slack, positions_)
+    # limits
+    count_of_vri = Vnode_ri_syms.size1()
+    Vmin = [-np.inf] * count_of_vri
+    Vmax = [np.inf] * count_of_vri
+    # constraints
+    Y_by_V = _rm_slack_entries(expressions['Y_by_V'], count_of_slacks)
+    def optimize_vk(
+        Vnode_ri_ini, scaling_data, Inode_inj, diff_data,
+        constraints=_SX_0r1c):
+        syms = casadi.vertcat(Vnode_ri_syms, scaling_data.kvars)
+        objective = casadi.sumsqr(diff_data[2] - diff_data[3])
+        params = casadi.vertcat(params_, scaling_data.kconsts)
+        values_of_parameters = casadi.vertcat(
+            values_of_parameters_, scaling_data.values_of_consts)
+        constraints_ = casadi.vertcat(
+            Y_by_V + vstack(Inode_inj[count_of_slacks:, :]),
+            constraints)
+        nlp = {'x': syms, 'f': objective, 'g': constraints_, 'p': params}
+        # discrete = [0] * syms.size1()
+        # discrete[-1] = 1
+        # solver = casadi.nlpsol('solver', 'bonmin', nlp, {'discrete':discrete})
+        solver = casadi.nlpsol('solver', 'ipopt', nlp)
+        # initial values of decision variables
+        vini = _rm_slack_entries(Vnode_ri_ini, count_of_slacks)
+        ini = casadi.vertcat(vini, scaling_data.values_of_vars)
+        # limits of decision variables
+        lbx = casadi.vertcat(Vmin, scaling_data.kvar_min)
+        ubx = casadi.vertcat(Vmax, scaling_data.kvar_max)
+        # calculate
+        r = solver(
+            x0=ini, p=values_of_parameters, lbg=0, ubg=0, lbx=lbx, ubx=ubx)
+        # add slack voltages
+        parta, partb = casadi.vertsplit(
+            r['x'], [0, count_of_vri//2, ini.size1()])
+        return (
+            solver.stats()['success'],
+            casadi.vertcat(Vre_slack, parta, Vim_slack, partb))
     return optimize_vk
 
 #
