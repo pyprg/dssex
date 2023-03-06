@@ -1899,7 +1899,7 @@ def get_batch_constraints(values_of_constraints, expressions_of_batches):
     return _SX_0r1c
 
 def get_optimize_vk(model, expressions, positions=None):
-    """Prepares the function which optimizes node voltages and scaling factors.
+    """Prepares a function which optimizes node voltages and scaling factors.
 
     Parameters
     ----------
@@ -2007,7 +2007,7 @@ def _rm_slack_entries(expr, count_of_slacks):
         upper[count_of_slacks:, :], lower[count_of_slacks:, :])
 
 def get_optimize_vk2(model, expressions, positions=None):
-    """Prepares the function which optimizes node voltages and scaling factors.
+    """Prepares a function which optimizes node voltages and scaling factors.
     Processes slack differently than function 'get_optimize_vk'. Slackrows
     are removed from admittance matrix. Slackvoltages are parameters.
 
