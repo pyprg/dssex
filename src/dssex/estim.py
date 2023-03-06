@@ -1209,7 +1209,7 @@ def calculate_power_flow(
         optional
         float, initial guess of node voltages
     vminsqr: float
-        optinal
+        optional
         square of voltage, upper limit interpolation interval [0...vminsqr]
 
     Returns

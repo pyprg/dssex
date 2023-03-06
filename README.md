@@ -72,7 +72,8 @@ The objective function is the sum of terms having the structure
 (measured_value_or_setpoint - calculated_value)\*\*2. The search is
 an iterative process requiring a start value. A part of the constraints
 are the power flow relations. The sum of current flowing through branches
-into a node equals the injected current&nbsp;- except for slacks.
+into a node equals the injected current&nbsp;- except for slacks
+(current injection method).
 
     Y * V - I = 0          Y - complex branch admittance matrix
                            V - complex node voltage vector
@@ -81,18 +82,18 @@ into a node equals the injected current&nbsp;- except for slacks.
 Scaling factors and node voltages are the results of the optimization process.
 Variables for voltages and factors are named decision variables. The injected
 node current I is expressed in terms of the node voltages and scaling factors.
-The objective function is also expressed in decision variables and attributes 
-of the devices and the topology. P_calculated in the term of an active power 
-measurement at the terminals of a branch (P_measured - P_calculated)\*\*2, 
-for example, is expressed in decision variables of the node voltages and 
+The objective function is also expressed in decision variables and attributes
+of the devices and the topology. P_calculated in the term of an active power
+measurement at the terminals of a branch (P_measured - P_calculated)\*\*2,
+for example, is expressed in decision variables of the node voltages and
 admittance values of the branch.
 
 Initial node voltages for the optimization process are currently calculated
 by a rootfinding function created and solved by CasADi (using IPOPT).
 
 The complete estimation process can consist of several minimization steps.
-Each step has a specific objective funtion. E.g. after opimizing towards 
-P/Q measurements the next step might optimize to meet the voltage 
+Each step has a specific objective funtion. E.g. after opimizing towards
+P/Q measurements the next step might optimize to meet the voltage
 measurements/setpoints. P and Q values of the first step can be
 fixed by adding constraints accordingly. A separate handling of flow and
 voltage measurements and optimization of additional criteria is thus possible.
@@ -100,10 +101,12 @@ This split avoids numeric problems created by different magnitudes of
 voltages, powers and currents. Weighting factors shall be avoided.
 Including additional (consistent) measurements shall yield better results.
 
+Function **estim.estimate** implements described method.
+
 ## Separate Real and Imaginary Parts
 
 The non-linear solver and the CasADi-package do not support complex numbers.
-Hence, complex values are calculated with separate real andimaginary parts. 
+Hence, complex values are calculated with separate real and imaginary parts.
 Each complex number is transformed in a 2x2-matrix:
 
          +-      -+
@@ -120,3 +123,18 @@ multiplication of two matrices.
     |          | * |          | = |                                           |
     | Yim  Yre |   | Vim  Vre |   | (Yim*Vre + Yre*Vim)   (Yre*Vre - Yim*Vim) |
     +-        -+   +-        -+   +-                                         -+
+
+## Numeric Power Flow Calculation and Result Processing
+
+Function **pfcnum.calculate_power_flow** solves the non-linear
+power-flow-problem. It is an experimental implementation deploying the
+schema of separated real and imaginary parts of complex values internally while
+accepting an egrid.model.Model as input and returning a vector of
+complex voltages.
+
+Function **pfcnum.calculate_electric_data** accepts an egrid.model.Model and
+a voltage vector as input and calculates the power and current flow for
+branches and injections as well as losses for branches. The returned
+object additionally provides a method for calculating the residual node current
+which can be used to evaluate the quality of the obtained estimation and
+power flow calculation results.

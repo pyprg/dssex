@@ -495,47 +495,49 @@ def solved(precision, gb, Vnode_ri, Iinj_node_ri):
     -------
     bool"""
     Ires = gb.dot(Vnode_ri) - Iinj_node_ri
-    Ires_max = norm(Ires, np.inf)
-    return Ires_max < precision
+    return norm(Ires, np.inf) < precision if 0 < Ires.shape[0] else True
 
 def calculate_power_flow(
-        precision, max_iter, model,
-        Vslack=None, tappositions=None, Vinit=None,
-        pq_factors=None, loadcurve='original'):
+        model, Vslack=None, tappositions=None, Vinit=None,
+        pq_factors=None, loadcurve='original', precision=1e-8, max_iter=30):
     """Power flow calculating function. The function solves the non-linear
-    power flow problem by solving the linear equations Y * U_n+1 = I(U_n)
-    iteratively. U_n+1 is computed from Y and I(U_n). n: index of iteration.
+    power flow problem by solving the linear equations Y * V_n+1 = I(V_n)
+    iteratively. V_n+1 is computed from Y and I(V_n). n: index of iteration.
+    While in- and output use complex values the solver uses separated
+    values for real and imaginary parts.
 
     Parameters
     ----------
-    precision: float
-        tolerance for node current
-    max_iter: int
-        limit of iteration count
     model: egrid.model.Model
         data of electric grid
-    Vslack: array_like, complex
-        vector of voltages at slacks, default model.slacks.V
-    tappositions: array_like, int
-        vector of tap positions, default model.branchtaps.position
-    Vinit: array_like, complex
-        start value of iteration, node voltage vector
-    pq_factors: numpy.array, float, (nx2)
-        factors for active and reactive power of loads
-    loadcurve: 'original' | 'interpolated' | 'square'
+    Vslack: numpy.array (nx1), optional 
+        complex, vector of voltages at slacks, default model.slacks.V
+    tappositions: array_like, optional
+        int, vector of tap positions, default model.branchtaps.position
+    Vinit: array_like, optional
+        float, start value of iteration, node voltage vector,
+        real parts then imaginary parts
+    pq_factors: numpy.array (nx2), optional
+        float, factors for active and reactive power of loads
+    loadcurve: 'original' | 'interpolated' | 'square', optional
         default is 'original', just first letter is used
+    precision: float, optional
+        tolerance for node current
+    max_iter: int, optional
+        limit of iteration count
 
     Returns
     -------
     tuple
         * bool, success?
-        * array_like, complex, node voltages"""
+        * numpy.ndarray, complex, node voltages"""
     count_of_nodes = model.shape_of_Y[0]
     Vinit_ = (np.array([1.0]*count_of_nodes + [0.0]*count_of_nodes)
               .reshape(-1, 1)
               if Vinit is None else
               np.vstack([np.real(Vinit), np.imag(Vinit)]))
-    Vslack_ = model.slacks.V if Vslack is None else Vslack
+    Vslack_ = (
+        model.slacks.V.to_numpy().reshape(-1,1) if Vslack is None else Vslack)
     tappositions_ = model.branchtaps.position.copy() \
         if tappositions is None else tappositions
     gb = create_gb_matrix(model, tappositions_)
@@ -800,7 +802,7 @@ def get_branch_admittance_matrices(y_lo, y_tot, term_is_at_A):
 
     Returns
     -------
-    numpy.darray, complex, shape=(:, 2, 2)"""
+    numpy.darray, complex, shape=(n, 2, 2)"""
     y_tot_A = y_tot[term_is_at_A]
     y_tot_B = y_tot[~term_is_at_A]
     y_lo_AB = y_lo[term_is_at_A]
@@ -831,7 +833,7 @@ def get_y_branches(model, terms, term_is_at_A, pos):
 
     Returns
     -------
-    numpy.array, complex, shape=(:, 2, 2)"""
+    numpy.array, complex, shape=(n, 2, 2)"""
     #foffd = get_tap_factors(model.branchtaps, pos.to_numpy())
     foffd = get_tap_factors(model.branchtaps, pos)
     y_lo, y_tot = get_y_terms(terms, foffd)
@@ -842,14 +844,15 @@ def get_v_branches(terms, voltages):
 
     Parameters
     ----------
-    terms: pandas.DataFrame
-
+    terms: pandas.DataFrame, index of terminals
+        * .index_of_node
+        * .index_of_other_node
     voltages: numpy.array, complex
         voltages at nodes
 
     Returns
     -------
-    numpy.array, complex, shape=(:, 2, 1)"""
+    numpy.array, complex, shape=(n, 2, 1)"""
     mtermnode, mtermothernode = get_crossrefs(terms, len(voltages))
     Vterm = np.asarray(mtermnode @ voltages)
     Votherterm = np.asarray(mtermothernode @ voltages)

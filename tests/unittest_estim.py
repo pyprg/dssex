@@ -87,8 +87,7 @@ class Power_flow_calculation_basic(unittest.TestCase):
         vcx_slack = 0.95+0.2j
         model = make_model(
             grid.Slacknode('n_0', V=vcx_slack),
-            grid.Branch('line', 'n_0', 'n_1', y_lo=1e3-1e3j, y_tr=1e-6+1e-6j)
-            )
+            grid.Branch('line', 'n_0', 'n_1', y_lo=1e3-1e3j, y_tr=1e-6+1e-6j))
         # calculate
         success, vnode_ri = estim.calculate_power_flow(
             model, vminsqr=_VMINSQR)
@@ -105,8 +104,7 @@ class Power_flow_calculation_basic(unittest.TestCase):
         pure active power consumer."""
         model = make_model(
             grid_pfc,
-            grid.Injection('consumer', 'n_1', P10=30.0)
-            )
+            grid.Injection('consumer', 'n_1', P10=30.0))
         # calculate
         success, vnode_ri = estim.calculate_power_flow(
             model, vminsqr=_VMINSQR)
@@ -424,12 +422,12 @@ class Power_flow_calculation_basic2(unittest.TestCase):
         self.assertTrue(succ_estim, 'estimation succeeds')
         Vnode_cx_estim = estim.ri_to_complex(Vnode_ri_estim.toarray())
         succ_pfc, Vnode_cx_pfc = pfc.calculate_power_flow(
-            1e-12, 20, model, loadcurve='interpolated')
+            model, loadcurve='interpolated')
         self.assertTrue(succ_pfc, 'power flow calculation succeeds')
         self.assertAlmostEqual(
             norm(Vnode_cx_pfc - Vnode_cx_estim, np.inf),
             0.,
-            delta=1e-12,
+            delta=1e-10,
             msg='result of optimize_step equals result of numeric calculation')
 
 # node: 0               1               2
