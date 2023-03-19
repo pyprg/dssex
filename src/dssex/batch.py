@@ -17,6 +17,14 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 Created on Fri Dec 16 00:00:58 2022
 
 @author: pyprg
+
+Batches are structures to model the relation between measurements/setpoints and
+terminals. A batch is specific for one flow quantity I, P, Q and
+a power-flow-calculation/connectivity node. Instances of 'Output' associate
+flow (I, P, Q) through a terminal with a batch. Flow measurements
+are associated with a batch using instances of IValue / PValue / QValue. The
+estimation algorithm applies the equation sum_of_I/P/QValue + sum_of_Output = 0
+for including measurements/setpoints into the estimation process.
 """
 import numpy as np
 from functools import partial
