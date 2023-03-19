@@ -456,7 +456,7 @@ class Optimize_step(unittest.TestCase):
             grid.PValue('PQ_line_0', P=40.0),
             grid.Output('PQ_line_0', id_of_device='line_0', id_of_node='n_0'),
             # scaling factor kp for active power P of consumer
-            grid.Defk('kp'),
+            grid.Deff('kp'),
             grid.Link(objid='consumer', part='p', id='kp'))
         expressions = estim.get_expressions(model, count_of_steps=1)
         step_data = estim.get_step_data(
@@ -488,7 +488,7 @@ class Optimize_step(unittest.TestCase):
             grid.PValue('PQ_consumer', P=40.0),
             grid.Output('PQ_consumer', id_of_device='consumer'),
             # scaling factor kp for active power P of consumer
-            grid.Defk('kp'),
+            grid.Deff('kp'),
             grid.Link(objid='consumer', part='p', id='kp'))
         expressions = estim.get_expressions(model, count_of_steps=1)
         step_data = estim.get_step_data(
@@ -520,7 +520,7 @@ class Optimize_step(unittest.TestCase):
             grid.QValue('PQ_line_0', Q=40.0),
             grid.Output('PQ_line_0', id_of_device='line_0', id_of_node='n_0'),
             # scaling factor kq for reactive power Q of consumer
-            grid.Defk('kq'),
+            grid.Deff('kq'),
             grid.Link(objid='consumer', part='q', id='kq'))
         expressions = estim.get_expressions(model, count_of_steps=1)
         step_data = estim.get_step_data(
@@ -552,7 +552,7 @@ class Optimize_step(unittest.TestCase):
             grid.QValue('PQ_consumer', Q=40.0),
             grid.Output('PQ_consumer', id_of_device='consumer'),
             # scaling factor kq for reactive power Q of consumer
-            grid.Defk('kq'),
+            grid.Deff('kq'),
             grid.Link(objid='consumer', part='q', id='kq'))
         expressions = estim.get_expressions(model, count_of_steps=1)
         step_data = estim.get_step_data(
@@ -584,7 +584,7 @@ class Optimize_step(unittest.TestCase):
             grid.IValue('I_line_0', I=40.0),
             grid.Output('I_line_0', id_of_device='line_0', id_of_node='n_0'),
             # scaling factor kpq for active/reactive power P/Q of consumer
-            grid.Defk('kpq'),
+            grid.Deff('kpq'),
             grid.Link(objid='consumer', part='pq', id='kpq'))
         expressions = estim.get_expressions(model, count_of_steps=1)
         step_data = estim.get_step_data(
@@ -616,7 +616,7 @@ class Optimize_step(unittest.TestCase):
             grid.IValue('I_consumer', I=40.0),
             grid.Output('I_consumer', id_of_device='consumer'),
             # scaling factor kpq for active/reactive power P/Q of consumer
-            grid.Defk('kpq'),
+            grid.Deff('kpq'),
             grid.Link(objid='consumer', id=('kpq', 'kpq'), part='pq'))
         expressions = estim.get_expressions(model, count_of_steps=1)
         step_data = estim.get_step_data(
@@ -647,7 +647,7 @@ class Optimize_step(unittest.TestCase):
             # give magnitude of voltage at n_2
             grid.Vvalue('n_2', V=1.02),
             # scaling factor kq for reactive power Q of consumer
-            grid.Defk('kq'),
+            grid.Deff('kq'),
             grid.Link(objid='consumer', id='kq', part='q'))
         expressions = estim.get_expressions(model, count_of_steps=1)
         step_data = estim.get_step_data(

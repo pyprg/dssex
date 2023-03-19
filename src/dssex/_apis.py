@@ -50,7 +50,7 @@ def calculate_pf(model, step_params=()):
         egrid.builder.(
             Branch | Slacknode | Injection | Output |
             PValue | QValue | IValue | Vvalue | Branchtaps |
-            Defk | Link | Message) | str
+            Deff | Link | Message) | str
 
     Returns
     -------
@@ -112,7 +112,7 @@ def print_power_flow(*args):
         egrid.builder.(
             Branch | Slacknode | Injection | Output |
             PValue | QValue | IValue | Vvalue | Branchtaps |
-            Defk | Link | Message) | str"""
+            Deff | Link | Message) | str"""
     from egrid import make_model_checked
     if not args:
         args = DEFAULT_NETWORK

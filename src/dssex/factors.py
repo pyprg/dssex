@@ -27,7 +27,7 @@ import numpy as np
 from functools import partial
 from collections import namedtuple
 from itertools import chain
-from egrid.builder import DEFAULT_FACTOR_ID, defk, Loadfactor
+from egrid.builder import DEFAULT_FACTOR_ID, deff, Factor
 # empty vector of values
 _DM_0r1c = casadi.DM(0,1)
 # empty vector of expressions
@@ -115,9 +115,9 @@ def _get_default_factors(count_of_steps):
         columns according to fields of egrid.builder.Loadfactor"""
     return (
         pd.DataFrame(
-            defk(id_=DEFAULT_FACTOR_ID, type_='const', value=1.0,
+            deff(id_=DEFAULT_FACTOR_ID, type_='const', value=1.0,
                  min_=1.0, max_=1.0, step=range(count_of_steps)),
-            columns=Loadfactor._fields)
+            columns=Factor._fields)
         .set_index(['step', 'id']))
 
 def _factor_index_per_step(factors):
@@ -225,7 +225,7 @@ def _get_factors(model, count_of_steps=1):
         * pandas.DataFrame, injections with scaling factors"""
     return get_factor_data(
         model.injections.id,
-        model.load_scaling_factors,
+        model.factors,
         model.injection_factor_associations,
         count_of_steps)
 
@@ -340,7 +340,7 @@ def _make_DM_vector(array_like):
     casadi.DM"""
     return casadi.DM(array_like) if len(array_like) else _DM_0r1c
 
-def get_scaling_data(
+def _get_factor_data_for_step(
         factor_step_groups, injection_factor_step_groups,
         step=0, k_prev=_DM_0r1c):
     """Prepares data of scaling factors per step.
@@ -469,7 +469,7 @@ def make_get_factor_data(model, count_of_steps=1):
                 column vector, values for consts"""
     factors, injection_factors = _get_factors(model, count_of_steps)
     return partial(
-        get_scaling_data,
+        _get_factor_data_for_step,
         _groupby_step(factors),
         _groupby_step(injection_factors))
 

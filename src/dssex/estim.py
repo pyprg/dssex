@@ -466,11 +466,20 @@ def _create_gb_mn_tot(branchterminals, branchtaps, position_syms):
     gb_mn_tot[:,3] += gb_mn_tot[:,1]
     if position_syms.size1():
         foffd = get_tap_factors(branchtaps, position_syms)
-        return _mult_gb_by_tapfactors(
-            gb_mn_tot,
-            foffd,
-            branchtaps.index_of_term,
-            branchtaps.index_of_other_term)
+        # alternative of _mult_gb_by_tapfactors
+        count_of_rows = gb_mn_tot.size1()
+        foffd_term = casadi.SX.ones(count_of_rows)
+        foffd_term[branchtaps.index_of_term] = foffd
+        foffd_otherterm = casadi.SX.ones(count_of_rows)
+        foffd_otherterm[branchtaps.index_of_other_term] = foffd
+        gb_mn_tot[:, :2] *= (foffd_term * foffd_otherterm)
+        gb_mn_tot[:, 2:] *= (foffd_term * foffd_term)
+        # end of alternative of _mult_gb_by_tapfactors
+        # return _mult_gb_by_tapfactors(
+        #     gb_mn_tot,
+        #     foffd,
+        #     branchtaps.index_of_term,
+        #     branchtaps.index_of_other_term)
     return gb_mn_tot
 
 def create_v_symbols_gb_expressions(model):

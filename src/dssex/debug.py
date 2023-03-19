@@ -34,7 +34,7 @@ def show_factors(model, count_of_steps=3):
         makes scaling factors visible"""
     factors, injection_factors = get_factor_data(
         model.injections.id,
-        model.load_scaling_factors,
+        model.factors,
         model.injection_factor_associations,
         count_of_steps)
     return factors.applymap(str), injection_factors.applymap(str)
