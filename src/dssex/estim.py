@@ -28,7 +28,7 @@ from scipy.sparse import coo_matrix
 from dssex.injections import calculate_cubic_coefficients
 from dssex.batch import (
     get_values, get_batches, value_of_voltages, get_batch_values)
-from dssex.factors import make_get_factor_data, get_k
+from dssex.factors import make_get_factor_data, get_values_of_factors
 # square of voltage magnitude, default value, minimum value for load curve,
 #   if value is below _VMINSQR the load curves for P and Q converge
 #   towards a linear load curve which is 0 when V=0; P(V=0)=0, Q(V=0)=0
@@ -1909,7 +1909,7 @@ def get_step_data_fns(model, count_of_steps):
             optional, default ''
             string of characters 'I'|'P'|'Q'|'V' or empty string ''"""
         voltages_ri2 = ri_to_ri2(voltages_ri.toarray())
-        kpq, k_var_const = get_k(step_data.scaling_data, k)
+        kpq, k_var_const = get_values_of_factors(step_data.scaling_data, k)
         batch_values = get_batch_values(
             model, voltages_ri2, kpq, step_data.positions, constraints)
         return make_step_data(
@@ -2077,7 +2077,7 @@ def get_Vcx_kpq(factor_data, voltages_ri, k):
         node voltages
     kpq: numpy.array (shape m,2), float
         scaling factors per injection"""
-    kpq, _ = get_k(factor_data, k)
+    kpq, _ = get_values_of_factors(factor_data, k)
     V = ri_to_complex(voltages_ri)
     return V, kpq
 
