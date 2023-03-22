@@ -591,8 +591,8 @@ class Estimate_branch_injection(unittest.TestCase):
             'active power and reactive power are scaled with the same factor')
 
     def test_pqvalue_objPQ(self):
-        """scale active power P and reactive power Q in order to match them
-        with measurements P and Q"""
+        """scale active power P and reactive power Q in order to match
+        measurements P and Q"""
         vcx_slack = 0.95+0.02j
         s = 30.+10.j
         Pval = 20.
@@ -620,6 +620,60 @@ class Estimate_branch_injection(unittest.TestCase):
         init, res = estim.estimate(
             model,
             step_params=[dict(objectives='PQ')])
+        # check
+        self.assertEqual(
+            res[1], True, 'estimate succeeds')
+        ed = pfc.calculate_electric_data(model, res[2], res[3])
+        # maximum of residual node currents without slacknode
+        max_dev = norm(
+            ed.residual_node_current()[model.count_of_slacks:], np.inf)
+        self.assertLess(max_dev, 1e-8, 'residual node current is 0')
+        P_n0_line_pu, Q_n0_line_pu = ed.branch().loc['line',['P0_pu', 'Q0_pu']]
+        self.assertAlmostEqual(
+            P_n0_line_pu,
+            Pval,
+            places=8,
+            msg='estimated value of active power equals measured value '
+            'of active power at branch')
+        self.assertAlmostEqual(
+            Q_n0_line_pu,
+            Qval,
+            places=8,
+            msg='estimated value of reactive power equals measured value '
+            'of reactive power at branch')
+
+    def test_pqvalue_objPQ_two_steps(self):
+        """scale active power P and reactive power Q in two steps in order 
+        to match measurements P and Q"""
+        vcx_slack = 0.95+0.02j
+        s = 30.+10.j
+        Pval = 20.
+        Qval = 4.
+        model = make_model(
+            grid.Slacknode('n_0', V=vcx_slack),
+            grid.Branch('line', 'n_0', 'n_1', y_lo=1e3-1e3j, y_tr=1e-6+1e-6j),
+            grid.Injection('consumer', 'n_1', P10=s.real, Q10=s.imag),
+            # scaling, define scaling factors
+            grid.Deff(id='kp', step=0),
+            grid.Deff(id='kq', step=0),
+            # link scaling factors to active and reactive power of consumer
+            grid.Link(
+                objid='consumer',
+                id=('kp', 'kq'),
+                part=('p','q'),
+                step=0),
+            # measurements
+            grid.PValue(id_of_batch='pq_of_line', P=Pval),
+            grid.QValue(id_of_batch='pq_of_line', Q=Qval),
+            grid.Output(
+                id_of_batch='pq_of_line',
+                id_of_device='line',
+                id_of_node='n_0'))
+        init, res0, res = estim.estimate(
+            model,
+            step_params=[
+                dict(objectives='P'), 
+                dict(objectives='Q', constraints='P')])
         # check
         self.assertEqual(
             res[1], True, 'estimate succeeds')
