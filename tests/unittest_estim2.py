@@ -697,8 +697,8 @@ class Estimate_branch_injection(unittest.TestCase):
             'of reactive power at branch')
 
     def test_pqvalue_objI(self):
-        """scale active power P and reactive power Q in order to match them
-        with measurements P and Q"""
+        """scale active power P and reactive power Q in order to match 
+        measurements for electric current I"""
         vcx_slack = 0.95+0.02j
         pq_abs = 30/(2**.5)
         # apparent power, |s| == 30
