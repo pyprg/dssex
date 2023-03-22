@@ -473,4 +473,41 @@ def make_get_factor_data(model, count_of_steps=1):
         _groupby_step(factors),
         _groupby_step(injection_factors))
 
+def get_k(factor_data, x_scaling):
+    """Function for extracting scaling factors from the result provided
+    by the solver.
+    Enhances scaling factors calculated by optimization with constant
+    scaling factors and reorders the factors according to order of injections.
+    Returns kp and kq for each injection.
+    The function creates a vector of values for scaling factors which are
+    decision variables and those which are constants. This vector is ordered
+    for use as initial scaling factor values in next estimation step.
+
+    Parameters
+    ----------
+    factor_data: Factordata
+        * .values_of_consts, float
+            column vector, values for consts
+        * .var_const_to_factor
+            int, index_of_factor=>index_of_var_const
+            converts var_const to factor (var_const[var_const_to_factor])
+        * .var_const_to_kp
+            int, converts var_const to kp, one active power scaling factor
+            for each injection (var_const[var_const_to_kp])
+        * .var_const_to_kq
+            int, converts var_const to kq, one reactive power scaling factor
+            for each injection (var_const[var_const_to_kq])
+    x_scaling: casadi.DM
+        result of optimization (subset)
+
+    Result
+    ------
+    tuple
+        * numpy.array (n,2), kp, kq for each injection
+        * casadi.DM (m,1) kvar/const"""
+    k_var_const = np.vstack([x_scaling, factor_data.values_of_consts])
+    k_var_const_arr = k_var_const
+    kp = k_var_const_arr[factor_data.var_const_to_kp]
+    kq = k_var_const_arr[factor_data.var_const_to_kq]
+    return np.hstack([kp, kq]), k_var_const[factor_data.var_const_to_factor]
 

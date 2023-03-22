@@ -117,8 +117,8 @@ class Calculate_electric_data(unittest.TestCase):
     def test_slacknode_injection(self):
         """
         n_0----------->> consumer
-         slack=True       P10=30
-         V=.994+.023j     Q10=10
+          slack=True       P10=30
+          V=.994+.023j     Q10=10
         """
         vslack = .994+.023j
         Sconsumer = 30.0+10.j

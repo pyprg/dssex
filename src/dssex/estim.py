@@ -28,7 +28,7 @@ from scipy.sparse import coo_matrix
 from dssex.injections import calculate_cubic_coefficients
 from dssex.batch import (
     get_values, get_batches, value_of_voltages, get_batch_values)
-from dssex.factors import make_get_factor_data
+from dssex.factors import make_get_factor_data, get_k
 # square of voltage magnitude, default value, minimum value for load curve,
 #   if value is below _VMINSQR the load curves for P and Q converge
 #   towards a linear load curve which is 0 when V=0; P(V=0)=0, Q(V=0)=0
@@ -39,6 +39,8 @@ _EPSILON = 1e-12
 _DM_0r1c = casadi.DM(0,1)
 # empty vector of expressions
 _SX_0r1c = casadi.SX(0,1)
+# options for solver IPOPT
+_IPOPT_opts = {'ipopt.print_level':0, 'print_time':0}
 
 def create_V_symbols(count_of_nodes):
     """Creates variables for node voltages and expressions for Vre**2+Vim**2.
@@ -233,44 +235,6 @@ def multiply_Y_by_V(Vreim, G, B):
     casadi.SX"""
     V_node = casadi.vertcat(Vreim[:,0], Vreim[:,1])
     return casadi.blockcat([[G, -B], [B,  G]]) @ V_node
-
-def get_k(factor_data, x_scaling):
-    """Function for extracting scaling factors from the result provided
-    by the solver.
-    Enhances scaling factors calculated by optimization with constant
-    scaling factors and reorders the factors according to order of injections.
-    Returns kp and kq for each injection.
-    The function creates a vector of values for scaling factors which are
-    decision variables and those which are constants. This vector is ordered
-    for use as initial scaling factor values in next estimation step.
-
-    Parameters
-    ----------
-    factor_data: Factordata
-        * .values_of_consts, float
-            column vector, values for consts
-        * .var_const_to_factor
-            int, index_of_factor=>index_of_var_const
-            converts var_const to factor (var_const[var_const_to_factor])
-        * .var_const_to_kp
-            int, converts var_const to kp, one active power scaling factor
-            for each injection (var_const[var_const_to_kp])
-        * .var_const_to_kq
-            int, converts var_const to kq, one reactive power scaling factor
-            for each injection (var_const[var_const_to_kq])
-    x_scaling: casadi.DM
-        result of optimization (subset)
-
-    Result
-    ------
-    tuple
-        * numpy.array (n,2), kp, kq for each injection
-        * casadi.DM (m,1) kvar/const"""
-    k_var_const = casadi.vertcat(x_scaling, factor_data.values_of_consts)
-    k_var_const_arr = k_var_const.toarray()
-    kp = k_var_const_arr[factor_data.var_const_to_kp]
-    kq = k_var_const_arr[factor_data.var_const_to_kq]
-    return np.hstack([kp, kq]), k_var_const[factor_data.var_const_to_factor]
 
 #
 # expressions for injected current
@@ -1512,7 +1476,7 @@ def get_optimize_vk(model, expressions, positions=None):
         constraints_ = casadi.vertcat(
             expressions['Y_by_V'] + vstack(Inode_inj), constraints)
         nlp = {'x': syms, 'f': objective, 'g': constraints_, 'p': params}
-        solver = casadi.nlpsol('solver', 'ipopt', nlp)
+        solver = casadi.nlpsol('solver', 'ipopt', nlp, _IPOPT_opts)
         # initial values of decision variables
         ini = casadi.vertcat(Vnode_ri_ini, factor_data.values_of_vars)
         # limits of decision variables
@@ -1600,7 +1564,7 @@ def get_optimize_vk2(model, expressions, positions=None):
         # discrete = [0] * syms.size1()
         # discrete[-1] = 1
         # solver = casadi.nlpsol('solver', 'bonmin', nlp, {'discrete':discrete})
-        solver = casadi.nlpsol('solver', 'ipopt', nlp)
+        solver = casadi.nlpsol('solver', 'ipopt', nlp, _IPOPT_opts)
         # initial values of decision variables
         vini = _rm_slack_entries(Vnode_ri_ini, count_of_slacks)
         ini = casadi.vertcat(vini, scaling_data.values_of_vars)
