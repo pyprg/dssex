@@ -319,6 +319,18 @@ var_const_to_kq: array_like
     int, converts var_const to kq, one reactive power scaling factor for
     each injection (var_const[var_const_to_kq])"""
 
+_empty_factor_data = Factordata(
+    kpq=casadi.horzcat(_SX_0r1c, _SX_0r1c),
+    kvars=_SX_0r1c,
+    values_of_vars=_DM_0r1c,
+    kvar_min=_DM_0r1c,
+    kvar_max=_DM_0r1c,
+    kconsts=_SX_0r1c,
+    values_of_consts=_DM_0r1c,
+    var_const_to_factor=(),
+    var_const_to_kp=(),
+    var_const_to_kq=())
+
 def _make_DM_vector(array_like):
     """Creates a casadi.DM vector from array_like.
 
@@ -330,6 +342,32 @@ def _make_DM_vector(array_like):
     -------
     casadi.DM"""
     return casadi.DM(array_like) if len(array_like) else _DM_0r1c
+
+def _get_injections_factors(injection_factor_step_groups, step):
+    """Returns the group with index step. Returns an empty pandas.DataFrame
+    if the group with index step does not exist.
+
+    Parameters
+    ----------
+    injection_factor_step_groups: pandas.groupby
+
+    step: int
+        index of step 0, 1, ...
+
+    Returns
+    -------
+    pandas.DataFrame"""
+    try:
+        return (
+            injection_factor_step_groups
+            .get_group(step)
+            .sort_values(by='index_of_injection'))
+    except KeyError:
+        return pd.DataFrame(
+            [],
+            columns=[
+                'step', 'injid', 'id_p', 'id_q',
+                'kp', 'kq', 'index_of_injection'])
 
 def _get_factor_data_for_step(
         factor_step_groups, injection_factor_step_groups,
@@ -377,30 +415,11 @@ def _get_factor_data_for_step(
     try:
         factors = factor_step_groups.get_group(step)
     except KeyError:
-        return Factordata(
-            kpq=casadi.horzcat(_SX_0r1c, _SX_0r1c),
-            kvars=_SX_0r1c,
-            values_of_vars=_DM_0r1c,
-            kvar_min=_DM_0r1c,
-            kvar_max=_DM_0r1c,
-            kconsts=_SX_0r1c,
-            values_of_consts=_DM_0r1c,
-            var_const_to_factor=(),
-            var_const_to_kp=(),
-            var_const_to_kq=())
+        return _empty_factor_data
     # a symbol for each factor
     symbols = _create_symbols_with_ids(factors.id)
-    try:
-        injections_factors = (
-            injection_factor_step_groups
-            .get_group(step)
-            .sort_values(by='index_of_injection'))
-    except KeyError:
-        injections_factors = pd.DataFrame(
-            [],
-            columns=[
-                'step', 'injid', 'id_p', 'id_q',
-                'kp', 'kq', 'index_of_injection'])
+    injections_factors = _get_injections_factors(
+        injection_factor_step_groups, step)
     values = _get_values_of_symbols(factors, k_prev)
     select_symbols_values = partial(_select_rows, [symbols, values])
     factors_var = factors[factors.type=='var']
