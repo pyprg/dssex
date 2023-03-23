@@ -438,8 +438,7 @@ class Estimate_branch_injection(unittest.TestCase):
             -1,
             'index of estimation step is -1 for initial '
             'power flow calculation')
-        self.assertEqual(
-            res[1], True, 'estimate succeeds')
+        self.assertTrue(res[1], 'estimate succeeds')
         self.assertEqual(
             res[2].shape,
             (2,1),
@@ -488,8 +487,7 @@ class Estimate_branch_injection(unittest.TestCase):
             0,
             'index of estimation step is 0 for first '
             'optimization')
-        self.assertEqual(
-            res[1], True, 'estimate succeeds')
+        self.assertTrue(res[1], 'estimate succeeds')
         self.assertEqual(
             res[2].shape,
             (2,1),
@@ -528,8 +526,7 @@ class Estimate_branch_injection(unittest.TestCase):
                 id_of_node='n_0'))
         init, res = estim.estimate(model, step_params=[dict(objectives='P')])
         # check
-        self.assertEqual(
-            res[1], True, 'estimate succeeds')
+        self.assertTrue(res[1], 'estimate succeeds')
         ed = pfc.calculate_electric_data(model, res[2], res[3])
         # maximum of residual node currents without slacknode
         max_dev = norm(
@@ -569,8 +566,7 @@ class Estimate_branch_injection(unittest.TestCase):
                 id_of_node='n_0'))
         init, res = estim.estimate(model, step_params=[dict(objectives='P')])
         # check
-        self.assertEqual(
-            res[1], True, 'estimate succeeds')
+        self.assertTrue(res[1], 'estimate succeeds')
         ed = pfc.calculate_electric_data(model, res[2], res[3])
         # maximum of residual node currents without slacknode
         max_dev = norm(
@@ -621,8 +617,8 @@ class Estimate_branch_injection(unittest.TestCase):
             model,
             step_params=[dict(objectives='PQ')])
         # check
-        self.assertEqual(
-            res[1], True, 'estimate succeeds')
+        self.assertTrue(
+            res[1], 'estimate succeeds')
         ed = pfc.calculate_electric_data(model, res[2], res[3])
         # maximum of residual node currents without slacknode
         max_dev = norm(
@@ -654,14 +650,14 @@ class Estimate_branch_injection(unittest.TestCase):
             grid.Branch('line', 'n_0', 'n_1', y_lo=1e3-1e3j, y_tr=1e-6+1e-6j),
             grid.Injection('consumer', 'n_1', P10=s.real, Q10=s.imag),
             # scaling, define scaling factors
-            grid.Deff(id='kp', step=0),
-            grid.Deff(id='kq', step=0),
+            grid.Deff(id='kp', step=(0,1)),
+            grid.Deff(id='kq', step=(0,1)),
             # link scaling factors to active and reactive power of consumer
             grid.Link(
                 objid='consumer',
                 id=('kp', 'kq'),
                 part=('p','q'),
-                step=0),
+                step=(0,1)),
             # measurements
             grid.PValue(id_of_batch='pq_of_line', P=Pval),
             grid.QValue(id_of_batch='pq_of_line', Q=Qval),
@@ -675,8 +671,7 @@ class Estimate_branch_injection(unittest.TestCase):
                 dict(objectives='P'), 
                 dict(objectives='Q', constraints='P')])
         # check
-        self.assertEqual(
-            res[1], True, 'estimate succeeds')
+        self.assertTrue(res[1], 'estimate succeeds')
         ed = pfc.calculate_electric_data(model, res[2], res[3])
         # maximum of residual node currents without slacknode
         max_dev = norm(
@@ -723,8 +718,7 @@ class Estimate_branch_injection(unittest.TestCase):
             model,
             step_params=[dict(objectives='I')])
         # check
-        self.assertEqual(
-            res[1], True, 'estimate succeeds')
+        self.assertTrue(res[1], 'estimate succeeds')
         ed = pfc.calculate_electric_data(model, res[2], res[3])
         # maximum of residual node currents without slacknode
         max_dev = norm(
@@ -757,7 +751,7 @@ class Estimate_branch_injection(unittest.TestCase):
         init, res = estim.estimate(
             model, step_params=[dict(objectives='V')])
         # check
-        self.assertEqual(res[1], True, 'estimate succeeds')
+        self.assertTrue(res[1], 'estimate succeeds')
         ed = pfc.calculate_electric_data(model, res[2], res[3])
         # maximum of residual node currents without slacknode
         max_dev = norm(

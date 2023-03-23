@@ -271,8 +271,7 @@ def _get_values_of_symbols(factor_data, value_of_previous_step):
     # values calculated in previous step
     calc = factor_data[~is_given]
     if len(calc):
-        assert (0 < value_of_previous_step.size1()), \
-            'missing value_of_previous_step'
+        assert len(value_of_previous_step), 'missing value_of_previous_step'
         values[calc.index_of_symbol] = (
             value_of_previous_step[calc.index_of_source.astype(int)])
     return values
