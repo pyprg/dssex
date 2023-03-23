@@ -143,6 +143,33 @@ def _factor_index_per_step(factors):
         index=factors.index,
         name='index_of_symbol')
 
+def _add_step_index(df, step_indices):
+    """Copies data of generic step (index -1) for each step index
+    in step_indices. Combines the data with df.
+
+    Parameters
+    ----------
+    df: pandas.DataFrame
+        df has a MultiIndex
+    step_indices: interable
+        int
+
+    Returns
+    -------
+    pandas.DataFrame (extended copy of df)"""
+    try:
+        df_ = df.loc[-1]
+    except KeyError:
+        return df
+    def _new_index(index_of_step):
+        cp = df_.copy()
+        # adds a column 'step', adds value 'index_of_step' in each row of
+        #   column 'step', then adds the colum 'step' to the index
+        #   (column 'step' is added to the old index in the left most position)
+        return cp.assign(step=index_of_step).set_index(['step', cp.index])
+    return df.combine_first(
+        pd.concat([_new_index(idx) for idx in step_indices]))
+
 def get_factor_data(
         injectionids, given_factors, assoc_frame, index_of_step):
     """Creates and arranges indices for scaling factors and initialization
@@ -168,20 +195,27 @@ def get_factor_data(
     tuple
         * pandas.DataFrame, all scaling factors
         * pandas.DataFrame, injections with scaling factors"""
+    # index for requested step and the step before requested step, data
+    #   of step before are needed for initialization
     indices_of_steps = (
         [index_of_step - 1, index_of_step]
         if 0 < index_of_step else
         [0])
-    # given factors
+    # given factors are either specific for a step or defined for each step
+    #   which is indicated by a '-1' step-index
+    #   generate factors from those with -1 step setting
+    given_factors_ = _add_step_index(given_factors.copy(), indices_of_steps)
+    assoc_frame_ = _add_step_index(assoc_frame.copy(), indices_of_steps)
     # step, id_of_factor => id_of_injection, 'id_p'|'id_q'
     step_injection_part_factor = _get_step_factor_to_injection_part(
-        injectionids, assoc_frame, given_factors, indices_of_steps)
+        injectionids, assoc_frame_, given_factors_, indices_of_steps)
     # remove factors not needed, add default (nan) factors if necessary
     required_factors_index = step_injection_part_factor.index.unique()
-    required_factors = given_factors.reindex(required_factors_index)
+    required_factors = given_factors_.reindex(required_factors_index)
     if required_factors.isna().any(axis=None):
         # ensure existence of default factors when needed
         default_factor_steps = (
+            # type is just an arbitrary column
             required_factors[required_factors.type.isna()]
             .reset_index()
             .step)
@@ -196,7 +230,7 @@ def get_factor_data(
     factors['index_of_source'] = _get_factor_ini_values(
         factors, index_of_symbol)
     factors.sort_values(by=['step', 'type', 'id'], inplace=True)
-    if step_injection_part_factor.shape[0]:
+    if not step_injection_part_factor.empty:
         injection_factors = (
             step_injection_part_factor
             .join(factors.index_of_symbol)

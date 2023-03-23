@@ -88,9 +88,9 @@ class Get_factor_data(unittest.TestCase):
             grid.Slacknode('n_0', V=vcx_slack),
             grid.Injection('consumer', 'n_0', P10=s.real, Q10=s.imag),
             # scaling, define scaling factors
-            grid.Deff(id=('kp', 'kq')),
+            grid.Deff(id=('kp', 'kq'), step=0),
             # link scaling factors to active and reactive power of consumer
-            grid.Link(objid='consumer', id=('kp', 'kq'), part='pq'))
+            grid.Link(objid='consumer', id=('kp', 'kq'), part='pq', step=0))
         index_of_step = 1
         factors, injection_factor = ft.get_factor_data(
             model.injections.id,
@@ -118,9 +118,38 @@ class Get_factor_data(unittest.TestCase):
             all(factors.index_of_source == -1),
             "there are no source factors")
 
+    def test_generic_factor(self):
+        """'get_factor_data' creates default factors if factors are not
+        given explicitely"""
+        vcx_slack = 0.95+0.02j
+        s = 30.+10.j
+        model = make_model(
+            grid.Slacknode('n_0', V=vcx_slack),
+            grid.Injection('consumer', 'n_0', P10=s.real, Q10=s.imag),
+            # scaling, define scaling factors
+            grid.Deff(id=('kp', 'kq'), step=-1),
+            # link scaling factors to active and reactive power of consumer
+            grid.Link(objid='consumer', id=('kp', 'kq'), part='pq', step=-1))
+        index_of_step = 1
+        factors, injection_factor = ft.get_factor_data(
+            model.injections.id,
+            model.factors,
+            model.injection_factor_associations,
+            index_of_step)
+        factors_step_0 = factors.loc[0]
+        self.assertEqual(
+            len(factors_step_0),
+            2,
+            "two factors for step 0")
+        factors_step_1 = factors.loc[1]
+        self.assertEqual(
+            len(factors_step_1),
+            2,
+            "two factors for step 1")
+
 class Make_get_factor_data(unittest.TestCase):
 
-    def test_make_default_parameters(self):
+    def test_default_factors(self):
         """assign (default) scaling factors for active and reactive power to
         each injection"""
         vcx_slack = 0.95+0.02j
@@ -193,7 +222,7 @@ class Make_get_factor_data(unittest.TestCase):
             # scaling, define scaling factors
             grid.Deff(id=('kp', 'kq'), step=0),
             # link scaling factors to active and reactive power of consumer
-            grid.Link(objid='consumer', id=('kp', 'kq'), part='pq'))
+            grid.Link(objid='consumer', id=('kp', 'kq'), part='pq', step=0))
         self.assertIsNotNone(model, "make_model makes models")
         get_factor_data = ft.make_get_factor_data(model)
         factor_data = get_factor_data(step=0)
