@@ -498,8 +498,7 @@ def create_v_symbols_gb_expressions(model):
 # power flow calculation
 #
 
-def make_get_scaling_and_injection_data(
-        model, Vnode_syms, vminsqr, count_of_steps):
+def make_get_scaling_and_injection_data(model, Vnode_syms, vminsqr):
     """Returns a function creating scaling_data and injection_data
     for a given step, in general expressions which are specific
     for the given step.
@@ -515,8 +514,6 @@ def make_get_scaling_and_injection_data(
         * Vnode_syms[:,2], float, Vre**2 + Vim**2
     vminsqr: float
         square of voltage, upper limit interpolation interval [0...vminsqr]
-    count_of_steps: int
-        0 < number of calculation steps
 
     Returns
     -------
@@ -559,13 +556,10 @@ def make_get_scaling_and_injection_data(
             [:,5] Qip, reactive power interpolated
             [:,6] Vabs_sqr, square of voltage magnitude
             [:,7] interpolate?"""
-    get_factor_data = make_get_factor_data(model, count_of_steps)
+    get_factor_data = make_get_factor_data(model)
     injections = model.injections
     node_to_inj = casadi.SX(model.mnodeinj).T
     def get_scaling_and_injection_data(step=0, k_prev=_DM_0r1c):
-        assert step < count_of_steps, \
-            f'index "step" ({step}) must be smaller than '\
-            f'value of paramter "count_of_steps" ({count_of_steps})'
         scaling_data = get_factor_data(step, k_prev)
         # injected node current
         Iinj_data = _injected_current(
@@ -573,15 +567,13 @@ def make_get_scaling_and_injection_data(
         return scaling_data, Iinj_data
     return get_scaling_and_injection_data
 
-def get_expressions(model, count_of_steps, vminsqr=_VMINSQR):
+def get_expressions(model, vminsqr=_VMINSQR):
     """Prepares data for estimation. Creates symbols and expressions.
 
     Parameters
     ----------
     model : egrid.model.Model
         data of electric grid
-    count_of_steps : int
-        number of estimation steps
     vminsqr : float, optional
         minimum voltage at loads for original load curve, squared
 
@@ -608,7 +600,7 @@ def get_expressions(model, count_of_steps, vminsqr=_VMINSQR):
     ed = create_v_symbols_gb_expressions(model)
     ed['get_scaling_and_injection_data'] = (
         make_get_scaling_and_injection_data(
-            model, ed['Vnode_syms'], vminsqr, count_of_steps))
+            model, ed['Vnode_syms'], vminsqr))
     ed['inj_to_node'] = casadi.SX(model.mnodeinj)
     return ed
 
@@ -721,7 +713,7 @@ def calculate_power_flow(
         create_v_symbols_gb_expressions(model)
         if v_syms_gb_ex is None else v_syms_gb_ex)
     get_scaling_and_injection_data = make_get_scaling_and_injection_data(
-        model, const_expr['Vnode_syms'], vminsqr, count_of_steps=1)
+        model, const_expr['Vnode_syms'], vminsqr)
     scaling_data, Iinj_data = get_scaling_and_injection_data(step=0)
     Vslack_syms = const_expr['Vslack_syms']
     Inode_inj = _reset_slack_current(
@@ -1838,7 +1830,7 @@ def get_step_data(
         model, expressions, scaling_data, Inode_inj, positions,
         diff_data, batch_constraints)
 
-def get_step_data_fns(model, count_of_steps):
+def get_step_data_fns(model):
     """Creates two functions for generating step specific data,
     'ini_step_data' and 'next_step_data'.
     Function 'ini_step_data' creates the step_data structure for the first run
@@ -1847,9 +1839,6 @@ def get_step_data_fns(model, count_of_steps):
     Parameters
     ----------
     model: egrid.model.Model
-
-    count_of_steps: int
-        number of estimation steps
 
     Returns
     -------
@@ -1885,7 +1874,7 @@ def get_step_data_fns(model, count_of_steps):
               constraints: str (optional)
                   optional, default ''
                   string of characters 'I'|'P'|'Q'|'V' or empty string ''"""
-    expressions = get_expressions(model, count_of_steps=count_of_steps)
+    expressions = get_expressions(model)
     make_step_data = partial(get_step_data, model, expressions)
     def next_step_data(
             step, step_data, voltages_ri, k, objectives='', constraints=''):
@@ -2030,8 +2019,7 @@ def optimize_steps(
           factors for injections
         * factor_data, Factordata
           factor data of step"""
-    make_step_data, next_step_data = get_step_data_fns(
-        model, max(1, len(step_params)))
+    make_step_data, next_step_data = get_step_data_fns(model)
     step_data = make_step_data(step=0, positions=positions)
     scaling_data = step_data.scaling_data
     # power flow calculation for initial voltages

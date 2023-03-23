@@ -62,15 +62,15 @@ class Get_factor_data(unittest.TestCase):
     def test_default_factors(self):
         """'get_factor_data' creates default factors if factors are not
         given explicitely"""
-        count_of_steps = 3
+        index_of_step = 3
         factors, injection_factor = ft.get_factor_data(
             pd.Series(['injid0'], name='id', dtype=str),
             Get_factor_data.empty_factors,
             Get_factor_data.empty_assocs,
-            count_of_steps)
+            index_of_step)
         assert_array_equal(
             [idx[0] for idx in factors.index],
-            list(range(count_of_steps)),
+            [index_of_step-1, index_of_step],
             err_msg="one factor per step")
         self.assertTrue(
             all(idx[1]=='const' for idx in factors.index),
@@ -91,12 +91,12 @@ class Get_factor_data(unittest.TestCase):
             grid.Deff(id=('kp', 'kq')),
             # link scaling factors to active and reactive power of consumer
             grid.Link(objid='consumer', id=('kp', 'kq'), part='pq'))
-        count_of_steps = 2
+        index_of_step = 1
         factors, injection_factor = ft.get_factor_data(
             model.injections.id,
             model.factors,
             model.injection_factor_associations,
-            count_of_steps)
+            index_of_step)
         self.assertEqual(
             factors.loc[0].shape[0],
             2,
@@ -255,8 +255,17 @@ class Make_get_factor_data(unittest.TestCase):
             grid.Link(objid='consumer', id=('kp', 'kq'), part='pq', step=1))
         self.assertIsNotNone(model, "make_model makes models")
         get_factor_data = ft.make_get_factor_data(model)
-        factor_data = get_factor_data(step=0)
+        factor_data = get_factor_data(step=1)
         print(factor_data)
+
+
+
+
+
+
+
+
+
         # self.assertEqual(
         #     factor_data.kpq.shape,
         #     (1,2),

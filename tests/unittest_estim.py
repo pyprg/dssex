@@ -416,7 +416,7 @@ class Power_flow_calculation_basic2(unittest.TestCase):
         """Calculating power flow using function 'optimize_step' creates same
         results like function 'dssex.pfcnum.calculate_power_flow'."""
         model = make_model(grid_pfc3)
-        expr = estim.get_expressions(model, count_of_steps=3)
+        expr = estim.get_expressions(model)
         step_data = estim.get_step_data(model, expr)
         succ_estim, Vnode_ri_estim, _ = estim.optimize_step(*step_data)
         self.assertTrue(succ_estim, 'estimation succeeds')
@@ -458,7 +458,7 @@ class Optimize_step(unittest.TestCase):
             # scaling factor kp for active power P of consumer
             grid.Deff('kp'),
             grid.Link(objid='consumer', part='p', id='kp'))
-        expressions = estim.get_expressions(model, count_of_steps=1)
+        expressions = estim.get_expressions(model)
         step_data = estim.get_step_data(
             model, expressions, objectives='P')
         succ, x_V, x_scaling = estim.optimize_step(*step_data)
@@ -490,7 +490,7 @@ class Optimize_step(unittest.TestCase):
             # scaling factor kp for active power P of consumer
             grid.Deff('kp'),
             grid.Link(objid='consumer', part='p', id='kp'))
-        expressions = estim.get_expressions(model, count_of_steps=1)
+        expressions = estim.get_expressions(model)
         step_data = estim.get_step_data(
             model, expressions, objectives='P')
         succ, x_V, x_scaling = estim.optimize_step(*step_data)
@@ -522,7 +522,7 @@ class Optimize_step(unittest.TestCase):
             # scaling factor kq for reactive power Q of consumer
             grid.Deff('kq'),
             grid.Link(objid='consumer', part='q', id='kq'))
-        expressions = estim.get_expressions(model, count_of_steps=1)
+        expressions = estim.get_expressions(model)
         step_data = estim.get_step_data(
             model, expressions, objectives='Q')
         succ, x_V, x_scaling = estim.optimize_step(*step_data)
@@ -554,7 +554,7 @@ class Optimize_step(unittest.TestCase):
             # scaling factor kq for reactive power Q of consumer
             grid.Deff('kq'),
             grid.Link(objid='consumer', part='q', id='kq'))
-        expressions = estim.get_expressions(model, count_of_steps=1)
+        expressions = estim.get_expressions(model)
         step_data = estim.get_step_data(
             model, expressions, objectives='Q')
         succ, x_V, x_scaling = estim.optimize_step(*step_data)
@@ -586,7 +586,7 @@ class Optimize_step(unittest.TestCase):
             # scaling factor kpq for active/reactive power P/Q of consumer
             grid.Deff('kpq'),
             grid.Link(objid='consumer', part='pq', id='kpq'))
-        expressions = estim.get_expressions(model, count_of_steps=1)
+        expressions = estim.get_expressions(model)
         step_data = estim.get_step_data(
             model, expressions, objectives='I')
         succ, x_V, x_scaling = estim.optimize_step(*step_data)
@@ -618,7 +618,7 @@ class Optimize_step(unittest.TestCase):
             # scaling factor kpq for active/reactive power P/Q of consumer
             grid.Deff('kpq'),
             grid.Link(objid='consumer', id=('kpq', 'kpq'), part='pq'))
-        expressions = estim.get_expressions(model, count_of_steps=1)
+        expressions = estim.get_expressions(model)
         step_data = estim.get_step_data(
             model, expressions, objectives='I')
         succ, x_V, x_scaling = estim.optimize_step(*step_data)
@@ -649,7 +649,7 @@ class Optimize_step(unittest.TestCase):
             # scaling factor kq for reactive power Q of consumer
             grid.Deff('kq'),
             grid.Link(objid='consumer', id='kq', part='q'))
-        expressions = estim.get_expressions(model, count_of_steps=1)
+        expressions = estim.get_expressions(model)
         step_data = estim.get_step_data(
             model, expressions, objectives='V')
         succ, x_V, x_scaling = estim.optimize_step(*step_data)

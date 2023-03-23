@@ -51,7 +51,7 @@ def _create_symbols_with_ids(ids):
     return casadi.vertcat(*(casadi.SX.sym(id_) for id_ in ids))
 
 def _get_step_factor_to_injection_part(
-        injectionids, assoc_frame, step_factors, count_of_steps):
+        injectionids, assoc_frame, step_factors, indices_of_steps):
     """Arranges ids for all calculation steps and injections.
 
     Parameters
@@ -62,8 +62,8 @@ def _get_step_factor_to_injection_part(
         * .id, str, ID of factor
     step_factors: pandas.DataFrame
 
-    count_of_steps: int
-        number of optimization steps
+    indices_of_steps: array_like
+        int, indices of optimization steps
 
     Returns
     -------
@@ -72,7 +72,7 @@ def _get_step_factor_to_injection_part(
         * .part, 'p'|'q'"""
     # all injections, create step, id, (pq) for all injections
     index_all = pd.MultiIndex.from_product(
-        [range(count_of_steps), injectionids, ('p', 'q')],
+        [indices_of_steps, injectionids, ('p', 'q')],
         names=('step', 'injid', 'part'))
     # step injid part => id
     return (
@@ -144,7 +144,7 @@ def _factor_index_per_step(factors):
         name='index_of_symbol')
 
 def get_factor_data(
-        injectionids, given_factors, assoc_frame, count_of_steps):
+        injectionids, given_factors, assoc_frame, index_of_step):
     """Creates and arranges indices for scaling factors and initialization
     of scaling factors.
 
@@ -160,20 +160,22 @@ def get_factor_data(
         * .max, float, greatest value, constraint during optimization
     assoc_frame: pandas.DataFrame (int (step), str (injid), 'p'|'q' (part))
         * str (id of factor)
-    count_of_steps: int
-        number of optimization steps
+    index_of_step: int
+        index of optimization steps, first step has index 0
 
     Returns
     -------
     tuple
         * pandas.DataFrame, all scaling factors
         * pandas.DataFrame, injections with scaling factors"""
-    assert 0 < count_of_steps, \
-        "value 'count_of_steps' must be an integer greater than 0"
+    indices_of_steps = (
+        [index_of_step - 1, index_of_step]
+        if 0 < index_of_step else
+        [0])
     # given factors
     # step, id_of_factor => id_of_injection, 'id_p'|'id_q'
     step_injection_part_factor = _get_step_factor_to_injection_part(
-        injectionids, assoc_frame, given_factors, count_of_steps)
+        injectionids, assoc_frame, given_factors, indices_of_steps)
     # remove factors not needed, add default (nan) factors if necessary
     required_factors_index = step_injection_part_factor.index.unique()
     required_factors = given_factors.reindex(required_factors_index)
@@ -193,6 +195,7 @@ def get_factor_data(
     # add data for initialization
     factors['index_of_source'] = _get_factor_ini_values(
         factors, index_of_symbol)
+    factors.sort_values(by=['step', 'type', 'id'], inplace=True)
     if step_injection_part_factor.shape[0]:
         injection_factors = (
             step_injection_part_factor
@@ -217,30 +220,6 @@ def get_factor_data(
     factors.reset_index(inplace=True)
     factors.set_index(['step', 'type', 'id'], inplace=True)
     return factors, injection_factors
-
-def _get_factors(model, count_of_steps=1):
-    """Creates identifiers and indices of scaling factors. Creates mapping
-    from injections to scaling factors. The mapping is specific for each
-    calculation step, injection and scaled part of power (either active or
-    reactive power)
-
-    Parameters
-    ----------
-    model: egrid.model.Model
-        data of electric grid
-    count_of_steps: int
-        number of optimization steps (default is 1)
-
-    Returns
-    -------
-    tuple
-        * pandas.DataFrame, all scaling factors
-        * pandas.DataFrame, injections with scaling factors"""
-    return get_factor_data(
-        model.injections.id,
-        model.factors,
-        model.injection_factor_associations,
-        count_of_steps)
 
 def _groupby_step(df):
     """Resets index of pandas.Dataframe df and groups the data in the
@@ -406,9 +385,9 @@ def _get_factor_data_for_step(
             kvar_max=_DM_0r1c,
             kconsts=_SX_0r1c,
             values_of_consts=_DM_0r1c,
-            var_const_to_factor=[],
-            var_const_to_kp=[],
-            var_const_to_kq=[])
+            var_const_to_factor=(),
+            var_const_to_kp=(),
+            var_const_to_kq=())
     # a symbol for each factor
     symbols = _create_symbols_with_ids(factors.id)
     try:
@@ -461,7 +440,7 @@ def _get_factor_data_for_step(
         var_const_to_kp=var_const_to_factor[injections_factors.kp],
         var_const_to_kq=var_const_to_factor[injections_factors.kq])
 
-def make_get_factor_data(model, count_of_steps=1):
+def make_get_factor_data(model):
     """Creates a function for creating Factordata specific for a calculation
     step.
 
@@ -469,8 +448,6 @@ def make_get_factor_data(model, count_of_steps=1):
     ----------
     model: egrid.model.Model
         data of electric grid
-    count_of_steps: int
-        0 < number of calculation steps
 
     Returns
     -------
@@ -492,11 +469,18 @@ def make_get_factor_data(model, count_of_steps=1):
                 column vector, symbols for constants of scaling factors
             values_of_consts: casadi.DM
                 column vector, values for consts"""
-    factors, injection_factors = _get_factors(model, count_of_steps)
-    return partial(
-        _get_factor_data_for_step,
-        _groupby_step(factors),
-        _groupby_step(injection_factors))
+    def _get_factor_data(step=0, k_prev=_DM_0r1c):
+        factors, injection_factors = get_factor_data(
+                model.injections.id,
+                model.factors,
+                model.injection_factor_associations,
+                step)
+        return _get_factor_data_for_step(
+            _groupby_step(factors),
+            _groupby_step(injection_factors),
+            step,
+            k_prev)
+    return _get_factor_data
 
 def get_values_of_factors(factor_data, x_factors):
     """Function for extracting factors for injections from the result provided
