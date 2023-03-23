@@ -2025,11 +2025,11 @@ def optimize_steps(
           (initial power flow calculation result is -1, first estimation is 0)
         * bool, success?
         * voltages_ri, casadi.DM (shape 2n,1)
-            calculated node voltages, real voltages then imaginary voltages
+          calculated node voltages, real voltages then imaginary voltages
         * k, casadi.DM (shape m,1)
-            factors for injections
+          factors for injections
         * factor_data, Factordata
-            factor data of step"""
+          factor data of step"""
     make_step_data, next_step_data = get_step_data_fns(
         model, max(1, len(step_params)))
     step_data = make_step_data(step=0, positions=positions)

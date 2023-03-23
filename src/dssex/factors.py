@@ -19,7 +19,12 @@ Created on Fri Dec 16 00:14:07 2022
 @author: pyprg
 
 The function 'get_factors' returns data on factors to be applied to nominal
-active and reactive power of injections.
+active and reactive power of injections. Factors fall in one of the two
+categories 'var' or 'const'. Factors of category 'var' are decision variables.
+Factors of category 'const' are parameters. Factors are specific for
+each step. A factor is initialized by a value of a factor from previous step
+or - if none exists - by a factor specific 'value' (which is an attribute of
+the input data).
 """
 import casadi
 import pandas as pd
@@ -52,9 +57,9 @@ def _get_step_factor_to_injection_part(
     Parameters
     ----------
     injectionids: pandas.Series
-        str, IDs of all injecions
+        str, IDs of all injections
     assoc_frame: (str (step), str (injid), 'p'|'q' (part))
-        * .id, str
+        * .id, str, ID of factor
     step_factors: pandas.DataFrame
 
     count_of_steps: int
@@ -94,18 +99,19 @@ def _get_factor_ini_values(myfactors, symbols):
         [unique_factors.get_level_values(0) - 1, myfactors.id_of_source.array])
     ini = pd.Series(symbols, index=unique_factors).reindex(prev_index)
     ini.index = unique_factors
-    # transfer data from value in case of missing source data
+    # '-1' means copy initial data from column 'value' as there is no valid
+    #   reference to a var/const of previous step
     ini.fillna(-1, inplace=True)
     return ini.astype(dtype='Int64')
 
-def _get_default_factors(count_of_steps):
+def _get_default_factors(indices_of_steps):
     """Generates one default scaling factor for each step. The factor is
     of type 'const' has value 1.0, minimum and maximum are 1.0 too.
 
     Parameters
     ----------
-    count_of_steps: int
-        number of factors to generate
+    indices_of_steps: array_like
+        int, indices of steps which to create a default factor for
 
     Parameters
     ----------
@@ -116,7 +122,7 @@ def _get_default_factors(count_of_steps):
     return (
         pd.DataFrame(
             deff(id_=DEFAULT_FACTOR_ID, type_='const', value=1.0,
-                 min_=1.0, max_=1.0, step=range(count_of_steps)),
+                 min_=1.0, max_=1.0, step=indices_of_steps),
             columns=Factor._fields)
         .set_index(['step', 'id']))
 
@@ -173,7 +179,11 @@ def get_factor_data(
     required_factors = given_factors.reindex(required_factors_index)
     if required_factors.isna().any(axis=None):
         # ensure existence of default factors when needed
-        default_factors = _get_default_factors(count_of_steps)
+        default_factor_steps = (
+            required_factors[required_factors.type.isna()]
+            .reset_index()
+            .step)
+        default_factors = _get_default_factors(default_factor_steps)
         # replace nan with values (for required default factors)
         factors = required_factors.combine_first(default_factors)
     else:
@@ -420,9 +430,9 @@ def _get_factor_data_for_step(
     factors_consts = factors[factors.type=='const']
     symbols_of_consts, values_of_consts = select_symbols_values(
         factors_consts.index_of_symbol)
-    # the optimization result is provided as a vector of concatenated
-    #   scaling variables and scaling constants, we prepare indices for
-    #   mapping to kp/kq (which are ordered according to injections)
+    # the optimization result is provided as a concatenation of
+    #   values for decision variables and parameters, here we prepare indices
+    #   for mapping to kp/kq (which are ordered according to injections)
     var_const_idxs = np.concatenate(
         [factors_var.index_of_symbol.array,
          factors_consts.index_of_symbol.array])
@@ -489,7 +499,7 @@ def make_get_factor_data(model, count_of_steps=1):
         _groupby_step(injection_factors))
 
 def get_values_of_factors(factor_data, x_factors):
-    """Function for extracting factors from the result provided
+    """Function for extracting factors for injections from the result provided
     by the solver.
     Enhances scaling factors calculated by optimization with constant
     scaling factors and reorders the factors according to order of injections.
@@ -512,14 +522,15 @@ def get_values_of_factors(factor_data, x_factors):
         * .var_const_to_kq
             array_like int, converts var_const to kq, one reactive power
             scaling factor for each injection (var_const[var_const_to_kq])
-    x_factors: casadi.DM
-        result of optimization (subset)
+    x_factors: array_like
+        float, result of optimization (subset)
 
     Result
     ------
     tuple
         * numpy.array (n,2), kp, kq for each injection
         * numpy.array (m,1) kvar/const"""
+    # concat values of decision variables and parameters
     k_var_const = np.vstack([x_factors, factor_data.values_of_consts])
     kp = k_var_const[factor_data.var_const_to_kp]
     kq = k_var_const[factor_data.var_const_to_kq]
