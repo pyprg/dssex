@@ -19,7 +19,7 @@ Created on Fri Dec 16 00:14:07 2022
 @author: pyprg
 
 The function 'get_factors' returns data on factors to be applied to nominal
-active and reactive power of injections. 
+active and reactive power of injections.
 """
 import casadi
 import pandas as pd
@@ -171,10 +171,13 @@ def get_factor_data(
     # remove factors not needed, add default (nan) factors if necessary
     required_factors_index = step_injection_part_factor.index.unique()
     required_factors = given_factors.reindex(required_factors_index)
-    # ensure existence of default factors when needed
-    default_factors = _get_default_factors(count_of_steps)
-    # replace nan with values (for required default factors)
-    factors = required_factors.combine_first(default_factors)
+    if required_factors.isna().any(axis=None):
+        # ensure existence of default factors when needed
+        default_factors = _get_default_factors(count_of_steps)
+        # replace nan with values (for required default factors)
+        factors = required_factors.combine_first(default_factors)
+    else:
+        factors = required_factors
     index_of_symbol = _factor_index_per_step(factors)
     factors['index_of_symbol'] = index_of_symbol
     # add data for initialization
@@ -382,7 +385,20 @@ def _get_factor_data_for_step(
         var_const_to_kq: array_like
             int, converts var_const to kq, one reactive power scaling factor
             for each injection (var_const[var_const_to_kq])"""
-    factors = factor_step_groups.get_group(step)
+    try:
+        factors = factor_step_groups.get_group(step)
+    except KeyError:
+        return Factordata(
+            kpq=casadi.horzcat(_SX_0r1c, _SX_0r1c),
+            kvars=_SX_0r1c,
+            values_of_vars=_DM_0r1c,
+            kvar_min=_DM_0r1c,
+            kvar_max=_DM_0r1c,
+            kconsts=_SX_0r1c,
+            values_of_consts=_DM_0r1c,
+            var_const_to_factor=[],
+            var_const_to_kp=[],
+            var_const_to_kq=[])
     # a symbol for each factor
     symbols = _create_symbols_with_ids(factors.id)
     try:
@@ -487,14 +503,14 @@ def get_values_of_factors(factor_data, x_factors):
     factor_data: Factordata
         * .values_of_consts,
             array_like, float, column vector, values for consts
-        * .var_const_to_factor, 
+        * .var_const_to_factor,
             array_like int, index_of_factor=>index_of_var_const
             converts var_const to factor (var_const[var_const_to_factor])
         * .var_const_to_kp
-            array_like int, converts var_const to kp, one active power 
+            array_like int, converts var_const to kp, one active power
             scaling factor for each injection (var_const[var_const_to_kp])
         * .var_const_to_kq
-            array_like int, converts var_const to kq, one reactive power 
+            array_like int, converts var_const to kq, one reactive power
             scaling factor for each injection (var_const[var_const_to_kq])
     x_factors: casadi.DM
         result of optimization (subset)
