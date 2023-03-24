@@ -207,10 +207,10 @@ def get_factor_data(
     given_factors_ = _add_step_index(given_factors.copy(), indices_of_steps)
     assoc_frame_ = _add_step_index(assoc_frame.copy(), indices_of_steps)
     # step, id_of_factor => id_of_injection, 'id_p'|'id_q'
-    step_injection_part_factor = _get_step_factor_to_injection_part(
+    step_factor_injection_part = _get_step_factor_to_injection_part(
         injectionids, assoc_frame_, given_factors_, indices_of_steps)
     # remove factors not needed, add default (nan) factors if necessary
-    required_factors_index = step_injection_part_factor.index.unique()
+    required_factors_index = step_factor_injection_part.index.unique()
     required_factors = given_factors_.reindex(required_factors_index)
     if required_factors.isna().any(axis=None):
         # ensure existence of default factors when needed
@@ -230,9 +230,9 @@ def get_factor_data(
     factors['index_of_source'] = _get_factor_ini_values(
         factors, index_of_symbol)
     factors.sort_values(by=['step', 'type', 'id'], inplace=True)
-    if not step_injection_part_factor.empty:
+    if not step_factor_injection_part.empty:
         injection_factors = (
-            step_injection_part_factor
+            step_factor_injection_part
             .join(factors.index_of_symbol)
             .reset_index()
             .set_index(['step', 'injid', 'part'])
