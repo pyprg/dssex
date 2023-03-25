@@ -529,15 +529,15 @@ def make_get_scaling_and_injection_data(model, Vnode_syms, vminsqr):
             kq: casadi.SX
                 column vector, symbols for scaling factor of reactive power
                 per injection
-            kvars: casadi.SX
+            vars: casadi.SX
                 column vector, symbols for variables of scaling factors
             values_of_vars: casadi.DM
-                column vector, initial values for kvars
-            kvar_min: casadi.DM
-                lower limits of kvars
-            kvar_max: casadi.DM
-                upper limits of kvars
-            kconsts: casadi.SX
+                column vector, initial values for vars
+            var_min: casadi.DM
+                lower limits of vars
+            var_max: casadi.DM
+                upper limits of vars
+            consts: casadi.SX
                 column vector, symbols for constants of scaling factors
             values_of_consts: casadi.DM
                 column vector, values for consts
@@ -621,8 +621,8 @@ def calculate_power_flow2(
         * 'position_syms', casadi.SX, symbols of tap positions
         * 'Y_by_V', casadi.SX, expression for Y @ V
     factor_data: Factordata
-        * .kvars, casadi.SX, symbols of variable scaling factors
-        * .kconsts, casadi.SX symbols of constant scaling factors
+        * .vars, casadi.SX, symbols of variable scaling factors
+        * .consts, casadi.SX symbols of constant scaling factors
         * .values_of_vars
         * .values_of_consts
     Inode: casadi.SX (shape n,2)
@@ -645,8 +645,8 @@ def calculate_power_flow2(
     parameter_syms=casadi.vertcat(
         *Vslack_syms,
         expr['position_syms'],
-        factor_data.kvars,
-        factor_data.kconsts)
+        factor_data.vars,
+        factor_data.consts)
     Vnode_syms = expr['Vnode_syms']
     #Inode_ri = vstack(Inode_, 2)
     Inode_ri = vstack(Inode, 2)
@@ -1435,12 +1435,12 @@ def get_optimize_vk(model, expressions, positions=None):
             float, initial node voltages with separated real and imaginary
             parts, first real then imaginary
         factor_data: Factordata
-            * .kvars, casadi.SX, column vector, symbols for variables
+            * .vars, casadi.SX, column vector, symbols for variables
               of scaling factors
-            * .kconsts, casadi.SX, column vector, symbols for constants
+            * .consts, casadi.SX, column vector, symbols for constants
               of scaling factors
             * .values_of_vars, casadi.DM, column vector, initial values
-              for kvars
+              for vars
             * .values_of_consts, casadi.DM, column vector, values for consts
         Inode_inj: casadi.SX (shape n,2)
             expressions for injected node current
@@ -1460,9 +1460,9 @@ def get_optimize_vk(model, expressions, positions=None):
             success?
         casadi.DM
             result vector of optimization"""
-        syms = casadi.vertcat(Vnode_ri_syms, factor_data.kvars)
+        syms = casadi.vertcat(Vnode_ri_syms, factor_data.vars)
         objective = casadi.sumsqr(diff_data[2] - diff_data[3])
-        params = casadi.vertcat(params_, factor_data.kconsts)
+        params = casadi.vertcat(params_, factor_data.consts)
         values_of_parameters = casadi.vertcat(
             values_of_parameters_, factor_data.values_of_consts)
         constraints_ = casadi.vertcat(
@@ -1472,8 +1472,8 @@ def get_optimize_vk(model, expressions, positions=None):
         # initial values of decision variables
         ini = casadi.vertcat(Vnode_ri_ini, factor_data.values_of_vars)
         # limits of decision variables
-        lbx = casadi.vertcat(Vmin, factor_data.kvar_min)
-        ubx = casadi.vertcat(Vmax, factor_data.kvar_max)
+        lbx = casadi.vertcat(Vmin, factor_data.var_min)
+        ubx = casadi.vertcat(Vmax, factor_data.var_max)
         # calculate
         r = solver(
             x0=ini, p=values_of_parameters, lbg=0, ubg=0, lbx=lbx, ubx=ubx)
@@ -1544,9 +1544,9 @@ def get_optimize_vk2(model, expressions, positions=None):
     def optimize_vk(
         Vnode_ri_ini, scaling_data, Inode_inj, diff_data,
         constraints=_SX_0r1c):
-        syms = casadi.vertcat(Vnode_ri_syms, scaling_data.kvars)
+        syms = casadi.vertcat(Vnode_ri_syms, scaling_data.vars)
         objective = casadi.sumsqr(diff_data[2] - diff_data[3])
-        params = casadi.vertcat(params_, scaling_data.kconsts)
+        params = casadi.vertcat(params_, scaling_data.consts)
         values_of_parameters = casadi.vertcat(
             values_of_parameters_, scaling_data.values_of_consts)
         constraints_ = casadi.vertcat(
@@ -1561,8 +1561,8 @@ def get_optimize_vk2(model, expressions, positions=None):
         vini = _rm_slack_entries(Vnode_ri_ini, count_of_slacks)
         ini = casadi.vertcat(vini, scaling_data.values_of_vars)
         # limits of decision variables
-        lbx = casadi.vertcat(Vmin, scaling_data.kvar_min)
-        ubx = casadi.vertcat(Vmax, scaling_data.kvar_max)
+        lbx = casadi.vertcat(Vmin, scaling_data.var_min)
+        ubx = casadi.vertcat(Vmax, scaling_data.var_max)
         # calculate
         r = solver(
             x0=ini, p=values_of_parameters, lbg=0, ubg=0, lbx=lbx, ubx=ubx)
@@ -1684,8 +1684,8 @@ def get_calculate_from_result(model, expressions, factor_data, x):
     x_scaling = x[count_of_v_ri:]
     Vslacks_neg = -model.slacks.V
     return make_calculate(
-        (factor_data.kvars,
-         factor_data.kconsts,
+        (factor_data.vars,
+         factor_data.consts,
          Vnode_ri_syms,
          vstack(expressions['Vslack_syms'], 2),
          expressions['position_syms']),
@@ -1728,12 +1728,12 @@ expressions: dict
     * 'inj_to_node', casadi.SX, matrix, maps from
       injections to power flow calculation nodes
 factor_data: Factordata
-    * .kvars, casadi.SX, column vector, symbols for variables
+    * .vars, casadi.SX, column vector, symbols for variables
       of factors
-    * .kconsts, casadi.SX, column vector, symbols for constants
+    * .consts, casadi.SX, column vector, symbols for constants
       of scaling factors
     * .values_of_vars, casadi.DM, column vector, initial values
-      for kvars
+      for vars
     * .values_of_consts, casadi.DM, column vector, values for consts
 Inode_inj: casadi.SX (shape n,2)
     * Inode_inj[:,0] - Ire, real part of current injected into node
@@ -1925,12 +1925,12 @@ def optimize_step(
         * 'Vslack_syms', casadi.SX (shape n,2)
         * 'position_syms', casadi.SX (shape n,1)
     scaling_data: Factordata
-        * .kvars, casadi.SX, column vector, symbols for variables
+        * .vars, casadi.SX, column vector, symbols for variables
           of scaling factors
-        * .kconsts, casadi.SX, column vector, symbols for constants
+        * .consts, casadi.SX, column vector, symbols for constants
           of scaling factors
         * .values_of_vars, casadi.DM, column vector, initial values
-          for kvars
+          for vars
         * .values_of_consts, casadi.DM, column vector, values for consts
     Inode_inj: casadi.SX (shape n,2)
         * Inode_inj[:,0] - Ire, real part of current injected into node
