@@ -25,7 +25,7 @@ import pandas as pd
 import dssex.factors as ft
 import egrid.builder as grid
 from egrid import make_model
-from numpy.testing import assert_array_equal, assert_array_almost_equal
+from numpy.testing import assert_array_equal
 
 class Get_factor_data(unittest.TestCase):
 
@@ -45,29 +45,73 @@ class Get_factor_data(unittest.TestCase):
             names=('step', 'injid', 'part')))
     empty_injids = pd.Series([], name='id', dtype=str)
 
+    def test_terminal_factor(self):
+        """"""
+        model = make_model(
+            grid.Slacknode('n_0'),
+            grid.Branch(
+                id='branch',
+                id_of_node_A='n_0',
+                id_of_node_B='n_1'),
+            grid.Injection('injection', 'n_1'),
+            # scaling, define scaling factors
+            grid.Deff(id='taps', step=-1),
+            # link scaling factors to active and reactive power of consumer
+            grid.Link(
+                objid='branch',
+                id='taps',
+                nodeid='n_0',
+                cls=grid.Terminallink,
+                step=-1))
+        index_of_step = 1
+        factors, terminal_factor = ft.get_taps_factor_data(
+            model.branchterminals[['id_of_branch','id_of_node']].reset_index(),
+            model.factors,
+            model.terminal_factor_associations,
+            steps=[index_of_step-1, index_of_step],
+            start=[3, 5])
+        self.assertEqual(
+            len(factors.loc[0]), 
+            1,
+            "one factor for step 0")
+        self.assertEqual(
+            factors.loc[0].index_of_symbol[0], 
+            3,
+            "step-0 symbol has index 3")
+        self.assertEqual(
+            len(factors.loc[1]), 
+            1,
+            "one factor for step 1")
+        self.assertEqual(
+            factors.loc[1].index_of_symbol[0], 
+            5,
+            "step-1 symbol has index 5")
+
     def test_no_data(self):
-        """'get_factor_data' processes empty input"""
-        factors, injection_factor = ft.get_factor_data(
+        """'get_scaling_factor_data' processes empty input"""
+        factors, injection_factor = ft.get_scaling_factor_data(
             Get_factor_data.empty_injids,
             Get_factor_data.empty_factors,
             Get_factor_data.empty_assocs,
-            3)
+            [2, 3],
+            None)
         self.assertTrue(
             factors.empty,
-            "get_factor_data returns no data for factors")
+            "get_scaling_factor_data returns no data for factors")
         self.assertTrue(
             injection_factor.empty,
-            "get_factor_data returns no data for association injection_factor")
+            "get_scaling_factor_data returns no data for association injection_factor")
 
-    def test_default_factors(self):
-        """'get_factor_data' creates default factors if factors are not
+    def test_default_scaling_factors(self):
+        """'get_scaling_factor_data' creates default scaling factors if factors are not
         given explicitely"""
         index_of_step = 3
-        factors, injection_factor = ft.get_factor_data(
+        factors, injection_factor = ft.get_scaling_factor_data(
             pd.Series(['injid0'], name='id', dtype=str),
             Get_factor_data.empty_factors,
             Get_factor_data.empty_assocs,
-            index_of_step)
+            [index_of_step-1, index_of_step],
+            None)
         assert_array_equal(
             [idx[0] for idx in factors.index],
             [index_of_step-1, index_of_step],
@@ -79,24 +123,23 @@ class Get_factor_data(unittest.TestCase):
             all(idx[2]==grid.DEFAULT_FACTOR_ID for idx in factors.index),
             f"all factors are '{grid.DEFAULT_FACTOR_ID}'")
 
-    def test_step1_without_factordef(self):
-        """'get_factor_data' creates default factors if factors are not
+    def test_step1_without_scaling_factordef(self):
+        """'get_scaling_factor_data' creates default scaling factors if factors are not
         given explicitely"""
-        vcx_slack = 0.95+0.02j
-        s = 30.+10.j
         model = make_model(
-            grid.Slacknode('n_0', V=vcx_slack),
-            grid.Injection('consumer', 'n_0', P10=s.real, Q10=s.imag),
+            grid.Slacknode('n_0'),
+            grid.Injection('consumer', 'n_0'),
             # scaling, define scaling factors
             grid.Deff(id=('kp', 'kq'), step=0),
             # link scaling factors to active and reactive power of consumer
             grid.Link(objid='consumer', id=('kp', 'kq'), part='pq', step=0))
         index_of_step = 1
-        factors, injection_factor = ft.get_factor_data(
+        factors, injection_factor = ft.get_scaling_factor_data(
             model.injections.id,
             model.factors,
             model.injection_factor_associations,
-            index_of_step)
+            [index_of_step-1, index_of_step],
+            None)
         self.assertEqual(
             factors.loc[0].shape[0],
             2,
@@ -118,24 +161,23 @@ class Get_factor_data(unittest.TestCase):
             all(factors.index_of_source == -1),
             "there are no source factors")
 
-    def test_generic_factor(self):
-        """'get_factor_data' creates default factors if factors are not
+    def test_generic_scaling_factor(self):
+        """'get_scaling_factor_data' creates default factors if factors are not
         given explicitely"""
-        vcx_slack = 0.95+0.02j
-        s = 30.+10.j
         model = make_model(
-            grid.Slacknode('n_0', V=vcx_slack),
-            grid.Injection('consumer', 'n_0', P10=s.real, Q10=s.imag),
+            grid.Slacknode('n_0'),
+            grid.Injection('consumer', 'n_0'),
             # scaling, define scaling factors
             grid.Deff(id=('kp', 'kq'), step=-1),
             # link scaling factors to active and reactive power of consumer
             grid.Link(objid='consumer', id=('kp', 'kq'), part='pq', step=-1))
         index_of_step = 1
-        factors, injection_factor = ft.get_factor_data(
+        factors, injection_factor = ft.get_scaling_factor_data(
             model.injections.id,
             model.factors,
             model.injection_factor_associations,
-            index_of_step)
+            [index_of_step-1, index_of_step],
+            None)
         factors_step_0 = factors.loc[0]
         self.assertEqual(
             len(factors_step_0),
@@ -146,6 +188,38 @@ class Get_factor_data(unittest.TestCase):
             len(factors_step_1),
             2,
             "two factors for step 1")
+
+    def test_scaling_factor_with_terminallink(self):
+        """'get_scaling_factor_data' creates factors for injections
+        if linked with Injectionlink only"""
+        model = make_model(
+            grid.Slacknode('n_0'),
+            grid.Injection('consumer', 'n_0'),
+            # scaling, define scaling factors
+            grid.Deff(id=('kp', 'kq'), step=-1),
+            # link scaling factors to active and reactive power of consumer
+            grid.Link(
+                objid='consumer',
+                id=('kp', 'kq'),
+                part='pq',
+                cls=grid.Terminallink,
+                step=-1))
+        index_of_step = 0
+        factors, injection_factor = ft.get_scaling_factor_data(
+            model.injections.id,
+            model.factors,
+            model.injection_factor_associations,
+            [0],
+            None)
+        self.assertEqual(
+            len(factors),
+            1,
+            "one factor")
+        self.assertEqual(
+            factors.index[0][2],
+            grid.DEFAULT_FACTOR_ID,
+            "'get_scaling_factor_data' creates a scaling factor with ID "
+            f"{grid.DEFAULT_FACTOR_ID} as link is a Terminallink")
 
 class Make_get_factor_data(unittest.TestCase):
 
@@ -159,8 +233,8 @@ class Make_get_factor_data(unittest.TestCase):
             grid.Injection('consumer0', 'n_0', P10=s.real, Q10=s.imag),
             grid.Injection('consumer1', 'n_0', P10=s.real, Q10=s.imag))
         self.assertIsNotNone(model, "make_model makes models")
-        get_factor_data = ft.make_get_factor_data(model)
-        factor_data = get_factor_data(step=0)
+        get_scaling_factor_data = ft.make_get_factor_data(model)
+        factor_data = get_scaling_factor_data(step=0)
         self.assertEqual(
             factor_data.kpq.shape,
             (2,2),
@@ -224,8 +298,8 @@ class Make_get_factor_data(unittest.TestCase):
             # link scaling factors to active and reactive power of consumer
             grid.Link(objid='consumer', id=('kp', 'kq'), part='pq', step=0))
         self.assertIsNotNone(model, "make_model makes models")
-        get_factor_data = ft.make_get_factor_data(model)
-        factor_data = get_factor_data(step=0)
+        get_scaling_factor_data = ft.make_get_factor_data(model)
+        factor_data = get_scaling_factor_data(step=0)
         self.assertEqual(
             factor_data.kpq.shape,
             (1,2),
@@ -288,8 +362,8 @@ class Make_get_factor_data(unittest.TestCase):
             # link scaling factors to active and reactive power of consumer
             grid.Link(objid='consumer', id=('kp', 'kq'), part='pq', step=1))
         self.assertIsNotNone(model, "make_model makes models")
-        get_factor_data = ft.make_get_factor_data(model)
-        factor_data = get_factor_data(step=1)
+        get_scaling_factor_data = ft.make_get_factor_data(model)
+        factor_data = get_scaling_factor_data(step=1)
         self.assertEqual(
             factor_data.kpq.shape,
             (1,2),
