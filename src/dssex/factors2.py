@@ -680,14 +680,14 @@ def make_get_factor_data(model):
 
 def _empty_like(df, droplevel=-1):
     """Creates an empty pandas.DataFrame from a template DataFrame.
-    
+
     Parameters
     ----------
     df: pandas.DataFrame
-        
+
     droplevel: int
         function drops a level from index if value is greater -1
-        
+
     Returns
     -------
     pandas.DataFrame"""
@@ -697,7 +697,7 @@ def _empty_like(df, droplevel=-1):
 
 Stepgroups = namedtuple(
     'Stepgroups', 'groups template')
-Stepgroups.__doc__ = """pandas.Groupby object and a(n empty) DataFrame 
+Stepgroups.__doc__ = """pandas.Groupby object and a(n empty) DataFrame
 template.
 
 Parameters
@@ -710,12 +710,12 @@ template: pandas.DataFrame
 
 def _create_stepgroups(df):
     """Groups df by column 'step'.
-    
+
     Parameters
     ----------
     df: pandas.DataFrame
         * .step
-    
+
     Returns
     -------
     Stepgroups"""
@@ -725,13 +725,13 @@ def _create_stepgroups(df):
 def _selectgroup(step, stepgroups):
     """Selects a group with index step from stepgroups. Returns a copy of
     stepgroups.template if no group with index exists.
-    
+
     Parameters
     ----------
     step: int
         index of optimization step
     stepgroups: Stepgroups
-    
+
     Returns
     -------
     pandas.DataFrame"""
@@ -743,14 +743,14 @@ def _selectgroup(step, stepgroups):
 def _selectgroups(steps, stepgroups):
     """Selects and concatenates groups from stepgroups if present.
     Returns an empty pandas.DataFrame otherwise.
-    
+
     Parameters
     ----------
     steps: interable
         int, index of optimization step, first step is 0, generic data
         have step -1
     stepgroups: Stepgroups
-    
+
     Returns
     -------
     pandas.DataFrame"""
@@ -761,7 +761,7 @@ Factordefs = namedtuple(
     'gen_factor_data gen_factor_symbols gen_injfactor gen_termfactor '
     'factorgroups injfactorgroups termfactorgroups')
 Factordefs.__doc__ ="""
-Data of generic factors (step == -1), 
+Data of generic factors (step == -1),
 symbols for generic factors, references to injections and terminals for
 generic factors.
 
@@ -780,14 +780,14 @@ Parameters
 """
 
 def _get_factordefs(model):
-    """Create casadi.SX symbols for generic factor. Filter valid data.
+    """Create casadi.SX symbols for generic factors. Filters valid data.
     Generic factors are present in each step, they have step index -1.
-    
+
     Parameters
     ----------
     model: egrid.model.Model
         data of electric grid
-        
+
     Returns
     -------
     Factordefs
@@ -817,14 +817,14 @@ def _get_factordefs(model):
     factors['index_of_symbol'] = range(len(factors))
     symbols = _create_symbols_with_ids(factors.id)
     return Factordefs(
-        factors.set_index('id'), 
-        symbols, 
-        injassoc.set_index(['injid', 'part']), 
-        termassoc.set_index(['branchid', 'nodeid']), 
+        factors.set_index('id'),
+        symbols,
+        injassoc.set_index(['injid', 'part']),
+        termassoc.set_index(['branchid', 'nodeid']),
         factorgroups, injfactorgroups, termfactorgroups)
 
 def _add_step_index2(df, step_indices):
-    """Copies data of df for each step index in step_indices. 
+    """Copies data of df for each step index in step_indices.
     Concatenates the data.
 
     Parameters
@@ -848,7 +848,7 @@ def _add_step_index2(df, step_indices):
     return pd.concat([_new_index(idx) for idx in step_indices])
 
 def _get_injection_factors2(step_factor_injection_part, factors):
-    """Creates crossreference from (step, injection) to IDs and 
+    """Creates crossreference from (step, injection) to IDs and
     indices of scaling factors for active and reactive power.
 
     Parameters
@@ -941,7 +941,7 @@ def get_scaling_factor_data2(model, factordefs, steps, start):
     assoc_steps = (
         _selectgroups(steps, factordefs.injfactorgroups)
         .set_index(['step', 'injid', 'part']))
-    # get generic_assocs which are not in assocs of step, this allows 
+    # get generic_assocs which are not in assocs of step, this allows
     #   overriding the linkage of factors
     assoc_diff = generic_injfactor_steps.index.difference(assoc_steps.index)
     generic_assoc = generic_injfactor_steps.reindex(assoc_diff)
@@ -953,34 +953,35 @@ def get_scaling_factor_data2(model, factordefs, steps, start):
     #   copy generic_factors and add step indices
     generic_factor_steps = _add_step_index2(factordefs.gen_factor_data, steps)
     # retrieve step specific factors
-    factors_step = (
+    factors_steps = (
         _selectgroups(steps, factordefs.factorgroups)
         .set_index(['step', 'id']))
     # select generic factors only if not part of specific factors
     req_generic_factors_index = generic_factor_steps.index.difference(
-        factors_step.index)
+        factors_steps.index)
     # union of generic and specific injection factors
     given_factors = pd.concat(
         [generic_factor_steps
              .drop(columns=['index_of_symbol'])
-             .reindex(req_generic_factors_index), 
-         factors_step])
+             .reindex(req_generic_factors_index),
+         factors_steps])
     # generate MultiIndex for:
-    #   - two factors 
+    #   - two factors
     #   - all requested steps
     #   - all injections
     step_injection_part__factor = _get_step_injection_part_to_factor(
         model.injections.id, inj_assoc, steps)
     # step-to-factor index
-    step__factor = (
+    step_factor = (
         pd.MultiIndex.from_arrays(
             [step_injection_part__factor.index.get_level_values('step'),
-             step_injection_part__factor.id])
+             step_injection_part__factor.id],
+            names=['step', 'id'])
         .unique())
     # given_factors, expand union of generic and specific factors to
     #   all required factors
     # this method call destroys type info of column 'is_discrete', was bool
-    required_factors = given_factors.reindex(step__factor)
+    required_factors = given_factors.reindex(step_factor)
     factors = (
         _add_default_factors(required_factors)
         .astype({'is_discrete':bool}, copy=False))
@@ -997,7 +998,7 @@ def get_scaling_factor_data2(model, factordefs, steps, start):
     # add data for initialization
     factors['index_of_source'] = _get_factor_ini_values(factors)
     injection_factors = _get_injection_factors2(
-        step_injection_part__factor.reset_index().set_index(['step', 'id']), 
+        step_injection_part__factor.reset_index().set_index(['step', 'id']),
         factors)
     # indices of injections ordered according to injection_factors
     injids = injection_factors.index.get_level_values(1)
@@ -1009,6 +1010,88 @@ def get_scaling_factor_data2(model, factordefs, steps, start):
     factors.reset_index(inplace=True)
     factors.set_index(['step', 'type', 'id'], inplace=True)
     return factors.assign(devtype='injection'), injection_factors
+
+
+
+# model: terminals, given_factors, assoc_frame
+
+# model.branchterminals[['id_of_branch','id_of_node']].reset_index(),
+# model.factors,
+# model.terminal_factor_associations,
+
+def get_taps_factor_data2(model, factordefs, steps):
+    """Arranges indices for taps factors and values for initialization of
+    taps factors.
+
+    Parameters
+    ----------
+    model: egrid.model.Model
+        data of electric grid
+    factordefs: Generic_factors
+        * .gen_factor_data, pandas.DataFrame
+        * .gen_factor_symbols, casadi.SX, shape(n,1)
+        * .gen_injfactor, pandas.DataFrame
+        * .gen_termfactor, pandas.DataFrame
+        * .factorgroups, pandas.DataFrame
+        * .injfactorgroups, pandas.DataFrame
+        * .termfactorgroups, pandas.DataFrame
+    steps: iterable
+        int, indices of optimization steps, first step has index 0
+
+    Returns
+    -------
+    tuple
+        * pandas.DataFrame, all taps factors
+          (str (step), 'const'|'var', str (id of factor)) ->
+          * .id_of_source, str, source of initial value,
+            factor of previous step
+          * .value, float, initial value if no valid source reference
+          * .min, float, smallest possible value
+          * .max, float, greatest possible value
+          * .is_discrete, bool, no digits after decimal point if True
+            (input for MINLP solver), True for taps model
+          * .m, float, -Vdiff per tap-step in case of taps
+          * .n, float, n = 1 - (Vdiff * index_of_neutral_position) for taps,
+            e.g. when index_of_neutral_position=0 --> n=0
+          * .index_of_symbol, int, index in 1d-vector of var/const
+          * .index_of_source, int, index in 1d-vector of previous step
+          * .devtype, 'terminal'
+        * pandas.DataFrame, terminals with taps factors
+          (int (step), int (index_of_term))
+          * .index_of_symbol, int"""
+    generic_termfactor_steps = _add_step_index2(
+        factordefs.gen_termfactor, steps)
+    # get generic_assocs which are not in assocs of step, this allows
+    #   overriding the linkage of factors
+    term_assoc = generic_termfactor_steps[
+        ~generic_termfactor_steps.index.duplicated()]
+    # given factors are generic with step -1
+    #   generate factors for given steps
+    # step, branch, node => factor
+    #   copy generic_factors and add step indices
+    generic_factor_steps = _add_step_index2(factordefs.gen_factor_data, steps)
+    # filter for linked taps-factors step-to-factor index
+    step_factor = (
+        pd.MultiIndex.from_arrays(
+            [term_assoc.index.get_level_values('step'),
+             term_assoc.id],
+            names=['step', 'id'])
+        .unique())
+    factors = generic_factor_steps.reindex(step_factor)
+    factors.sort_index(inplace=True)
+    # retrieve step specific factors
+    # step specific factors cannot introduce new taps-factors just
+    #   modify generic taps-factors
+    factors_steps = (
+        _selectgroups(steps, factordefs.factorgroups)
+        .set_index(['step', 'id']))
+    override_index = factors.index.intersection(factors_steps.index)
+    cols = [
+        'type', 'id_of_source', 'value', 'min', 'max', 'is_discrete', 'm', 'n']
+    factors.loc[override_index, cols] = factors_steps.loc[override_index, cols]
+    # add data for initialization
+    factors['index_of_source'] = _get_factor_ini_values(factors)
+    return factors.assign(devtype='terminal'), term_assoc
 
 def _get_factor_data2(model, generic_factors, step=0, k_prev=_DM_0r1c):
     """Returns data of decision variables and on parameters for a specific
@@ -1022,7 +1105,7 @@ def _get_factor_data2(model, generic_factors, step=0, k_prev=_DM_0r1c):
         * .factor_data, pandas.DataFrame
         * .factor_symbols, casadi.SX, shape(n,1)
         * .injassoc, pandas.DataFrame
-        * .termassoc, pandas.DataFrame        
+        * .termassoc, pandas.DataFrame
     step: int
         index of optimization step, first index is 0
     k_prev: array_like optional
