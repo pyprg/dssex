@@ -81,22 +81,23 @@ def _get_step_factor_to_injection_part(
         .set_index(['step', 'id'])
         .join(step_factors[[]]))
 
-def _get_factor_ini_values(myfactors, symbols):
-    """Returns expressions for initial values of scaling variables/parameters.
+def _get_factor_ini_values(factors, symbols):
+    """Returns indices for initial values of variables/parameters.
 
     Parameters
     ----------
-    myfactors: pandas.DataFrame
+    factors: pandas.DataFrame
 
     symbols: pandas.Series
+        int, indices of symbols
 
     Returns
     -------
     pandas.Series
-        casadi.SX"""
-    unique_factors = myfactors.index
+        int"""
+    unique_factors = factors.index
     prev_index = pd.MultiIndex.from_arrays(
-        [unique_factors.get_level_values(0) - 1, myfactors.id_of_source.array])
+        [unique_factors.get_level_values(0) - 1, factors.id_of_source.array])
     ini = pd.Series(symbols, index=unique_factors).reindex(prev_index)
     ini.index = unique_factors
     # '-1' means copy initial data from column 'value' as there is no valid
@@ -214,6 +215,7 @@ def get_scaling_factor_data(
           * .n, float, not used for scaling factors
           * .index_of_symbol, int, index in 1d-vector of var/const
           * .index_of_source, int, index in 1d-vector of previous step
+          * .devtype, 'injection'
         * pandas.DataFrame, injections with scaling factors
           (int (step), str (injid))
           * .id_p, str, ID for scaling factor of active power
@@ -354,6 +356,7 @@ def get_taps_factor_data(terminals, given_factors, assoc_frame, steps, start):
             e.g. when index_of_neutral_position=0 --> n=0
           * .index_of_symbol, int, index in 1d-vector of var/const
           * .index_of_source, int, index in 1d-vector of previous step
+          * .devtype, 'terminal'
         * pandas.DataFrame, terminals with taps factors
           (int (step), int (index_of_term))
           * .index_of_symbol, int"""
@@ -446,7 +449,7 @@ def _select_rows(vecs, row_index):
 
 Factordata = namedtuple(
     'Factordata',
-    'kpq ftaps '
+    'kpq ftaps index_of_term '
     'vars values_of_vars var_min var_max is_discrete '
     'consts values_of_consts '
     'var_const_to_factor var_const_to_kp var_const_to_kq var_const_to_ftaps')
@@ -460,6 +463,8 @@ kpq: casadi.SX
     reactive power per injection
 ftaps: casadi.SX
     vector, symbols for taps factors of terminals
+index_of_term: numpy.array
+    int, index of terminal which ftaps is assigned to
 vars: casadi.SX
     column vector, symbols for variables of factors
 values_of_vars: casadi.DM
@@ -491,6 +496,7 @@ var_const_to_ftaps: array_like
 _empty_factor_data = Factordata(
     kpq=casadi.horzcat(_SX_0r1c, _SX_0r1c),
     ftaps=_SX_0r1c,
+    index_of_term=(),
     vars=_SX_0r1c,
     values_of_vars=_DM_0r1c,
     var_min=_DM_0r1c,
@@ -612,6 +618,8 @@ def _get_factor_data_for_step(
             reactive power per injection
         ftaps: casadi.SX
             vector, symbols for taps factors of terminals
+        index_of_term: numpy.array
+            int, index of terminal which ftaps is assigned to
         vars: casadi.SX
             column vector, symbols for variables of scaling factors
         values_of_vars: casadi.DM
@@ -620,6 +628,8 @@ def _get_factor_data_for_step(
             lower limits of vars
         var_max: casadi.DM
             upper limits of vars
+        is_discrete: numpy.array
+            bool, flag for variable
         consts: casadi.SX
             column vector, symbols for constants of scaling factors
         values_of_consts: casadi.DM
@@ -632,7 +642,10 @@ def _get_factor_data_for_step(
             for each injection (var_const[var_const_to_kp])
         var_const_to_kq: array_like
             int, converts var_const to kq, one reactive power scaling factor
-            for each injection (var_const[var_const_to_kq])"""
+            for each injection (var_const[var_const_to_kq])
+        var_const_to_ftaps: array_like
+            int, converts var_const to ftaps, factor assigned to
+            (selected) terminals (var_const[var_const_to_ftaps])"""
     try:
         factors = factor_step_groups.get_group(step)
     except KeyError:
@@ -666,6 +679,7 @@ def _get_factor_data_for_step(
             symbols[injection_factors.kp].reshape((-1,1)),
             symbols[injection_factors.kq].reshape((-1,1))),
         ftaps=symbols[terminal_factor.index_of_symbol].reshape((-1,1)),
+        index_of_term=terminal_factor.index_of_term.to_numpy().reshape(-1,1),
         # vars, variables for solver preparation
         vars=symbols_of_vars,
         # initial values, argument in solver call
@@ -722,21 +736,7 @@ def _get_factor_data(model, step=0, k_prev=_DM_0r1c):
 
     Returns
     -------
-    Factordata:
-        kp: casadi.SX
-            column vector, symbols for scaling factor
-            of active power per injection
-        kq: casadi.SX
-            column vector, symbols for scaling factor
-            of reactive power per injection
-        vars: casadi.SX
-            column vector, symbols for variables of scaling factors
-        values_of_vars: casadi.DM
-            column vector, initial values for vars
-        consts: casadi.SX
-            column vector, symbols for constants of scaling factors
-        values_of_consts: casadi.DM
-            column vector, values for consts"""
+    Factordata"""
     # index for requested step and the step before requested step, data
     #   of step before are needed for initialization
     steps = [step - 1, step] if 0 < step else [0]
@@ -778,22 +778,7 @@ def make_get_factor_data(model):
     -------
     function
         (int, casadi.DM) -> (Factordata)
-        (index_of_calculation_step, result_of_previous_step) -> (Factordata)
-        Factordata:
-            kp: casadi.SX
-                column vector, symbols for scaling factor
-                of active power per injection
-            kq: casadi.SX
-                column vector, symbols for scaling factor
-                of reactive power per injection
-            vars: casadi.SX
-                column vector, symbols for variables of scaling factors
-            values_of_vars: casadi.DM
-                column vector, initial values for vars
-            consts: casadi.SX
-                column vector, symbols for constants of scaling factors
-            values_of_consts: casadi.DM
-                column vector, values for consts"""
+        (index_of_calculation_step, result_of_previous_step) -> (Factordata)"""
     return partial(_get_factor_data, model)
 
 def get_values_of_factors(factor_data, x_factors):
@@ -827,10 +812,10 @@ def get_values_of_factors(factor_data, x_factors):
     ------
     tuple
         * numpy.array (n,2), kp, kq for each injection
-        * numpy.array (m,1) kvar/const"""
+        * numpy.array (m,1) var/const"""
     # concat values of decision variables and parameters
-    k_var_const = np.vstack([x_factors, factor_data.values_of_consts])
-    kp = k_var_const[factor_data.var_const_to_kp]
-    kq = k_var_const[factor_data.var_const_to_kq]
-    return np.hstack([kp, kq]), k_var_const[factor_data.var_const_to_factor]
+    var_const = np.vstack([x_factors, factor_data.values_of_consts])
+    kp = var_const[factor_data.var_const_to_kp]
+    kq = var_const[factor_data.var_const_to_kq]
+    return np.hstack([kp, kq]), var_const[factor_data.var_const_to_factor]
 

@@ -622,9 +622,12 @@ def calculate_power_flow2(
         * 'Y_by_V', casadi.SX, expression for Y @ V
     factor_data: Factordata
         * .vars, casadi.SX, symbols of variable scaling factors
-        * .consts, casadi.SX symbols of constant scaling factors
-        * .values_of_vars
-        * .values_of_consts
+        * .values_of_vars, casadi.DM, initial values for vars 
+        * .var_min, casadi.DM, lower limits of vars
+        * .var_max, casadi.DM, upper limits of vars
+        * .is_discrete, numpy.array, bool, flag for variable
+        * .consts, casadi.SX, symbols of constant scaling factors
+        * .values_of_consts, casadi.DM, values for parameters ('consts')
     Inode: casadi.SX (shape n,2)
         values for slack need to be set to slack voltage
         * Inode[:,0] - Ire, real part of current injected into node
