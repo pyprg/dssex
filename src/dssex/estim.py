@@ -29,6 +29,7 @@ from dssex.injections import calculate_cubic_coefficients
 from dssex.batch import (
     get_values, get_batches, value_of_voltages, get_batch_values)
 from dssex.factors import make_get_factor_data, get_values_of_factors
+from dssex.factors2 import make_factordefs
 # square of voltage magnitude, default value, minimum value for load curve,
 #   if value is below _VMINSQR the load curves for P and Q converge
 #   towards a linear load curve which is 0 when V=0; P(V=0)=0, Q(V=0)=0
@@ -622,7 +623,7 @@ def calculate_power_flow2(
         * 'Y_by_V', casadi.SX, expression for Y @ V
     factor_data: Factordata
         * .vars, casadi.SX, symbols of variable scaling factors
-        * .values_of_vars, casadi.DM, initial values for vars 
+        * .values_of_vars, casadi.DM, initial values for vars
         * .var_min, casadi.DM, lower limits of vars
         * .var_max, casadi.DM, upper limits of vars
         * .is_discrete, numpy.array, bool, flag for variable
@@ -1893,7 +1894,7 @@ def get_step_data_fns(model):
         voltages_ri: casadi.DM
             node voltages calculated by previous calculation step
         k: casadi.DM
-            scaling factors calculated by previous calculation step
+            factors calculated by previous calculation step
         objectives: str (optional)
             optional, default ''
             string of characters 'I'|'P'|'Q'|'V' or empty string ''
@@ -1979,13 +1980,20 @@ def optimize_step(
         (succ, x, _DM_0r1c))
 
 def optimize_steps(
-    model, step_params=(), positions=None, vminsqr=_VMINSQR):
+    model, factordefs, step_params=(), positions=None, vminsqr=_VMINSQR):
     """Estimates grid status stepwise.
 
     Parameters
     ----------
     model: egrid.model.Model
 
+    factordefs: factor.Factordefs
+        * .gen_factor_data, pandas.DataFrame
+        * .gen_factor_symbols, casadi.SX, shape(n,1)
+        * .gen_injfactor, pandas.DataFrame
+        * .gen_termfactor, pandas.DataFrame
+        * .factorgroups, pandas.DataFrame
+        * .injfactorgroups, pandas.DataFrame
     step_params: array_like
         dict {'objectives': objectives, 'constraints': constraints}
             if empty the function calculates power flow,
@@ -2114,6 +2122,7 @@ def estimate(
             calculated complex node voltages
         * pq_factors : numpy.array, float (shape m,2)
             scaling factors for injections"""
+    factordefs = make_factordefs(model)
     return (
         (step, succ, *get_Vcx_kpq(scaling_data, v_ri, k))
         for step, succ, v_ri, k, scaling_data in optimize_steps(

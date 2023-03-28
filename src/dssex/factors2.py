@@ -49,8 +49,8 @@ def _create_symbols_with_ids(ids):
     -------
     casadi.SX"""
     return (
-        _SX_0r1c 
-        if ids.empty else 
+        _SX_0r1c
+        if ids.empty else
         casadi.vertcat(*(casadi.SX.sym(id_) for id_ in ids)))
 
 def _get_step_injection_part_to_factor(
@@ -414,20 +414,20 @@ def make_factordefs(model):
         gen_factors.set_index('id').reindex(valid_factorids).reset_index())
     factors['index_of_symbol'] = range(len(factors))
     symbols = _create_symbols_with_ids(factors.id)
-    # add index of symbol to termassoc, 
+    # add index of symbol to termassoc,
     #   terminal factors are NEVER step-specific
     termassoc = (
         pd.merge(
-            left=termassoc_, 
-            right=factors[['id','index_of_symbol']], 
-            left_on='id', 
+            left=termassoc_,
+            right=factors[['id','index_of_symbol']],
+            left_on='id',
             right_on='id'))
     return Factordefs(
         factors.set_index('id'),
         symbols,
         injassoc.set_index(['injid', 'part']),
         termassoc.set_index(['branchid', 'nodeid']),
-        factorgroups, 
+        factorgroups,
         injfactorgroups)
 
 def _add_step_index(df, step_indices):
@@ -594,7 +594,7 @@ def _get_scaling_factor_data(model, factordefs, steps, start):
     factors_.sort_index(inplace=True)
     # indices of symbols
     factors_ = factors_.join(
-        generic_factor_steps['index_of_symbol'].astype('Int64'), 
+        generic_factor_steps['index_of_symbol'].astype('Int64'),
         how='left')
     no_symbol = factors_['index_of_symbol'].isna()
     # range of indices for new scaling factor indices
@@ -699,7 +699,7 @@ def _get_taps_factor_data(model, factordefs, steps):
     return (
         factors.assign(devtype='terminal')
             .reset_index()
-            .set_index(['step', 'type', 'id']), 
+            .set_index(['step', 'type', 'id']),
         term_factor)
 
 def make_factor_data(
@@ -722,7 +722,7 @@ def make_factor_data(
     Parameters
     ----------
     factordefs: Factordefs
-    
+
     factors: pandas.DataFrame
         sorted by 'index_of_symbol'
     injection_factors: pandas.DataFrame
@@ -730,7 +730,7 @@ def make_factor_data(
     terminal_factors: pandas.DataFrame
 
     k_prev: array_like
-        float, values of scaling factors from previous step, 
+        float, values of scaling factors from previous step,
         variables and constants
 
     Returns
@@ -874,7 +874,7 @@ def setup_factors_for_step(model, factordefs, step):
             * .id, str, ID of factor
             * .index_of_symbol, int
             * .index_of_terminal, int"""
-    # index for requested step and the step before requested step, 
+    # index for requested step and the step before requested step,
     #   data of step before are needed for initialization
     steps = [step - 1, step] if 0 < step else [0]
     # factors assigned to terminals
@@ -892,7 +892,7 @@ def setup_factors_for_step(model, factordefs, step):
         _loc(terminal_factor, step).reset_index())
 
 def make_factor_data2(model, factordefs, step=0, k_prev=[]):
-    """Returns data of decision variables and on parameters for a specific
+    """Returns data of decision variables and of parameters for a specific
     step.
 
     Parameters
@@ -918,14 +918,16 @@ def make_factor_data2(model, factordefs, step=0, k_prev=[]):
         factordefs, *setup_factors_for_step(model, factordefs, step), k_prev)
 
 def get_values_of_factors(factor_data, x_factors):
-    """Function for extracting factors for injections from the result provided
-    by the solver.
-    Enhances scaling factors calculated by optimization with constant
-    scaling factors and reorders the factors according to order of injections.
-    Returns kp and kq for each injection.
-    The function creates a vector of values for scaling factors which are
+    """Function for extracting factors of injections and terminals (taps)
+    from the result provided by the solver.
+    Enhances factors calculated by optimization with constant factors and
+    reorders the factors according to order of injections and terminals.
+    Returns kp and kq for each injection. Returns a factor ftaps for terminals
+    addressed by 'Factordefs.index_of_term' which is an argument to the
+    function 'make_factor_data'.
+    The function creates a vector of values for factors which are
     decision variables and those which are constants. This vector is ordered
-    for use as initial scaling factor values in next estimation step.
+    for use as initial factor values in next estimation step.
 
     Parameters
     ----------
@@ -935,23 +937,30 @@ def get_values_of_factors(factor_data, x_factors):
         * .var_const_to_factor,
             array_like int, index_of_factor=>index_of_var_const
             converts var_const to factor (var_const[var_const_to_factor])
-        * .var_const_to_kp
+        * .var_const_to_kp,
             array_like int, converts var_const to kp, one active power
             scaling factor for each injection (var_const[var_const_to_kp])
-        * .var_const_to_kq
+        * .var_const_to_kq,
             array_like int, converts var_const to kq, one reactive power
             scaling factor for each injection (var_const[var_const_to_kq])
-    x_factors: array_like
+        * .var_const_to_ftaps,
+            array_like int, converts var_const to ftaps, factor assigned to
+            (selected) terminals (var_const[var_const_to_ftaps])
+    x_factors: numpy.array|casadi.DM, shape(k,1)
         float, result of optimization (subset)
 
     Result
     ------
     tuple
-        * numpy.array (n,2), kp, kq for each injection
-        * numpy.array (m,1) var/const"""
+        * numpy.array (l,2), kp, kq for each injection
+        * numpy.array (m,1), for selected terminals
+        * numpy.array (n,1) var/const"""
     # concat values of decision variables and parameters
     var_const = np.vstack([x_factors, factor_data.values_of_consts])
     kp = var_const[factor_data.var_const_to_kp]
     kq = var_const[factor_data.var_const_to_kq]
-    return np.hstack([kp, kq]), var_const[factor_data.var_const_to_factor]
+    return (
+        np.hstack([kp, kq]),
+        var_const[factor_data.var_const_to_ftaps],
+        var_const[factor_data.var_const_to_factor])
 

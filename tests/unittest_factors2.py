@@ -68,8 +68,8 @@ class Make_factordefs(unittest.TestCase):
                 zip(factordefs.gen_factor_data.columns,
                     factordefs.gen_factor_data.iloc[0].to_numpy())),
             {'step': -1, 'type': 'var', 'id_of_source': 'kp', 'value': 1.0,
-             'min': -np.inf, 'max': np.inf, 'is_discrete': False, 'm': 1.0,
-             'n': 0.0, 'index_of_symbol': 0})
+              'min': -np.inf, 'max': np.inf, 'is_discrete': False, 'm': 1.0,
+              'n': 0.0, 'index_of_symbol': 0})
         self.assertEqual(
             factordefs.gen_factor_symbols.name(),
             'kp',
@@ -119,8 +119,8 @@ class Make_factordefs(unittest.TestCase):
                 zip(factordefs.gen_factor_data.columns,
                     factordefs.gen_factor_data.iloc[0].to_numpy())),
             {'step': -1, 'type': 'const', 'id_of_source': 'taps', 'value': 0.,
-             'min': -np.inf, 'max': np.inf, 'is_discrete': True, 'm': -0.00625,
-             'n': 0.0, 'index_of_symbol': 0})
+              'min': -np.inf, 'max': np.inf, 'is_discrete': True, 'm': -0.00625,
+              'n': 0.0, 'index_of_symbol': 0})
         self.assertEqual(
             factordefs.gen_factor_symbols.name(),
             'taps',
@@ -479,6 +479,110 @@ class Get_scaling_factor_data(unittest.TestCase):
             factors.loc[1].index_of_source,
             [1],
             err_msg="indices of symbols for step 1 are [1]")
+
+class Get_values_of_factors(unittest.TestCase):
+
+    def test_no_data(self):
+        """"""
+        model = make_model()
+        factordefs = ft.make_factordefs(model)
+        factor_data = ft.make_factor_data2(model, factordefs, 0)
+        fk, ftaps, factors = ft.get_values_of_factors(
+            factor_data, np.zeros((0,1), dtype=float))
+        self.assertEqual(fk.shape, (0, 2), 'no scaling factors')
+        self.assertEqual(ftaps.shape, (0, 1), 'no taps (terminal) factors')
+        self.assertEqual(factors.shape, (0, 1), 'no factors')
+
+    def test_default_scaling_factors(self):
+        """
+        default scaling factors are constants
+        """
+        model = make_model(
+            grid.Slacknode('n_0'),
+            grid.Branch(
+                id='branch',
+                id_of_node_A='n_0',
+                id_of_node_B='n_1'),
+            grid.Injection('consumer', 'n_1'),
+            grid.Injection('consumer2', 'n_1'))
+        factordefs = ft.make_factordefs(model)
+        factor_data = ft.make_factor_data2(model, factordefs, 0)
+        fk, ftaps, factors = ft.get_values_of_factors(
+            factor_data, np.zeros((0,1), dtype=float))
+        self.assertEqual(fk.shape, (2, 2), '2x2 scaling factors')
+        assert_array_equal(
+            fk,
+            np.ones((2,2), dtype=float),
+            err_msg='all scaling factors are 1.')
+        self.assertEqual(ftaps.shape, (0, 1), 'no taps (terminal) factors')
+        self.assertEqual(factors.shape, (1, 1), 'one (default) factor only')
+
+    def test_explicit_scaling_factors(self):
+        """
+        default scaling factor, and two defined scaling factors
+        """
+        model = make_model(
+            grid.Slacknode('n_0'),
+            grid.Branch(
+                id='branch',
+                id_of_node_A='n_0',
+                id_of_node_B='n_1'),
+            grid.Injection('consumer', 'n_1'),
+            grid.Injection('consumer2', 'n_1'),
+            grid.Deff(id=('kp','kq')),
+            grid.Link(objid='consumer', id=('kp','kq'), part='pq'),
+            grid.Link(objid='consumer2', id='kq', part='q'))
+        factordefs = ft.make_factordefs(model)
+        factor_data = ft.make_factor_data2(model, factordefs, 0)
+        solution_vector = np.array([27., 42.]).reshape(-1,1)
+        fk, ftaps, factors = ft.get_values_of_factors(
+            factor_data, solution_vector)
+        self.assertEqual(fk.shape, (2, 2), '2x2 scaling factors')
+        assert_array_equal(
+            fk,
+            # first column is kp, second kq
+            np.array([[27., 42.], [ 1., 42.]]),
+            err_msg='scaling factors are [[27., 42.], [ 1., 42.]]')
+        self.assertEqual(ftaps.shape, (0, 1), 'no taps (terminal) factors')
+        self.assertEqual(
+            factors.shape,
+            (3, 1),
+            'two decision variables, one constant (default) factor')
+
+    def test_taps_factor(self):
+        """
+        default scaling factor, and one defined taps factor
+        """
+        model = make_model(
+            grid.Slacknode('n_0'),
+            grid.Branch(
+                id='branch',
+                id_of_node_A='n_0',
+                id_of_node_B='n_1'),
+            grid.Injection('consumer', 'n_1'),
+            grid.Injection('consumer2', 'n_1'),
+            grid.Deff(id='taps'),
+            grid.Link(
+                objid='branch', id='taps',
+                nodeid='n_0', cls=grid.Terminallink))
+        factordefs = ft.make_factordefs(model)
+        factor_data = ft.make_factor_data2(model, factordefs, 0)
+        solution_vector = np.array([-3.]).reshape(-1,1)
+        fk, ftaps, factors = ft.get_values_of_factors(
+            factor_data, solution_vector)
+        self.assertEqual(fk.shape, (2, 2), '2x2 scaling factors')
+        assert_array_equal(
+            fk,
+            np.ones((2,2), dtype=float),
+            err_msg='all scaling factors are 1.')
+        self.assertEqual(
+            ftaps,
+            np.array([-3.]).reshape(-1,1),
+            'taps (terminal) factors are [[-3.]]')
+        self.assertEqual(
+            factors.shape,
+            (2, 1),
+            'one decision variables, one constant (default) factor')
 
 if __name__ == '__main__':
     unittest.main()
