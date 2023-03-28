@@ -377,7 +377,7 @@ Parameters
 * .injfactorgroups, pandas.DataFrame
 """
 
-def _get_factordefs(model):
+def make_factordefs(model):
     """Create casadi.SX symbols for generic factors. Filters valid data.
     Generic factors are present in each step, they have step index -1.
 
@@ -478,7 +478,7 @@ def _get_injection_factors(step_factor_injection_part, factors):
             .unstack('part')
             .droplevel(0, axis=1))
         injection_factors.columns=['id_p', 'id_q', 'kp', 'kq']
-        return injection_factors.astype({'kp':np.int64, 'kq':np.int64})
+        return injection_factors
     return pd.DataFrame(
         [],
         columns=['id_p', 'id_q', 'kp', 'kq'],
@@ -588,19 +588,20 @@ def _get_scaling_factor_data(model, factordefs, steps, start):
     #   all required factors
     # this method call destroys type info of column 'is_discrete', was bool
     required_factors = given_factors.reindex(step_factor)
-    factors = (
+    factors_ = (
         _add_default_factors(required_factors)
         .astype({'is_discrete':bool}, copy=False))
-    factors.sort_index(inplace=True)
+    factors_.sort_index(inplace=True)
     # indices of symbols
-    factors = factors.join(
-        generic_factor_steps['index_of_symbol']
-        .astype('Int64'), how='left')
-    no_symbol = factors['index_of_symbol'].isna()
+    factors_ = factors_.join(
+        generic_factor_steps['index_of_symbol'].astype('Int64'), 
+        how='left')
+    no_symbol = factors_['index_of_symbol'].isna()
     # range of indices for new scaling factor indices
     factor_index_per_step = _factor_index_per_step(
-        factors[no_symbol], start)
-    factors.loc[no_symbol, 'index_of_symbol'] = factor_index_per_step
+        factors_[no_symbol], start)
+    factors_.loc[no_symbol, 'index_of_symbol'] = factor_index_per_step
+    factors = factors_.astype({'index_of_symbol':np.int64})
     # add data for initialization
     factors['index_of_source'] = _get_factor_ini_values(factors)
     injection_factors = _get_injection_factors(
@@ -660,14 +661,14 @@ def _get_taps_factor_data(model, factordefs, steps):
         factordefs.gen_termfactor, steps)
     # get generic_assocs which are not in assocs of step, this allows
     #   overriding the linkage of factors
-    term_assoc = generic_termfactor_steps[
+    term_factor = generic_termfactor_steps[
         ~generic_termfactor_steps.index.duplicated()]
     # add index of terminal
-    term_assoc['index_of_terminal'] = (
+    term_factor['index_of_terminal'] = (
         model.branchterminals[['id_of_branch', 'id_of_node']]
         .reset_index()
         .set_index(['id_of_branch', 'id_of_node'])
-        .reindex(term_assoc.index.droplevel('step'))
+        .reindex(term_factor.index.droplevel('step'))
         .to_numpy())
     # given factors are generic with step -1
     #   generate factors for given steps
@@ -677,8 +678,8 @@ def _get_taps_factor_data(model, factordefs, steps):
     # filter for linked taps-factors step-to-factor index
     step_factor = (
         pd.MultiIndex.from_arrays(
-            [term_assoc.index.get_level_values('step'),
-             term_assoc.id],
+            [term_factor.index.get_level_values('step'),
+             term_factor.id],
             names=['step', 'id'])
         .unique())
     factors = generic_factor_steps.reindex(step_factor)
@@ -699,12 +700,12 @@ def _get_taps_factor_data(model, factordefs, steps):
         factors.assign(devtype='terminal')
             .reset_index()
             .set_index(['step', 'type', 'id']), 
-        term_assoc)
+        term_factor)
 
-def _get_factor_data_for_step(
-        factordefs, factors, injection_factors, terminal_factor, 
-        k_prev=[]):
-    """Prepares data of scaling factors per step.
+def make_factor_data(
+        factordefs, factors, injection_factors, terminal_factor, k_prev=[]):
+    """Prepares data of scaling factors per step. Creates symbols for
+    scaling factors.
 
     Arguments for solver call:
 
@@ -718,18 +719,16 @@ def _get_factor_data_for_step(
     of factors (symbols), to the order of active power scaling factors,
     reactive power scaling factors and taps factors.
 
-
     Parameters
     ----------
+    factordefs: Factordefs
+    
     factors: pandas.DataFrame
         sorted by 'index_of_symbol'
+    injection_factors: pandas.DataFrame
 
-    injection_factors: pandas.groupby
+    terminal_factors: pandas.DataFrame
 
-    terminal_factors: pandas.groupby
-
-    step: int
-        step number 0, 1, ...
     k_prev: array_like
         float, values of scaling factors from previous step, 
         variables and constants
@@ -823,7 +822,76 @@ def _get_factor_data_for_step(
         var_const_to_ftaps=var_const_to_factor[
             terminal_factor.index_of_symbol])
 
-def get_factor_data(model, factordefs, step=0, k_prev=[]):
+def setup_factors_for_step(model, factordefs, step):
+    """Returns data of decision variables and on parameters for a selected
+    step.
+
+    Parameters
+    ----------
+    model: egrid.model.Model
+        data of electric grid
+    factordefs: Factordefs
+        * .gen_factor_data, pandas.DataFrame
+        * .gen_factor_symbols, casadi.SX, shape(n,1)
+        * .gen_injfactor, pandas.DataFrame
+        * .gen_termfactor, pandas.DataFrame
+        * .factorgroups, pandas.DataFrame
+        * .injfactorgroups, pandas.DataFrame
+    step: int
+        index of optimization step, first index is 0
+
+    Returns
+    -------
+    tuple
+        * factors: pandas.DataFrame
+            sorted by 'index_of_symbol'
+            * .type, 'var|'const', dedicsion variable or
+              parameter
+            * .id, str, id of factor
+            * .id_of_source, id of factor of previous step
+              for initialization
+            * .value, float, used fo initialization if
+              id_of_source is invalid
+            * .min, float, smalles possible value
+            * .max, float, greates possible value
+            * .is_discrete, bool
+            * .m, float, -Vdiff per tap-step in case of taps
+            * .n, float, n = 1 - (Vdiff * index_of_neutral_position) for taps,
+              e.g. when index_of_neutral_position=0 --> n=0
+            * .index_of_symbol, int, index in 1d-vector of var/const
+            * .index_of_source, int, index in 1d-vector of previous step
+            * .devtype, 'terminal'|'injection'
+        * injection_factors: pandas.DataFrame
+            * .injid, str, ID of injection
+            * .id_p, str, ID of scaling factor for active power
+            * .id_q, str, ID of scaling factor for reactive power
+            * .kp, int, index of symbol
+            * .kq, int, index of symbol
+            * .index_of_injection, int
+        * terminal_factors: pandas.DataFrame
+            * .branchid, str, ID of branch
+            * .nodeid, str, ID of node
+            * .id, str, ID of factor
+            * .index_of_symbol, int
+            * .index_of_terminal, int"""
+    # index for requested step and the step before requested step, 
+    #   data of step before are needed for initialization
+    steps = [step - 1, step] if 0 < step else [0]
+    # factors assigned to terminals
+    taps_factors, terminal_factor = _get_taps_factor_data(
+        model, factordefs, steps)
+    # scaling factors for injections
+    start = repeat(len(factordefs.gen_factor_data))
+    scaling_factors, injection_factors = _get_scaling_factor_data(
+        model, factordefs, steps, start)
+    factors = pd.concat([scaling_factors, taps_factors])
+    factors.sort_values('index_of_symbol', inplace=True)
+    return (
+        _loc(factors, step).reset_index(),
+        _loc(injection_factors, step).reset_index(),
+        _loc(terminal_factor, step).reset_index())
+
+def make_factor_data2(model, factordefs, step=0, k_prev=[]):
     """Returns data of decision variables and on parameters for a specific
     step.
 
@@ -846,24 +914,8 @@ def get_factor_data(model, factordefs, step=0, k_prev=[]):
     Returns
     -------
     Factordata"""
-    # index for requested step and the step before requested step, 
-    #   data of step before are needed for initialization
-    steps = [step - 1, step] if 0 < step else [0]
-    # factors assigned to terminals
-    taps_factors, terminal_factor = _get_taps_factor_data(
-        model, factordefs, steps)
-    # scaling factors for injections
-    start = repeat(len(factordefs.gen_factor_data))
-    scaling_factors, injection_factors = _get_scaling_factor_data(
-        model, factordefs, steps, start)
-    factors = pd.concat([scaling_factors, taps_factors])
-    factors.sort_values('index_of_symbol', inplace=True)
-    return _get_factor_data_for_step(
-        factordefs,
-        _loc(factors, step).reset_index(),
-        _loc(injection_factors, step).reset_index(),
-        _loc(terminal_factor, step).reset_index(),
-        k_prev)
+    return make_factor_data(
+        factordefs, *setup_factors_for_step(model, factordefs, step), k_prev)
 
 def get_values_of_factors(factor_data, x_factors):
     """Function for extracting factors for injections from the result provided
