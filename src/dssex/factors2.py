@@ -38,6 +38,139 @@ _DM_0r1c = casadi.DM(0,1)
 # empty vector of expressions
 _SX_0r1c = casadi.SX(0,1)
 
+Stepgroups = namedtuple(
+    'Stepgroups', 'groups template')
+Stepgroups.__doc__ = """pandas.Groupby object and a(n empty) DataFrame
+template.
+
+Parameters
+----------
+groups: pandas.Groupby
+    a pandas.DataFrame grouped by columns 'step'
+
+template: pandas.DataFrame
+"""
+
+Factordefs = namedtuple(
+    'Factordefs',
+    'gen_factor_data gen_factor_symbols gen_injfactor gen_termfactor '
+    'factorgroups injfactorgroups')
+Factordefs.__doc__ ="""
+Data of generic factors (step == -1),
+symbols for generic factors, references to injections and terminals for
+generic factors.
+
+Data grouped by step for factors, references to injections
+and references to terminals.
+
+Parameters
+----------
+* .gen_factor_data, pandas.DataFrame
+* .gen_factor_symbols, casadi.SX, shape(n,1)
+* .gen_injfactor, pandas.DataFrame
+* .gen_termfactor, pandas.DataFrame
+* .factorgroups, pandas.DataFrame
+* .injfactorgroups, pandas.DataFrame
+"""
+
+Factordata = namedtuple(
+    'Factordata',
+    'kpq ftaps index_of_term '
+    'vars values_of_vars var_min var_max is_discrete '
+    'consts values_of_consts '
+    'var_const_to_factor var_const_to_kp var_const_to_kq var_const_to_ftaps')
+Factordata.__doc__="""
+Symbols of variables and constants for factors.
+
+Parameters
+----------
+kpq: casadi.SX
+    two column vectors, symbols for scaling factors of active and
+    reactive power per injection
+ftaps: casadi.SX
+    vector, symbols for taps factors of terminals for terminals
+    addressed by index_of_term
+index_of_term: numpy.array
+    int, index of terminal which ftaps is assigned to
+vars: casadi.SX
+    column vector, symbols for variables of scaling factors
+values_of_vars: casadi.DM
+    column vector, initial values for vars
+var_min: casadi.DM
+    lower limits of vars
+var_max: casadi.DM
+    upper limits of vars
+is_discrete: numpy.array
+    bool, flag for variable
+consts: casadi.SX
+    column vector, symbols for constants of scaling factors
+values_of_consts: casadi.DM
+    column vector, values for consts
+var_const_to_factor: array_like
+    int, index_of_factor=>index_of_var_const
+    converts var_const to factor (var_const[var_const_to_factor])
+var_const_to_kp: array_like
+    int, converts var_const to kp, one active power scaling factor
+    for each injection (var_const[var_const_to_kp])
+var_const_to_kq: array_like
+    int, converts var_const to kq, one reactive power scaling factor
+    for each injection (var_const[var_const_to_kq])
+var_const_to_ftaps: array_like
+    int, converts var_const to ftaps, factor assigned to
+    (selected) terminals (var_const[var_const_to_ftaps])"""
+
+def _select_rows(vecs, row_index):
+    """Creates column vectors from vecs by extracting elements by their
+    (row-) indices.
+
+    Parameters
+    ----------
+    vecs: iterable
+        casadi.SX or casadi.DM, column vector
+    row_index: array_like
+        int
+
+    Returns
+    -------
+    iterator
+        * casadi.SX / casadi.DM"""
+    return (v[row_index, 0] for v in vecs)
+
+def _make_DM_vector(array_like):
+    """Creates a casadi.DM vector from array_like.
+
+    Parameters
+    ----------
+    array_like: array_like
+
+    Returns
+    -------
+    casadi.DM"""
+    return casadi.DM(array_like) if len(array_like) else _DM_0r1c
+
+def _empty_like(df, droplevel=-1):
+    """Creates an empty pandas.DataFrame from a template DataFrame.
+
+    Parameters
+    ----------
+    df: pandas.DataFrame
+
+    droplevel: int
+        function drops a level from index if value is greater -1
+
+    Returns
+    -------
+    pandas.DataFrame"""
+    idx_ = df.index.droplevel(droplevel) if -1 < droplevel else df.index
+    idx = idx_.delete(range(len(idx_)))
+    return pd.DataFrame([], columns=df.columns, index=idx).astype(df.dtypes)
+
+def _loc(df, key):
+    try:
+        return df.loc[key]
+    except KeyError:
+        return _empty_like(df, 0)
+
 def _create_symbols_with_ids(ids):
     """Creates a column vector of casadi symbols with given identifiers.
 
@@ -180,133 +313,6 @@ def _get_values_of_symbols(factor_data, value_of_previous_step):
             value_of_previous_step[calc.index_of_source.astype(int)])
     return values
 
-def _select_rows(vecs, row_index):
-    """Creates column vectors from vecs by extracting elements by their
-    (row-) indices.
-
-    Parameters
-    ----------
-    vecs: iterable
-        casadi.SX or casadi.DM, column vector
-    row_index: array_like
-        int
-
-    Returns
-    -------
-    iterator
-        * casadi.SX / casadi.DM"""
-    return (v[row_index, 0] for v in vecs)
-
-Factordata = namedtuple(
-    'Factordata',
-    'kpq ftaps index_of_term '
-    'vars values_of_vars var_min var_max is_discrete '
-    'consts values_of_consts '
-    'var_const_to_factor var_const_to_kp var_const_to_kq var_const_to_ftaps')
-Factordata.__doc__="""
-Symbols of variables and constants for factors.
-
-Parameters
-----------
-kpq: casadi.SX
-    two column vectors, symbols for scaling factors of active and
-    reactive power per injection
-ftaps: casadi.SX
-    vector, symbols for taps factors of terminals for terminals
-    addressed by index_of_term
-index_of_term: numpy.array
-    int, index of terminal which ftaps is assigned to
-vars: casadi.SX
-    column vector, symbols for variables of scaling factors
-values_of_vars: casadi.DM
-    column vector, initial values for vars
-var_min: casadi.DM
-    lower limits of vars
-var_max: casadi.DM
-    upper limits of vars
-is_discrete: numpy.array
-    bool, flag for variable
-consts: casadi.SX
-    column vector, symbols for constants of scaling factors
-values_of_consts: casadi.DM
-    column vector, values for consts
-var_const_to_factor: array_like
-    int, index_of_factor=>index_of_var_const
-    converts var_const to factor (var_const[var_const_to_factor])
-var_const_to_kp: array_like
-    int, converts var_const to kp, one active power scaling factor
-    for each injection (var_const[var_const_to_kp])
-var_const_to_kq: array_like
-    int, converts var_const to kq, one reactive power scaling factor
-    for each injection (var_const[var_const_to_kq])
-var_const_to_ftaps: array_like
-    int, converts var_const to ftaps, factor assigned to
-    (selected) terminals (var_const[var_const_to_ftaps])"""
-
-_empty_factor_data = Factordata(
-    kpq=casadi.horzcat(_SX_0r1c, _SX_0r1c),
-    ftaps=_SX_0r1c,
-    index_of_term=(),
-    vars=_SX_0r1c,
-    values_of_vars=_DM_0r1c,
-    var_min=_DM_0r1c,
-    var_max=_DM_0r1c,
-    is_discrete=(),
-    consts=_SX_0r1c,
-    values_of_consts=_DM_0r1c,
-    var_const_to_factor=(),
-    var_const_to_kp=(),
-    var_const_to_kq=(),
-    var_const_to_ftaps=())
-
-def _make_DM_vector(array_like):
-    """Creates a casadi.DM vector from array_like.
-
-    Parameters
-    ----------
-    array_like: array_like
-
-    Returns
-    -------
-    casadi.DM"""
-    return casadi.DM(array_like) if len(array_like) else _DM_0r1c
-
-def _empty_like(df, droplevel=-1):
-    """Creates an empty pandas.DataFrame from a template DataFrame.
-
-    Parameters
-    ----------
-    df: pandas.DataFrame
-
-    droplevel: int
-        function drops a level from index if value is greater -1
-
-    Returns
-    -------
-    pandas.DataFrame"""
-    idx_ = df.index.droplevel(droplevel) if -1 < droplevel else df.index
-    idx = idx_.delete(range(len(idx_)))
-    return pd.DataFrame([], columns=df.columns, index=idx).astype(df.dtypes)
-
-def _loc(df, key):
-    try:
-        return df.loc[key]
-    except KeyError:
-        return _empty_like(df, 0)
-
-Stepgroups = namedtuple(
-    'Stepgroups', 'groups template')
-Stepgroups.__doc__ = """pandas.Groupby object and a(n empty) DataFrame
-template.
-
-Parameters
-----------
-groups: pandas.Groupby
-    a pandas.DataFrame grouped by columns 'step'
-
-template: pandas.DataFrame
-"""
-
 def _create_stepgroups(df):
     """Groups df by column 'step'.
 
@@ -354,28 +360,6 @@ def _selectgroups(steps, stepgroups):
     -------
     pandas.DataFrame"""
     return pd.concat([_selectgroup(step, stepgroups) for step in steps])
-
-Factordefs = namedtuple(
-    'Factordefs',
-    'gen_factor_data gen_factor_symbols gen_injfactor gen_termfactor '
-    'factorgroups injfactorgroups')
-Factordefs.__doc__ ="""
-Data of generic factors (step == -1),
-symbols for generic factors, references to injections and terminals for
-generic factors.
-
-Data grouped by step for factors, references to injections
-and references to terminals.
-
-Parameters
-----------
-* .gen_factor_data, pandas.DataFrame
-* .gen_factor_symbols, casadi.SX, shape(n,1)
-* .gen_injfactor, pandas.DataFrame
-* .gen_termfactor, pandas.DataFrame
-* .factorgroups, pandas.DataFrame
-* .injfactorgroups, pandas.DataFrame
-"""
 
 def make_factordefs(model):
     """Create casadi.SX symbols for generic factors. Filters valid data.
