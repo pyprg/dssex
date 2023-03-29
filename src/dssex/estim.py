@@ -2126,4 +2126,4 @@ def estimate(
     return (
         (step, succ, *get_Vcx_kpq(scaling_data, v_ri, k))
         for step, succ, v_ri, k, scaling_data in optimize_steps(
-            model, step_params, positions, vminsqr))
+            model, factordefs, step_params, positions, vminsqr))
