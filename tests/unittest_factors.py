@@ -42,7 +42,7 @@ class Get_scaling_factor_data(unittest.TestCase):
         columns=['id'],
         index=pd.MultiIndex.from_arrays(
             arrays=[[],[],[]],
-            names=('step', 'injid', 'part')))
+            names=('step', 'id_of_injection', 'part')))
     empty_injids = pd.Series([], name='id', dtype=str)
 
     def test_no_data(self):

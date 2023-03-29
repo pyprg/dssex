@@ -58,7 +58,7 @@ def _get_step_factor_to_injection_part(
     ----------
     injectionids: pandas.Series
         str, IDs of all injections
-    assoc_frame: (str (step), str (injid), 'p'|'q' (part))
+    assoc_frame: (str (step), str (id_of_injection), 'p'|'q' (part))
         * .id, str, ID of factor
     step_factors: pandas.DataFrame
 
@@ -68,13 +68,13 @@ def _get_step_factor_to_injection_part(
     Returns
     -------
     pandas.Dataframe (int (step), str (id of factor))
-        * .injid, str, identifier of injection
+        * .id_of_injection, str, identifier of injection
         * .part, 'p'|'q', active or reactive power"""
     # all injections, create step, id, (pq) for all injections
     index_all = pd.MultiIndex.from_product(
         [indices_of_steps, injectionids, ('p', 'q')],
-        names=('step', 'injid', 'part'))
-    # step injid part => id
+        names=('step', 'id_of_injection', 'part'))
+    # step id_of_injection part => id
     return (
         assoc_frame
         .reindex(index_all, fill_value=DEFAULT_FACTOR_ID).reset_index()
@@ -191,7 +191,8 @@ def get_scaling_factor_data(
         * .value, float, (initial) value if no valid source from previous step
         * .min, float, smallest value, constraint during optimization
         * .max, float, greatest value, constraint during optimization
-    assoc_frame: pandas.DataFrame (int (step), str (injid), 'p'|'q' (part))
+    assoc_frame: pandas.DataFrame 
+        (int (step), str (id_of_injection), 'p'|'q' (part))
         * str (id of factor)
     steps: iterable
         int, indices of optimization steps, first step has index 0
@@ -217,7 +218,7 @@ def get_scaling_factor_data(
           * .index_of_source, int, index in 1d-vector of previous step
           * .devtype, 'injection'
         * pandas.DataFrame, injections with scaling factors
-          (int (step), str (injid))
+          (int (step), str (id_of_injection))
           * .id_p, str, ID for scaling factor of active power
           * .id_q, str, ID for scaling factor of reactive power
           * .kp, int, index of active power scaling factor in 1d-vector
@@ -259,7 +260,7 @@ def get_scaling_factor_data(
             step_factor_injection_part
             .join(factors.index_of_symbol)
             .reset_index()
-            .set_index(['step', 'injid', 'part'])
+            .set_index(['step', 'id_of_injection', 'part'])
             .unstack('part')
             .droplevel(0, axis=1))
         injection_factors.columns=['id_p', 'id_q', 'kp', 'kq']
@@ -268,7 +269,7 @@ def get_scaling_factor_data(
             [],
             columns=['id_p', 'id_q', 'kp', 'kq'],
             index=pd.MultiIndex.from_arrays(
-                [[],[]], names=['step', 'injid']))
+                [[],[]], names=['step', 'id_of_injection']))
     injids = injection_factors.index.get_level_values(1)
     index_of_injection = (
         pd.Series(injectionids.index, index=injectionids)
@@ -288,7 +289,8 @@ def _get_step_factor_to_terminal(terminals, assoc_frame, given_factors, steps):
         * .index_of_term, int
         * .id_of_branch, str
         * .id_of_node, str
-    assoc_frame: pandas.DataFrame (int (step), str (branchid), str (nodeid))
+    assoc_frame: pandas.DataFrame 
+        (int (step), str (id_of_branch), str (id_of_node))
         * .id, str, identifier of factor
     given_factors: pandas.DataFrame (int (step), str(id))
         * ... (not used)
@@ -324,15 +326,16 @@ def get_taps_factor_data(terminals, given_factors, assoc_frame, steps, start):
     Parameters
     ----------
     terminals: pandas.dataFrame (index of terminal)
-        * .branchid, str, identifier of branch
-        * .nodeid, str, identifier of connectivity node
+        * .id_of_branch, str, identifier of branch
+        * .id_of_node, str, identifier of connectivity node
     given_factors: pandas.DataFrame (step, id)
         * .type, 'var' | 'const'
         * .id_of_source , str, source from previous step for (initial) value
         * .value, float, (initial) value if no valid source from previous step
         * .min, float, smallest value, constraint during optimization
         * .max, float, greatest value, constraint during optimization
-    assoc_frame: pandas.DataFrame (int (step), str (branchjid), str (nodeid))
+    assoc_frame: pandas.DataFrame 
+        (int (step), str (id_of_branch), str (id_of_node))
         * str (id of factor)
     steps: iterable
         int, indices of optimization steps, first step has index 0
@@ -545,10 +548,10 @@ def _get_injection_factors(injection_factor_step_groups, step):
             pd.DataFrame(
                 [],
                 columns=[
-                    'step', 'injid', 'id_p', 'id_q',
+                    'step', 'id_of_injection', 'id_p', 'id_q',
                     'kp', 'kq', 'index_of_injection'])
             .astype({
-                'step':np.int64, 'injid':str, 'id_p':str, 'id_q':str,
+                'step':np.int64, 'id_of_injection':str, 'id_p':str, 'id_q':str,
                 'kp':np.int64, 'kq':np.int64, 'index_of_injection':np.int64}))
 
 def _get_terminal_factor(terminal_factor_step_groups, step):

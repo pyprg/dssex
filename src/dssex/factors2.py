@@ -68,7 +68,10 @@ Parameters
 * .gen_factor_data, pandas.DataFrame
 * .gen_factor_symbols, casadi.SX, shape(n,1)
 * .gen_injfactor, pandas.DataFrame
-* .gen_termfactor, pandas.DataFrame
+* .gen_termfactor, pandas.DataFrame (index (id_of_branch, id_of_node))
+    * .step
+    * .id
+    * .index_of_symbol
 * .factorgroups, pandas.DataFrame
 * .injfactorgroups, pandas.DataFrame
 """
@@ -194,7 +197,7 @@ def _get_step_injection_part_to_factor(
     ----------
     injectionids: pandas.Series
         str, IDs of all injections
-    assoc_frame: (str (step), str (injid), 'p'|'q' (part))
+    assoc_frame: (str (step), str (id_of_injection), 'p'|'q' (part))
         * .id, str, ID of factor
     indices_of_steps: array_like
         int, indices of optimization steps
@@ -206,8 +209,8 @@ def _get_step_injection_part_to_factor(
     # all injections, create step, id, (pq) for all injections
     index_all = pd.MultiIndex.from_product(
         [indices_of_steps, injectionids, ('p', 'q')],
-        names=('step', 'injid', 'part'))
-    # step injid part => id
+        names=('step', 'id_of_injection', 'part'))
+    # step id_of_injection part => id
     return (
         # do not accept duplicated links
         assoc_frame[~assoc_frame.index.duplicated()]
@@ -406,13 +409,20 @@ def make_factordefs(model):
             right=factors[['id','index_of_symbol']],
             left_on='id',
             right_on='id'))
+    # gen_termfactor=(
+    #     pd.merge(
+    #         termassoc, 
+    #         model.branchterminals[['id_of_branch', 'id_of_node']]
+    #             .reset_index(), left_on=['id_of_branch', 'id_of_node'], 
+    #         right_on=['id_of_branch', 'id_of_node'])
+    #     .set_index(['id_of_branch', 'id_of_node']))
     return Factordefs(
-        factors.set_index('id'),
-        symbols,
-        injassoc.set_index(['injid', 'part']),
-        termassoc.set_index(['branchid', 'nodeid']),
-        factorgroups,
-        injfactorgroups)
+        gen_factor_data=factors.set_index('id'),
+        gen_factor_symbols=symbols,
+        gen_injfactor=injassoc.set_index(['id_of_injection', 'part']),
+        gen_termfactor=termassoc.set_index(['id_of_branch', 'id_of_node']),
+        factorgroups=factorgroups,
+        injfactorgroups=injfactorgroups)
 
 def _add_step_index(df, step_indices):
     """Copies data of df for each step index in step_indices.
@@ -458,7 +468,7 @@ def _get_injection_factors(step_factor_injection_part, factors):
             step_factor_injection_part
             .join(factors.index_of_symbol)
             .reset_index()
-            .set_index(['step', 'injid', 'part'])
+            .set_index(['step', 'id_of_injection', 'part'])
             .unstack('part')
             .droplevel(0, axis=1))
         injection_factors.columns=['id_p', 'id_q', 'kp', 'kq']
@@ -466,7 +476,7 @@ def _get_injection_factors(step_factor_injection_part, factors):
     return pd.DataFrame(
         [],
         columns=['id_p', 'id_q', 'kp', 'kq'],
-        index=pd.MultiIndex.from_arrays([[],[]], names=['step', 'injid']))
+        index=pd.MultiIndex.from_arrays([[],[]], names=['step', 'id_of_injection']))
 
 def _add_default_factors(required_factors):
     if required_factors.isna().any(axis=None):
@@ -521,7 +531,7 @@ def _get_scaling_factor_data(model, factordefs, steps, start):
           * .index_of_source, int, index in 1d-vector of previous step
           * .devtype, 'injection'
         * pandas.DataFrame, injections with scaling factors
-          (int (step), str (injid))
+          (int (step), str (id_of_injection))
           * .id_p, str, ID for scaling factor of active power
           * .id_q, str, ID for scaling factor of reactive power
           * .kp, int, index of active power scaling factor in 1d-vector
@@ -530,7 +540,7 @@ def _get_scaling_factor_data(model, factordefs, steps, start):
     generic_injfactor_steps = _add_step_index(factordefs.gen_injfactor, steps)
     assoc_steps = (
         _selectgroups(steps, factordefs.injfactorgroups)
-        .set_index(['step', 'injid', 'part']))
+        .set_index(['step', 'id_of_injection', 'part']))
     # get generic_assocs which are not in assocs of step, this allows
     #   overriding the linkage of factors
     assoc_diff = generic_injfactor_steps.index.difference(assoc_steps.index)
@@ -846,15 +856,15 @@ def setup_factors_for_step(model, factordefs, step):
             * .index_of_source, int, index in 1d-vector of previous step
             * .devtype, 'terminal'|'injection'
         * injection_factors: pandas.DataFrame
-            * .injid, str, ID of injection
+            * .id_of_injection, str, ID of injection
             * .id_p, str, ID of scaling factor for active power
             * .id_q, str, ID of scaling factor for reactive power
             * .kp, int, index of symbol
             * .kq, int, index of symbol
             * .index_of_injection, int
         * terminal_factors: pandas.DataFrame
-            * .branchid, str, ID of branch
-            * .nodeid, str, ID of node
+            * .id_of_branch, str, ID of branch
+            * .id_of_node, str, ID of node
             * .id, str, ID of factor
             * .index_of_symbol, int
             * .index_of_terminal, int"""
