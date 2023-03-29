@@ -83,7 +83,7 @@ class Make_factordefs(unittest.TestCase):
             err_msg="expected index is ('consumer', 'p')")
         assert_array_equal(
             factordefs.gen_termfactor,
-            np.zeros((0,3), dtype=object),
+            np.zeros((0,4), dtype=object),
             err_msg="no taps (terminal) factor"),
         self.assertEqual(
             factordefs.factorgroups.groups.groups,
@@ -130,7 +130,7 @@ class Make_factordefs(unittest.TestCase):
             err_msg="expected no generic injection_factor relation")
         assert_array_equal(
             factordefs.gen_termfactor.to_numpy(),
-            np.array([[-1, 'taps', 0]], dtype=object),
+            np.array([[-1, 'taps', 0, 0]], dtype=object),
             err_msg="expected taps (terminal) factor [-1, 'taps', 0]"),
         assert_array_equal(
             factordefs.gen_termfactor.index.to_numpy()[0],
@@ -157,7 +157,7 @@ class Make_factor_data2(unittest.TestCase):
             (0,1),
             "no taps factors")
         self.assertEqual(
-            factordata.index_of_term.shape,
+            factordata.index_of_terminal.shape,
             (0,),
             "no terminals with taps")
         self.assertEqual(

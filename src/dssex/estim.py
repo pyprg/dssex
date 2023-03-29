@@ -86,7 +86,7 @@ def get_tap_factors(branchtaps, position_syms):
         return casadi.SX(0, 1)
 
 def _mult_gb_by_tapfactors(
-        gb_mn_tot, foffd, index_of_term, index_of_other_term):
+        gb_mn_tot, foffd, index_of_terminal, index_of_other_terminal):
     """Multiplies conductance and susceptance of branch terminals in order
     to consider positions of taps.
 
@@ -100,9 +100,9 @@ def _mult_gb_by_tapfactors(
         gb_mn_tot[:,3] - b_tot
     foffd: casadi.SX
         vector - off-diagonal factor
-    index_of_term: array_like
+    index_of_terminal: array_like
         taps -> index of terminal
-    index_of_other_term: array_like
+    index_of_other_terminal: array_like
         taps -> index of other terminal (of same branch)
 
     Returns
@@ -113,13 +113,13 @@ def _mult_gb_by_tapfactors(
         gb_mn_tot[:,2] - g_tot
         gb_mn_tot[:,3] - b_tot"""
     assert foffd.size1(), "factors required"
-    assert len(index_of_term), "indices of terminals required"
-    assert len(index_of_other_term), "indices of other terminals required"
+    assert len(index_of_terminal), "indices of terminals required"
+    assert len(index_of_other_terminal), "indices of other terminals required"
     # mn
-    gb_mn_tot[index_of_term, :2] *= foffd
-    gb_mn_tot[index_of_other_term, :2] *= foffd
+    gb_mn_tot[index_of_terminal, :2] *= foffd
+    gb_mn_tot[index_of_other_terminal, :2] *= foffd
     # tot
-    gb_mn_tot[index_of_term, 2:] *= (foffd*foffd)
+    gb_mn_tot[index_of_terminal, 2:] *= (foffd*foffd)
     return gb_mn_tot
 
 def _create_gb_expressions(terms):
@@ -434,17 +434,17 @@ def _create_gb_mn_tot(branchterminals, branchtaps, position_syms):
         # alternative of _mult_gb_by_tapfactors
         count_of_rows = gb_mn_tot.size1()
         foffd_term = casadi.SX.ones(count_of_rows)
-        foffd_term[branchtaps.index_of_term] = foffd
+        foffd_term[branchtaps.index_of_terminal] = foffd
         foffd_otherterm = casadi.SX.ones(count_of_rows)
-        foffd_otherterm[branchtaps.index_of_other_term] = foffd
+        foffd_otherterm[branchtaps.index_of_other_terminal] = foffd
         gb_mn_tot[:, :2] *= (foffd_term * foffd_otherterm)
         gb_mn_tot[:, 2:] *= (foffd_term * foffd_term)
         # end of alternative of _mult_gb_by_tapfactors
         # return _mult_gb_by_tapfactors(
         #     gb_mn_tot,
         #     foffd,
-        #     branchtaps.index_of_term,
-        #     branchtaps.index_of_other_term)
+        #     branchtaps.index_of_terminal,
+        #     branchtaps.index_of_other_terminal)
     return gb_mn_tot
 
 def create_v_symbols_gb_expressions(model):
@@ -1154,11 +1154,11 @@ def _get_batch_expressions_br(model, v_syms_gb_ex, quantity):
     get_branch_expr = make_get_branch_expressions(v_syms_gb_ex, quantity)
     branchterminals = model.branchterminals
     return {
-        id_of_batch:get_branch_expr(branchterminals.loc[df.index_of_term])
+        id_of_batch:get_branch_expr(branchterminals.loc[df.index_of_terminal])
         for id_of_batch, df in get_batches(
             get_values(model, quantity),
             model.branchoutputs,
-            'index_of_term')}
+            'index_of_terminal')}
 
 def _get_batch_expressions_inj(model, ipqv, quantity):
     """Creates a vector (casadi.SX, shape n,1) expressing injected absolute
@@ -1838,7 +1838,8 @@ def get_step_data_fns(model):
     """Creates two functions for generating step specific data,
     'ini_step_data' and 'next_step_data'.
     Function 'ini_step_data' creates the step_data structure for the first run
-    of function 'optimize_step'. Function 'next_step_data' for all subsequent runs.
+    of function 'optimize_step'. Function 'next_step_data' for all 
+    subsequent runs.
 
     Parameters
     ----------

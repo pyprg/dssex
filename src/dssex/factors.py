@@ -286,7 +286,7 @@ def _get_step_factor_to_terminal(terminals, assoc_frame, given_factors, steps):
     Parameters
     ----------
     terminals: pandas.DataFrame
-        * .index_of_term, int
+        * .index_of_terminal, int
         * .id_of_branch, str
         * .id_of_node, str
     assoc_frame: pandas.DataFrame 
@@ -315,7 +315,7 @@ def _get_step_factor_to_terminal(terminals, assoc_frame, given_factors, steps):
              for step in steps])
     except KeyError:
         return pd.DataFrame(
-            {'index_of_term':[]},
+            {'index_of_terminal':[]},
             dtype=np.int64,
             index=pd.MultiIndex.from_arrays([[],[]], names=['step', 'id']))
 
@@ -361,7 +361,7 @@ def get_taps_factor_data(terminals, given_factors, assoc_frame, steps, start):
           * .index_of_source, int, index in 1d-vector of previous step
           * .devtype, 'terminal'
         * pandas.DataFrame, terminals with taps factors
-          (int (step), int (index_of_term))
+          (int (step), int (index_of_terminal))
           * .index_of_symbol, int"""
     # given factors are either specific for a step or defined for each step
     #   which is indicated by a '-1' step-index
@@ -380,10 +380,10 @@ def get_taps_factor_data(terminals, given_factors, assoc_frame, steps, start):
         factors, index_of_symbol)
     factors.reset_index(inplace=True)
     terminal_factor = (
-        factors[['step', 'index_of_term', 'index_of_symbol']]
-        .set_index(['step', 'index_of_term']))
+        factors[['step', 'index_of_terminal', 'index_of_symbol']]
+        .set_index(['step', 'index_of_terminal']))
     factors.set_index(['step', 'type', 'id'], inplace=True)
-    factors.drop(columns=['index_of_term'], inplace=True)
+    factors.drop(columns=['index_of_terminal'], inplace=True)
     return factors.assign(devtype='terminal'), terminal_factor
 
 def _groupby_step(df):
@@ -452,7 +452,7 @@ def _select_rows(vecs, row_index):
 
 Factordata = namedtuple(
     'Factordata',
-    'kpq ftaps index_of_term '
+    'kpq ftaps index_of_terminal '
     'vars values_of_vars var_min var_max is_discrete '
     'consts values_of_consts '
     'var_const_to_factor var_const_to_kp var_const_to_kq var_const_to_ftaps')
@@ -466,7 +466,7 @@ kpq: casadi.SX
     reactive power per injection
 ftaps: casadi.SX
     vector, symbols for taps factors of terminals
-index_of_term: numpy.array
+index_of_terminal: numpy.array
     int, index of terminal which ftaps is assigned to
 vars: casadi.SX
     column vector, symbols for variables of factors
@@ -499,7 +499,7 @@ var_const_to_ftaps: array_like
 _empty_factor_data = Factordata(
     kpq=casadi.horzcat(_SX_0r1c, _SX_0r1c),
     ftaps=_SX_0r1c,
-    index_of_term=(),
+    index_of_terminal=(),
     vars=_SX_0r1c,
     values_of_vars=_DM_0r1c,
     var_min=_DM_0r1c,
@@ -572,14 +572,14 @@ def _get_terminal_factor(terminal_factor_step_groups, step):
         return (
             terminal_factor_step_groups
             .get_group(step)
-            .sort_values(by='index_of_term'))
+            .sort_values(by='index_of_terminal'))
     except KeyError:
         return (
             pd.DataFrame(
                 [],
-                columns=['step', 'index_of_term', 'index_of_symbol'])
+                columns=['step', 'index_of_terminal', 'index_of_symbol'])
             .astype({
-                'step':np.int64, 'index_of_term':np.int64,
+                'step':np.int64, 'index_of_terminal':np.int64,
                 'index_of_symbol':np.int64}))
 
 def _get_factor_data_for_step(
@@ -621,7 +621,7 @@ def _get_factor_data_for_step(
             reactive power per injection
         ftaps: casadi.SX
             vector, symbols for taps factors of terminals
-        index_of_term: numpy.array
+        index_of_terminal: numpy.array
             int, index of terminal which ftaps is assigned to
         vars: casadi.SX
             column vector, symbols for variables of scaling factors
@@ -682,7 +682,8 @@ def _get_factor_data_for_step(
             symbols[injection_factors.kp].reshape((-1,1)),
             symbols[injection_factors.kq].reshape((-1,1))),
         ftaps=symbols[terminal_factor.index_of_symbol].reshape((-1,1)),
-        index_of_term=terminal_factor.index_of_term.to_numpy().reshape(-1,1),
+        index_of_terminal=(
+            terminal_factor.index_of_terminal.to_numpy().reshape(-1,1)),
         # vars, variables for solver preparation
         vars=symbols_of_vars,
         # initial values, argument in solver call
@@ -701,7 +702,8 @@ def _get_factor_data_for_step(
         var_const_to_factor=var_const_to_factor,
         var_const_to_kp=var_const_to_factor[injection_factors.kp],
         var_const_to_kq=var_const_to_factor[injection_factors.kq],
-        var_const_to_ftaps=var_const_to_factor[terminal_factor.index_of_symbol])
+        var_const_to_ftaps=(
+            var_const_to_factor[terminal_factor.index_of_symbol]))
 
 def _get_next_symbol_index(df, step, default=0):
     """Returns greatest symbol index ('index_of_symbol') of addressed

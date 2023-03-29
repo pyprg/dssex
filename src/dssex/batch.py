@@ -376,7 +376,7 @@ def get_batches(values, outputs, column_of_device_index):
     outputs : pandas.DataFrame
         model.branchoutputs|model.injectionoutputs
     column_of_device_index : str
-        'index_of_term'|'index_of_injection'
+        'index_of_terminal'|'index_of_injection'
 
     Returns
     -------
@@ -500,8 +500,8 @@ def _create_gb_of_terminals_n(branchterminals, branchtaps, positions=None):
         * .g_tr_half, float, transversal conductance
         * .b_tr_half, float, transversal susceptance
     branchtaps: pandas.DataFrame (index_of_taps)
-        * .index_of_term, int
-        * .index_of_other_term, int
+        * .index_of_terminal, int
+        * .index_of_other_terminal, int
         * .Vstep, float voltage diff per tap
         * .positionneutral, int
         * .position, int (if argument positions is None)
@@ -516,16 +516,16 @@ def _create_gb_of_terminals_n(branchterminals, branchtaps, positions=None):
         gb_mn_tot[:,2] - g_tot
         gb_mn_tot[:,3] - b_tot"""
     index_of_branch_terminals = branchterminals.index
-    is_taps_at_term = branchtaps.index_of_term.isin(
+    is_taps_at_term = branchtaps.index_of_terminal.isin(
         index_of_branch_terminals)
     taps_at_term = branchtaps[is_taps_at_term]
     is_term_at_tap = index_of_branch_terminals.isin(
-        taps_at_term.index_of_term)
+        taps_at_term.index_of_terminal)
     is_taps_at_other_term = (
-        branchtaps.index_of_other_term.isin(index_of_branch_terminals))
+        branchtaps.index_of_other_terminal.isin(index_of_branch_terminals))
     taps_at_other_term = branchtaps[is_taps_at_other_term]
     is_other_term_at_tap = index_of_branch_terminals.isin(
-        taps_at_other_term.index_of_other_term)
+        taps_at_other_term.index_of_other_terminal)
     positions_ = branchtaps.position if positions is None else positions
     f_at_term = _calculate_factors_of_positions_n(
         taps_at_term, positions_[is_taps_at_term])
@@ -619,11 +619,11 @@ def _get_batch_values_br(
             model.branchtaps, positions, vnode_ri2, terminals)[slicer])
     branchterminals = model.branchterminals
     return {
-        id_of_batch:get_branch_vals(branchterminals.loc[df.index_of_term])
+        id_of_batch:get_branch_vals(branchterminals.loc[df.index_of_terminal])
         for id_of_batch, df in get_batches(
             get_values(model, selector),
             model.branchoutputs,
-            'index_of_term')}
+            'index_of_terminal')}
 
 def _get_batch_flow_values(
         model, Vnode_ri2, Vabs_sqr, kpq, positions, selector, vminsqr):

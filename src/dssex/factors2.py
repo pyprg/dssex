@@ -78,7 +78,7 @@ Parameters
 
 Factordata = namedtuple(
     'Factordata',
-    'kpq ftaps index_of_term '
+    'kpq ftaps index_of_terminal '
     'vars values_of_vars var_min var_max is_discrete '
     'consts values_of_consts '
     'var_const_to_factor var_const_to_kp var_const_to_kq var_const_to_ftaps')
@@ -92,8 +92,8 @@ kpq: casadi.SX
     reactive power per injection
 ftaps: casadi.SX
     vector, symbols for taps factors of terminals for terminals
-    addressed by index_of_term
-index_of_term: numpy.array
+    addressed by index_of_terminal
+index_of_terminal: numpy.array
     int, index of terminal which ftaps is assigned to
 vars: casadi.SX
     column vector, symbols for variables of scaling factors
@@ -409,18 +409,18 @@ def make_factordefs(model):
             right=factors[['id','index_of_symbol']],
             left_on='id',
             right_on='id'))
-    # gen_termfactor=(
-    #     pd.merge(
-    #         termassoc, 
-    #         model.branchterminals[['id_of_branch', 'id_of_node']]
-    #             .reset_index(), left_on=['id_of_branch', 'id_of_node'], 
-    #         right_on=['id_of_branch', 'id_of_node'])
-    #     .set_index(['id_of_branch', 'id_of_node']))
+    gen_termfactor=(
+        pd.merge(
+            termassoc, 
+            model.branchterminals[['id_of_branch', 'id_of_node']]
+                .reset_index(), left_on=['id_of_branch', 'id_of_node'], 
+            right_on=['id_of_branch', 'id_of_node'])
+        .set_index(['id_of_branch', 'id_of_node']))
     return Factordefs(
         gen_factor_data=factors.set_index('id'),
         gen_factor_symbols=symbols,
         gen_injfactor=injassoc.set_index(['id_of_injection', 'part']),
-        gen_termfactor=termassoc.set_index(['id_of_branch', 'id_of_node']),
+        gen_termfactor=gen_termfactor,
         factorgroups=factorgroups,
         injfactorgroups=injfactorgroups)
 
@@ -649,7 +649,7 @@ def _get_taps_factor_data(model, factordefs, steps):
           * .index_of_source, int, index in 1d-vector of previous step
           * .devtype, 'terminal'
         * pandas.DataFrame, terminals with taps factors
-          (int (step), int (index_of_term))
+          (int (step), int (index_of_terminal))
           * .index_of_symbol, int"""
     generic_termfactor_steps = _add_step_index(
         factordefs.gen_termfactor, steps)
@@ -657,6 +657,7 @@ def _get_taps_factor_data(model, factordefs, steps):
     #   overriding the linkage of factors
     term_factor = generic_termfactor_steps[
         ~generic_termfactor_steps.index.duplicated()]
+    
     # add index of terminal
     term_factor['index_of_terminal'] = (
         model.branchterminals[['id_of_branch', 'id_of_node']]
@@ -664,6 +665,7 @@ def _get_taps_factor_data(model, factordefs, steps):
         .set_index(['id_of_branch', 'id_of_node'])
         .reindex(term_factor.index.droplevel('step'))
         .to_numpy())
+    
     # given factors are generic with step -1
     #   generate factors for given steps
     # step, branch, node => factor
@@ -735,8 +737,8 @@ def make_factor_data(
             reactive power per injection
         ftaps: casadi.SX
             vector, symbols for taps factors of terminals for terminals
-            addressed by index_of_term
-        index_of_term: numpy.array
+            addressed by index_of_terminal
+        index_of_terminal: numpy.array
             int, index of terminal which ftaps is assigned to
         vars: casadi.SX
             column vector, symbols for variables of scaling factors
@@ -794,7 +796,7 @@ def make_factor_data(
             symbols[injection_factors.kp].reshape((-1,1)),
             symbols[injection_factors.kq].reshape((-1,1))),
         ftaps=symbols[terminal_factor.index_of_symbol].reshape((-1,1)),
-        index_of_term=terminal_factor.index_of_terminal.to_numpy(),
+        index_of_terminal=terminal_factor.index_of_terminal.to_numpy(),
         # vars, variables for solver preparation
         vars=symbols_of_vars,
         # initial values, argument in solver call
@@ -917,7 +919,7 @@ def get_values_of_factors(factor_data, x_factors):
     Enhances factors calculated by optimization with constant factors and
     reorders the factors according to order of injections and terminals.
     Returns kp and kq for each injection. Returns a factor ftaps for terminals
-    addressed by 'Factordefs.index_of_term' which is an argument to the
+    addressed by 'Factordefs.index_of_terminal' which is an argument to the
     function 'make_factor_data'.
     The function creates a vector of values for factors which are
     decision variables and those which are constants. This vector is ordered
