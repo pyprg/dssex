@@ -65,13 +65,27 @@ and references to terminals.
 
 Parameters
 ----------
-* .gen_factor_data, pandas.DataFrame
+* .gen_factor_data, pandas.DataFrame (id (str, ID of factor)) ->
+    * .step, -1
+    * .type, 'const'|'var'
+    * .id_of_source, str
+    * .value, float
+    * .min, float
+    * .max, float
+    * .is_discrete, bool
+    * .m, float
+    * .n, float
+    * .index_of_symbol, int
 * .gen_factor_symbols, casadi.SX, shape(n,1)
-* .gen_injfactor, pandas.DataFrame
-* .gen_termfactor, pandas.DataFrame (index (id_of_branch, id_of_node))
+* .gen_injfactor, pandas.DataFrame (id_of_injection, part) ->
+    * .step, -1
+    * id, str, ID of factor
+* .gen_termfactor, pandas.DataFrame (id_of_branch, id_of_node) ->
     * .step
     * .id
     * .index_of_symbol
+    * .index_of_terminal
+    * .index_of_otherterminal
 * .factorgroups, pandas.DataFrame
 * .injfactorgroups, pandas.DataFrame
 """
@@ -311,7 +325,7 @@ def _get_values_of_symbols(factor_data, value_of_previous_step):
     # values calculated in previous step
     calc = factor_data[~is_given]
     if len(calc):
-        assert len(value_of_previous_step), 'missing value_of_previous_step'
+        assert value_of_previous_step.size1(), 'missing value_of_previous_step'
         values[calc.index_of_symbol] = (
             value_of_previous_step[calc.index_of_source.astype(int)])
     return values
@@ -411,9 +425,10 @@ def make_factordefs(model):
             right_on='id'))
     gen_termfactor=(
         pd.merge(
-            termassoc, 
-            model.branchterminals[['id_of_branch', 'id_of_node']]
-                .reset_index(), left_on=['id_of_branch', 'id_of_node'], 
+            termassoc,
+            model.branchterminals[
+                ['id_of_branch', 'id_of_node', 'index_of_other_terminal']]
+                .reset_index(), left_on=['id_of_branch', 'id_of_node'],
             right_on=['id_of_branch', 'id_of_node'])
         .set_index(['id_of_branch', 'id_of_node']))
     return Factordefs(
@@ -649,23 +664,16 @@ def _get_taps_factor_data(model, factordefs, steps):
           * .index_of_source, int, index in 1d-vector of previous step
           * .devtype, 'terminal'
         * pandas.DataFrame, terminals with taps factors
-          (int (step), int (index_of_terminal))
-          * .index_of_symbol, int"""
+          (int (step), str (id_of_branch), str (id_of_node))
+          * .id, str, ID of factor
+          * .index_of_symbol, int
+          * .index_of_terminal, int"""
     generic_termfactor_steps = _add_step_index(
         factordefs.gen_termfactor, steps)
     # get generic_assocs which are not in assocs of step, this allows
     #   overriding the linkage of factors
     term_factor = generic_termfactor_steps[
         ~generic_termfactor_steps.index.duplicated()]
-    
-    # add index of terminal
-    term_factor['index_of_terminal'] = (
-        model.branchterminals[['id_of_branch', 'id_of_node']]
-        .reset_index()
-        .set_index(['id_of_branch', 'id_of_node'])
-        .reindex(term_factor.index.droplevel('step'))
-        .to_numpy())
-    
     # given factors are generic with step -1
     #   generate factors for given steps
     # step, branch, node => factor
@@ -699,7 +707,8 @@ def _get_taps_factor_data(model, factordefs, steps):
         term_factor)
 
 def make_factor_data(
-        factordefs, factors, injection_factors, terminal_factor, k_prev=[]):
+        factordefs, factors, injection_factors, terminal_factor,
+        k_prev=_DM_0r1c):
     """Prepares data of scaling factors per step. Creates symbols for
     scaling factors.
 
@@ -725,7 +734,7 @@ def make_factor_data(
 
     terminal_factors: pandas.DataFrame
 
-    k_prev: array_like
+    k_prev: casadi.DM
         float, values of scaling factors from previous step,
         variables and constants
 
@@ -887,7 +896,7 @@ def setup_factors_for_step(model, factordefs, step):
         _loc(injection_factors, step).reset_index(),
         _loc(terminal_factor, step).reset_index())
 
-def make_factor_data2(model, factordefs, step=0, k_prev=[]):
+def make_factor_data2(model, factordefs, step=0, k_prev=_DM_0r1c):
     """Returns data of decision variables and of parameters for a specific
     step.
 
@@ -904,7 +913,7 @@ def make_factor_data2(model, factordefs, step=0, k_prev=[]):
         * .injfactorgroups, pandas.DataFrame
     step: int
         index of optimization step, first index is 0
-    k_prev: array_like optional
+    k_prev: casadi.DM optional
         float, factors of previous optimization step
 
     Returns
@@ -914,8 +923,8 @@ def make_factor_data2(model, factordefs, step=0, k_prev=[]):
         factordefs, *setup_factors_for_step(model, factordefs, step), k_prev)
 
 def get_values_of_factors(factor_data, x_factors):
-    """Function for extracting factors of injections and terminals (taps)
-    from the result provided by the solver.
+    """Function for extracting factors of injections and terminals
+    (taps factors) from the result provided by the solver.
     Enhances factors calculated by optimization with constant factors and
     reorders the factors according to order of injections and terminals.
     Returns kp and kq for each injection. Returns a factor ftaps for terminals

@@ -653,7 +653,7 @@ def _get_batch_flow_values(
     Returns
     -------
     dict
-        id_of_batch, str => value for I/P/Q-calculation, float"""
+        id_of_batch, str => value(s) for I/P/Q-calculation, float"""
     shape = 0, 2 if selector=='I' else 1
     dd = defaultdict(lambda:np.empty(shape, dtype=float))
     dd.update(

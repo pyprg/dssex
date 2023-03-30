@@ -639,7 +639,7 @@ class Estimate_branch_injection(unittest.TestCase):
             'of reactive power at branch')
 
     def test_pqvalue_objPQ_two_steps(self):
-        """scale active power P and reactive power Q in two steps in order 
+        """scale active power P and reactive power Q in two steps in order
         to match measurements P and Q"""
         vcx_slack = 0.95+0.02j
         s = 30.+10.j
@@ -668,7 +668,7 @@ class Estimate_branch_injection(unittest.TestCase):
         init, res0, res = estim.estimate(
             model,
             step_params=[
-                dict(objectives='P'), 
+                dict(objectives='P'),
                 dict(objectives='Q', constraints='P')])
         # check
         self.assertTrue(res[1], 'estimate succeeds')
@@ -692,7 +692,7 @@ class Estimate_branch_injection(unittest.TestCase):
             'of reactive power at branch')
 
     def test_pqvalue_objI(self):
-        """scale active power P and reactive power Q in order to match 
+        """scale active power P and reactive power Q in order to match
         measurements for electric current I"""
         vcx_slack = 0.95+0.02j
         pq_abs = 30/(2**.5)
