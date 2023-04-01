@@ -1885,7 +1885,7 @@ def get_step_data_fns(model, factordefs):
         #++++++++++++++++++++++++
 
         batch_values = get_batch_values(
-            model, voltages_ri2, kpq, step_data.positions, constraints)
+            model, factordefs, voltages_ri2, kpq, ftaps, step_data.positions, constraints)
         return make_step_data(
             step=step,
             k_prev=k_var_const,

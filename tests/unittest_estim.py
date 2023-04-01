@@ -292,7 +292,7 @@ class Power_flow_calculation_taps(unittest.TestCase):
                 position=-16),# <- 10 percent increase
             grid.Deff(
                 'taps', type='const', min=-16, max=16, value=-16, 
-                m=-0.00625, is_discrete=True), # <- 10 percent increase
+                m=-0.00625, n=1., is_discrete=True), # <- 10 percent increase
             grid.Link(objid='branch_1', id='taps', nodeid='n_1', 
                       cls=grid.Terminallink))
         # calculate

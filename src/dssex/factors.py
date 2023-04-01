@@ -356,7 +356,7 @@ def get_taps_factor_data(terminals, given_factors, assoc_frame, steps, start):
             (input for MINLP solver), True for taps model
           * .m, float, -Vdiff per tap-step in case of taps
           * .n, float, n = 1 - (Vdiff * index_of_neutral_position) for taps,
-            e.g. when index_of_neutral_position=0 --> n=0
+            e.g. when index_of_neutral_position=0 --> n=1
           * .index_of_symbol, int, index in 1d-vector of var/const
           * .index_of_source, int, index in 1d-vector of previous step
           * .devtype, 'terminal'

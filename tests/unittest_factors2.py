@@ -106,7 +106,7 @@ class Make_factordefs(unittest.TestCase):
             # scaling, define scaling factors
             grid.Deff(
                 id='taps', value=0., type='const', is_discrete=True,
-                m=-0.00625, step=-1),
+                m=-0.00625, n=1., step=-1),
             # link scaling factors to active power of consumer
             #   factor for each step (generic, step=-1)
             grid.Link(
@@ -119,7 +119,7 @@ class Make_factordefs(unittest.TestCase):
                     factordefs.gen_factor_data.iloc[0].to_numpy())),
             {'step': -1, 'type': 'const', 'id_of_source': 'taps', 'value': 0.,
               'min': -np.inf, 'max': np.inf, 'is_discrete': True, 'm': -0.00625,
-              'n': 0.0, 'index_of_symbol': 0})
+              'n': 1.0, 'index_of_symbol': 0})
         self.assertEqual(
             factordefs.gen_factor_symbols.name(),
             'taps',

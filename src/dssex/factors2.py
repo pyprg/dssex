@@ -85,7 +85,7 @@ Parameters
     * .id
     * .index_of_symbol
     * .index_of_terminal
-    * .index_of_otherterminal
+    * .index_of_other_terminal
 * .factorgroups, pandas.DataFrame
 * .injfactorgroups, pandas.DataFrame
 """
@@ -659,7 +659,7 @@ def _get_taps_factor_data(model, factordefs, steps):
             (input for MINLP solver), True for taps model
           * .m, float, -Vdiff per tap-step in case of taps
           * .n, float, n = 1 - (Vdiff * index_of_neutral_position) for taps,
-            e.g. when index_of_neutral_position=0 --> n=0
+            e.g. when index_of_neutral_position=0 --> n=1
           * .index_of_symbol, int, index in 1d-vector of var/const
           * .index_of_source, int, index in 1d-vector of previous step
           * .devtype, 'terminal'
@@ -862,7 +862,7 @@ def setup_factors_for_step(model, factordefs, step):
             * .is_discrete, bool
             * .m, float, -Vdiff per tap-step in case of taps
             * .n, float, n = 1 - (Vdiff * index_of_neutral_position) for taps,
-              e.g. when index_of_neutral_position=0 --> n=0
+              e.g. when index_of_neutral_position=0 --> n=1
             * .index_of_symbol, int, index in 1d-vector of var/const
             * .index_of_source, int, index in 1d-vector of previous step
             * .devtype, 'terminal'|'injection'

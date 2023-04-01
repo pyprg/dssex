@@ -112,8 +112,7 @@ def get_gb_terms(terms, foffd):
 
 def create_gb(terms, count_of_nodes, foffd):
     """Generates a conductance-susceptance matrix of branches equivalent to
-    branch-admittance matrix. M[n,n] of slack nodes is set to 1, other
-    values of slack nodes are zero.
+    branch-admittance matrix.
 
     Parameters
     ----------
@@ -121,10 +120,8 @@ def create_gb(terms, count_of_nodes, foffd):
 
     count_of_nodes: int
         number of power flow calculation nodes
-    flo: array_like
-        double, longitudinal taps factor, sparse for terminals with taps
-    ftr: array_like
-        transversal taps factor, sparse for terminals with taps
+    foffd: pandas.Series, float
+        tap-factor for off-diagonal admittance y_mn
 
     Returns
     -------
@@ -153,7 +150,7 @@ def create_gb_matrix(model, pos):
     Parameters
     ----------
     model: egrid.model.Model
-
+        data of power network
     pos: numpy.array, int
         vector of position, one variable for each terminal with taps
 

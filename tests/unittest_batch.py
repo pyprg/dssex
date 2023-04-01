@@ -26,6 +26,7 @@ import egrid.builder as grid
 import dssex.pfcnum as pfc
 import dssex.estim as estim
 import dssex.batch as batch
+import dssex.factors2 as ft
 from functools import partial
 from numpy.linalg import norm
 from egrid import make_model
@@ -59,7 +60,21 @@ grid1 = (
     grid.Branch('line_2', 'n_1', 'n_3', y_lo=1e3-1e3j),
     grid.Injection('consumer_1', 'n_2', P10=10.0, Q10=10.0),
     grid.Injection('consumer_2', 'n_3', P10=20.0, Q10=15.0),
-    grid.Injection('consumer_3', 'n_3', P10=30.0, Q10=20.0))
+    grid.Injection('consumer_3', 'n_3', P10=30.0, Q10=20.0),
+    grid.Branchtaps(
+        'Branchtaps',
+        id_of_node='n_0',
+        id_of_branch='line_2',
+        Vstep=.1/16,
+        positionmin=-16,
+        positionneutral=0,
+        positionmax=16,
+        position=-16),# <- 10 percent increase
+    grid.Deff(
+        'taps', type='const', min=-16, max=16, value=-16, 
+        m=-0.00625, n=1., is_discrete=True), # <- 10 percent increase
+    grid.Link(objid='line_0', id='taps', nodeid='n_0', cls=grid.Terminallink)
+    )
 
 class Batch(unittest.TestCase):
 
@@ -93,6 +108,7 @@ class Batch(unittest.TestCase):
             grid.Vvalue('n_3')]
         pq_factors = np.ones((3,2), dtype=float)
         model = make_model(grid1, ipq_batches)
+        factordefs = ft.make_factordefs(model)
         # calculate power flow
         expr = estim.create_v_symbols_gb_expressions(model, None)
         success, vnode_ri = estim.calculate_power_flow(
@@ -113,7 +129,7 @@ class Batch(unittest.TestCase):
         ed = pfc.calculate_electric_data(model, vnode_cx, pq_factors)
         # act
         batch_values = batch.get_batch_values(
-            model, vnode_ri2, pq_factors, None, 'IPQV')
+            model, factordefs, vnode_ri2, pq_factors, np.array([-16]), None, 'IPQV')
         # test
         df_batch = (
             pd.DataFrame(
@@ -185,6 +201,20 @@ class Batch(unittest.TestCase):
             ed.node().loc['n_3', 'V_pu'],
             delta=1e-12,
             msg='voltage at n_3 is result of power flow calculation')
+
+
+# import batch as bt
+
+# class Get_branch_flow_values(unittest.TestCase):
+    
+#     def _(self):
+        
+#         bt._get_branch_flow_values(
+#             model.branchtaps, positions, vnode_ri2, model.branchterminals)        
+    
+    
+    
+    
 
 if __name__ == '__main__':
     unittest.main()
