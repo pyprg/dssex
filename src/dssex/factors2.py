@@ -397,15 +397,15 @@ def make_factordefs(model):
         * .factorgroups, pandas.DataFrame
         * .injfactorgroups, pandas.DataFrame"""
     factorgroups = _create_stepgroups(model.factors)
-    injfactorgroups = _create_stepgroups(model.injection_factor_associations)
-    termfactorgroups = _create_stepgroups(model.terminal_factor_associations)
     # factors with attribute step == -1
+    termfactorgroups = _create_stepgroups(model.terminal_factor_associations)
     gen_factors = _selectgroup(-1, factorgroups)
     # terminal-factor association with step attribute == -1
     gen_termassoc = _selectgroup(-1, termfactorgroups)
     valid_termassoc = gen_termassoc.id.isin(gen_factors.id)
     termassoc_ = gen_termassoc[valid_termassoc]
     # injection-factor association with step attribute == -1
+    injfactorgroups = _create_stepgroups(model.injection_factor_associations)
     gen_injassoc = _selectgroup(-1, injfactorgroups)
     valid_incassoc = gen_injassoc.id.isin(gen_factors.id)
     injassoc = gen_injassoc[valid_incassoc]

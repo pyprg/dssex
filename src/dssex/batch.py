@@ -28,10 +28,10 @@ for including measurements/setpoints into the estimation process.
 """
 import re
 import numpy as np
-import dssex.batchnext as bn
 from functools import partial
 from collections import defaultdict
 from pandas import concat
+from dssex.pfcnum import create_gb_of_terminals_n, calculate_term_factor_n
 from dssex.injections import calculate_cubic_coefficients
 # square of voltage magnitude, minimum value for load curve,
 #   if value is below _VMINSQR the load curves for P and Q converge
@@ -575,7 +575,7 @@ def _get_branch_flow_values(
         * [:,1] Iim, imaginary part of current
         * [:,2] P, active power
         * [:,3] Q, reactive power"""
-    gb_mn_tot = bn._create_gb_of_terminals_n(branchterminals, term_factor)
+    gb_mn_tot = create_gb_of_terminals_n(branchterminals, term_factor)
     gb_mn_tot = _create_gb_of_terminals_n(
         branchterminals, branchtaps, positions)
     # reverts columns to y_tot, y_mn
@@ -722,7 +722,7 @@ def get_batch_values(
     _vals = []
     quantities_upper = quantities.upper()
     if re.match(r'I|P|Q', quantities_upper):
-        term_factor = bn.calculate_term_factor_n(factordefs, fpositions)
+        term_factor = calculate_term_factor_n(factordefs, fpositions)
     for sel in quantities_upper:
         if sel in 'IPQ':
             id_val = _get_batch_flow_values(

@@ -202,19 +202,5 @@ class Batch(unittest.TestCase):
             delta=1e-12,
             msg='voltage at n_3 is result of power flow calculation')
 
-
-# import batch as bt
-
-# class Get_branch_flow_values(unittest.TestCase):
-    
-#     def _(self):
-        
-#         bt._get_branch_flow_values(
-#             model.branchtaps, positions, vnode_ri2, model.branchterminals)        
-    
-    
-    
-    
-
 if __name__ == '__main__':
     unittest.main()

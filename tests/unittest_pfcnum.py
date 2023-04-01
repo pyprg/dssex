@@ -63,11 +63,86 @@ class Calculate_power_flow(unittest.TestCase):
         success, vcx = pfc.calculate_power_flow(model)
         self.assertTrue(
             success,
-            'calculate_power_flow succeeds with slack node only')
+            'calculate_power_flow succeeds with slack node and injection')
         assert_array_equal(
             vcx,
             np.array([[vslack]]),
             err_msg='calculate_power_flow shall return the slack voltage')
+
+    def test_slacknode_branch(self):
+        vslack = .994+.023j
+        model = make_model(
+            grid.Slacknode('n_0', vslack),
+            grid.Branch('branch', 'n_0', 'n_1', y_lo=1e3))
+        success, vcx = pfc.calculate_power_flow(model)
+        self.assertTrue(
+            success,
+            'calculate_power_flow succeeds with slack node and branch')
+        assert_array_equal(
+            vcx,
+            np.array([[vslack], [vslack]]),
+            err_msg='calculate_power_flow shall return the slack voltage')
+
+    def test_slacknode_branch_tapfactor(self):
+        """with taps, taps are modeled with a terminal factor which is a
+        factor + Terminallink"""
+        vslack = .994+.023j
+        model = make_model(
+            grid.Slacknode('n_0', vslack),
+            grid.Branch('branch', 'n_0', 'n_1', y_lo=1e3),
+            grid.Deff(id='taps', type='const', value=-16, m=-.00625, n=1.),
+            grid.Link(
+                objid='branch', id='taps', nodeid='n_0', 
+                cls=grid.Terminallink))
+        success, vcx = pfc.calculate_power_flow(model)
+        self.assertTrue(
+            success,
+            'calculate_power_flow succeeds with slack node,'
+            ' branch and tapchanger')
+        assert_array_almost_equal(
+            vcx,
+            np.array([[vslack], [1.1 * vslack]]),
+            err_msg=
+            'calculate_power_flow shall return the slack voltage and '
+            'voltage increased by tap factor')
+
+    def test_slacknode_branch_many_tapfactors(self):
+        """with taps, multiple taps are modeled with factors, checks
+        the correct assignment of tapposition to terminal"""
+        vslack = .994+.023j
+        model = make_model(
+            grid.Slacknode('n_0', vslack),
+            grid.Branch('branch', 'n_0', 'n_1', y_lo=1e3),
+            grid.Deff(id='taps', type='const', value=-16, m=-.00625, n=1.),
+            grid.Link(
+                objid='branch', id='taps', nodeid='n_0', 
+                cls=grid.Terminallink),
+            grid.Branch('branch2', 'n_0', 'n_2', y_lo=1e3),
+            grid.Deff(id='taps2', type='const', value=0., m=-.00625, n=1.),
+            grid.Link(
+                objid='branch2', id='taps2', nodeid='n_0', 
+                cls=grid.Terminallink),
+            grid.Branch('branch3', 'n_0', 'n_3', y_lo=1e3),
+            grid.Deff(id='taps3', type='var', value=16, m=-.00625, n=1.),
+            grid.Link(
+                objid='branch3', id='taps3', nodeid='n_0', 
+                cls=grid.Terminallink),
+            grid.Branch('branch4', 'n_0', 'n_4', y_lo=1e3))
+        success, vcx = pfc.calculate_power_flow(model)
+        self.assertTrue(
+            success,
+            'calculate_power_flow succeeds with slack node,'
+            ' branches and tapchangers')
+        Vexpected = pd.Series(
+            [vslack, 1.1 * vslack, vslack, .9 * vslack, vslack],
+            index=['n_0', 'n_1', 'n_2', 'n_3', 'n_4'])
+        assert_array_almost_equal(
+            vcx,
+            # Vexpected ordered according to nodes in model
+            Vexpected.reindex(model.nodes.index).array.reshape(-1,1),
+            err_msg=
+            'calculate_power_flow shall return the slack voltage and '
+            'voltages increased/decreased by tap factors')
 
 class Calculate_electric_data(unittest.TestCase):
 
