@@ -85,8 +85,8 @@ def create_v_symbols_gb_expressions(model, factordefs):
 
     #+++++++++ old ++++++++++
 
-    position_syms = casadi.SX.sym('pos', len(model.branchtaps), 1)
-    gb_mn_tot = _create_gb_mn_tot(terms, model.branchtaps, position_syms)
+    # position_syms = casadi.SX.sym('pos', len(model.branchtaps), 1)
+    # gb_mn_tot = _create_gb_mn_tot(terms, model.branchtaps, position_syms)
 
     #++++++++++++++++++++++++
 
@@ -103,7 +103,7 @@ def create_v_symbols_gb_expressions(model, factordefs):
         Vslack_syms=casadi.horzcat(
             casadi.SX.sym('Vre_slack', count_of_slacks),
             casadi.SX.sym('Vim_slack', count_of_slacks)),
-        position_syms=position_syms,
+        #position_syms=factordefs.gen_factor_symbols, #position_syms,
         gb_mn_tot=gb_mn_tot,
         Y_by_V=multiply_Y_by_V(Vnode_syms, G, B))
 

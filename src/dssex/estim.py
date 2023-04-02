@@ -29,7 +29,7 @@ from scipy.sparse import coo_matrix
 from dssex.injections import calculate_cubic_coefficients
 from dssex.batch import (
     get_values, get_batches, value_of_voltages, get_batch_values)
-from dssex.factors import make_get_factor_data, get_values_of_factors
+#from dssex.factors import make_get_factor_data, get_values_of_factors
 import dssex.factors2 as ft #import make_factordefs
 # square of voltage magnitude, default value, minimum value for load curve,
 #   if value is below _VMINSQR the load curves for P and Q converge
@@ -456,7 +456,7 @@ def create_v_symbols_gb_expressions(model, factordefs):
 # power flow calculation
 #
 
-def make_get_scaling_and_injection_data(model, Vnode_syms, vminsqr):
+def make_get_scaling_and_injection_data(model, factordefs, Vnode_syms, vminsqr):
     """Returns a function creating scaling_data and injection_data
     for a given step, in general expressions which are specific
     for the given step.
@@ -465,6 +465,8 @@ def make_get_scaling_and_injection_data(model, Vnode_syms, vminsqr):
     ----------
     model: egrid.model.Model
         data of electric grid
+    factordefs: Factordefs
+
     Vnode_syms: casadi.SX
         three vectors of node voltage expressions
         * Vnode_syms[:,0], float, Vre vector of real node voltages
@@ -514,7 +516,8 @@ def make_get_scaling_and_injection_data(model, Vnode_syms, vminsqr):
             [:,5] Qip, reactive power interpolated
             [:,6] Vabs_sqr, square of voltage magnitude
             [:,7] interpolate?"""
-    get_factor_data = make_get_factor_data(model)
+    get_factor_data = partial(ft.make_factor_data2, model, factordefs)
+    # get_factor_data = make_get_factor_data(model)
     injections = model.injections
     node_to_inj = casadi.SX(model.mnodeinj).T
     def get_scaling_and_injection_data(step=0, k_prev=_DM_0r1c):
@@ -617,7 +620,7 @@ def calculate_power_flow2(
     Vslack_syms = expr['Vslack_syms'][:,0], expr['Vslack_syms'][:,1]
     parameter_syms=casadi.vertcat(
         *Vslack_syms,
-        expr['position_syms'],
+        # expr['position_syms'],
         factor_data.vars,
         factor_data.consts)
     Vnode_syms = expr['Vnode_syms']
@@ -651,7 +654,7 @@ def calculate_power_flow2(
     return rf.stats()['success'], voltages
 
 def calculate_power_flow(
-        model, v_syms_gb_ex, tappositions=None, Vinit=None,
+        model, factordefs, v_syms_gb_ex, tappositions=None, Vinit=None,
         vminsqr=_VMINSQR):
     """Solves the power flow problem using a rootfinding algorithm.
 
@@ -659,6 +662,8 @@ def calculate_power_flow(
     ----------
     model: egrid.model.Model
         data of electric grid
+    factordefs: Factordefs
+
     v_syms_gb_ex: dict
         * 'Vnode_syms', casadi.SX, expressions of node Voltages
         * 'Vre_slack_syms', casadi.SX, symbols of slack voltages, real part
@@ -684,7 +689,7 @@ def calculate_power_flow(
         * bool, success?
         * casadi.DM, float, voltage vector [real parts, imaginary parts]"""
     get_scaling_and_injection_data = make_get_scaling_and_injection_data(
-        model, v_syms_gb_ex['Vnode_syms'], vminsqr)
+        model, factordefs, v_syms_gb_ex['Vnode_syms'], vminsqr)
     scaling_data, Iinj_data = get_scaling_and_injection_data(step=0)
     Vslack_syms = v_syms_gb_ex['Vslack_syms']
     Inode_inj = _reset_slack_current(
@@ -1880,7 +1885,7 @@ def get_step_data_fns(model, factordefs):
 
         #+++++++++ old ++++++++++
 
-        kpq, k_var_const = get_values_of_factors(step_data.scaling_data, k)
+        # kpq, k_var_const = get_values_of_factors(step_data.scaling_data, k)
 
         #++++++++++++++++++++++++
 
@@ -2057,7 +2062,9 @@ def get_Vcx_kpq(factor_data, voltages_ri, k):
         node voltages
     kpq: numpy.array (shape m,2), float
         scaling factors per injection"""
-    kpq, _ = get_values_of_factors(factor_data, k)
+    kpq, *_ = ft.get_values_of_factors(factor_data, k)
+
+    #kpq, _ = get_values_of_factors(factor_data, k)
     V = ri_to_complex(voltages_ri)
     return V, kpq
 

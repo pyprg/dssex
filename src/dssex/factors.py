@@ -770,21 +770,21 @@ def _get_factor_data(model, step=0, k_prev=_DM_0r1c):
         step,
         k_prev)
 
-def make_get_factor_data(model):
-    """Creates a function for creating Factordata specific for a calculation
-    step.
+# def make_get_factor_data(model):
+#     """Creates a function for creating Factordata specific for a calculation
+#     step.
 
-    Parameters
-    ----------
-    model: egrid.model.Model
-        data of electric grid
+#     Parameters
+#     ----------
+#     model: egrid.model.Model
+#         data of electric grid
 
-    Returns
-    -------
-    function
-        (int, casadi.DM) -> (Factordata)
-        (index_of_calculation_step, result_of_previous_step) -> (Factordata)"""
-    return partial(_get_factor_data, model)
+#     Returns
+#     -------
+#     function
+#         (int, casadi.DM) -> (Factordata)
+#         (index_of_calculation_step, result_of_previous_step) -> (Factordata)"""
+#     return partial(_get_factor_data, model)
 
 def get_values_of_factors(factor_data, x_factors):
     """Function for extracting factors for injections from the result provided

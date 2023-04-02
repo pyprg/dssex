@@ -101,13 +101,14 @@ def _calculate_f_mn_tot(index_of_other_terminal, term_factor):
     Returns
     -------
     numpy.array, float (shape n,2)"""
-    f = (
+    array = (
         index_of_other_terminal
         .join(term_factor, how='left')
         .set_index('index_of_other_terminal')
         .join(term_factor, how='left', rsuffix='_other')
-        .fillna(1.))
-    return f.to_numpy()[:,[1,0]] * f.ftaps.to_numpy().reshape(-1,1)
+        .fillna(1.)
+        .to_numpy()[:,[1,0]])
+    return array * array[:,[1]]
 
 def create_gb_of_terminals_n(branchterminals, term_factor):
     """Creates a vectors (as a numpy array) of branch-susceptances and

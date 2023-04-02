@@ -25,6 +25,7 @@ import pandas as pd
 import egrid.builder as grid
 import dssex.pfcnum as pfc
 import dssex.estim as estim
+import dssex.estimnext as estimnext
 import dssex.batch as batch
 import dssex.factors2 as ft
 from functools import partial
@@ -61,15 +62,15 @@ grid1 = (
     grid.Injection('consumer_1', 'n_2', P10=10.0, Q10=10.0),
     grid.Injection('consumer_2', 'n_3', P10=20.0, Q10=15.0),
     grid.Injection('consumer_3', 'n_3', P10=30.0, Q10=20.0),
-    grid.Branchtaps(
-        'Branchtaps',
-        id_of_node='n_0',
-        id_of_branch='line_2',
-        Vstep=.1/16,
-        positionmin=-16,
-        positionneutral=0,
-        positionmax=16,
-        position=-16),# <- 10 percent increase
+    # grid.Branchtaps(
+    #     'Branchtaps',
+    #     id_of_node='n_0',
+    #     id_of_branch='line_0',
+    #     Vstep=.1/16,
+    #     positionmin=-16,
+    #     positionneutral=0,
+    #     positionmax=16,
+    #     position=-16),# <- 10 percent increase
     grid.Deff(
         'taps', type='const', min=-16, max=16, value=-16, 
         m=-0.00625, n=1., is_discrete=True), # <- 10 percent increase
@@ -109,10 +110,12 @@ class Batch(unittest.TestCase):
         pq_factors = np.ones((3,2), dtype=float)
         model = make_model(grid1, ipq_batches)
         factordefs = ft.make_factordefs(model)
+        
+        
         # calculate power flow
-        expr = estim.create_v_symbols_gb_expressions(model, None)
+        expr = estimnext.create_v_symbols_gb_expressions(model, factordefs)
         success, vnode_ri = estim.calculate_power_flow(
-            model, expr, vminsqr=_VMINSQR)
+            model, factordefs, expr, vminsqr=_VMINSQR)
         vnode_ri2 = np.hstack(np.vsplit(vnode_ri.toarray(),2))
         self.assertTrue(success, "calculate_power_flow shall succeed")
         # check residual current
@@ -127,6 +130,8 @@ class Batch(unittest.TestCase):
         max_dev = norm(Inode[model.count_of_slacks:], np.inf)
         self.assertLess(max_dev, 3e-8, 'residual node current is 0')
         ed = pfc.calculate_electric_data(model, vnode_cx, pq_factors)
+        
+        
         # act
         batch_values = batch.get_batch_values(
             model, factordefs, vnode_ri2, pq_factors, np.array([-16]), None, 'IPQV')
