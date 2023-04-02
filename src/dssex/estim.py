@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
 """
-Created on Sat Sep 10 11:28:52 2022
-
 Copyright (C) 2022, 2023 pyprg
 
 This program is free software: you can redistribute it and/or modify
@@ -16,6 +14,8 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+Created on Sat Sep 10 11:28:52 2022
 
 @author: pyprg
 """
@@ -456,7 +456,8 @@ def create_v_symbols_gb_expressions(model, factordefs):
 # power flow calculation
 #
 
-def make_get_scaling_and_injection_data(model, factordefs, Vnode_syms, vminsqr):
+def make_get_scaling_and_injection_data(
+        model, factordefs, Vnode_syms, vminsqr):
     """Returns a function creating scaling_data and injection_data
     for a given step, in general expressions which are specific
     for the given step.

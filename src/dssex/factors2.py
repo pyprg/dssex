@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Created on Sun Mar 19 12:17:49 2023
+Copyright (C) 2023 pyprg
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -15,6 +15,8 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 Created on Fri Dec 16 00:14:07 2022
+
+Created on Sun Mar 19 12:17:49 2023
 
 @author: pyprg
 

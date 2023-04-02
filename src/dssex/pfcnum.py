@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Copyright (C) 2022 pyprg
+Copyright (C) 2022, 2023 pyprg
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -113,10 +113,6 @@ def _calculate_f_mn_tot(index_of_other_terminal, term_factor):
 def create_gb_of_terminals_n(branchterminals, term_factor):
     """Creates a vectors (as a numpy array) of branch-susceptances and
     branch-conductances.
-    The intended use is calculating a subset of terminal values.
-    Arguments 'branchtaps' and 'positions' will be selected
-    accordingly, hence, it is appropriate to pass the complete branchtaps
-    and positions.
 
     Parameters
     ----------
@@ -146,7 +142,7 @@ def create_gb_of_terminals_n(branchterminals, term_factor):
         branchterminals[['index_of_other_terminal']], term_factor)
     gb_mn_tot[:, :2] *= f_mn_tot[:,[0]]
     gb_mn_tot[:, 2:] *= f_mn_tot[:,[1]]
-    return gb_mn_tot
+    return gb_mn_tot.copy()
 
 def create_gb(branchterminals, count_of_nodes, term_factor):
     """Generates a conductance-susceptance matrix of branches equivalent to
@@ -616,8 +612,8 @@ def get_y_terms(branchterminals, term_factor):
     Returns
     -------
     tuple
-        * numpy.array, complex, y_lo, longitudinal admittance, y_mn
-        * numpy.array, complex, y_tot, diagonal admittance y_mm"""
+        * numpy.array, complex, y_mn, longitudinal admittance, y_mn
+        * numpy.array, complex, y_tot, diagonal admittance ymn + y_mm"""
     y_tr = branchterminals.y_tr_half.to_numpy().reshape(-1,1)
     y_mn = branchterminals.y_lo.to_numpy().reshape(-1,1)
     y_tot = y_tr + y_mn
@@ -906,7 +902,13 @@ def calculate_branch_results(model, Vnode, pos):
     branchterminals = model.branchterminals
     terms = branchterminals[(~branchterminals.is_bridge)].reset_index()
     term_is_at_A = terms.side == 'A'
+
+
+
     Ybr = get_y_branches(model, terms, term_is_at_A, pos)
+
+
+
     Vbr = get_v_branches(terms[term_is_at_A], Vnode)
     Ibr = Ybr @ Vbr
     # converts from single phase calculation to 3-phase system
@@ -1112,7 +1114,7 @@ residual_node_current: function
 
 def calculate_electric_data(
         model, voltages_cx, pq_factors=None,
-        tappositions=None, vminsqr=_VMINSQR, loadcurve='interpolated'):
+        positions=None, vminsqr=_VMINSQR, loadcurve='interpolated'):
     """Calculates and arranges electric data of injections and branches
     for a given voltage vector which is e.g. the result of a power
     flow calculation.
@@ -1126,8 +1128,8 @@ def calculate_electric_data(
     pq_factors: numpy.array, float, (nx2)
         optional
         factors for active and reactive power
-    tappositions : array_like, int, optional
-        Positions of taps. The default is model.branchtaps.position.
+    positions : array_like, int, optional
+        positions of taps
     vminsqr : float, optional
         Upper limit of interpolation, interpolates if |V|² < vminsqr.
         The default is _VMINSQR.
@@ -1142,12 +1144,10 @@ def calculate_electric_data(
         * .node, function ()->(pandas.DataFrame)
         * .residual_node_current, function ()->(numpy.ndarray<complex>)"""
     from pandas import DataFrame as DF
-    tappositions_ = (
-        model.branchtaps.position if tappositions is None else tappositions)
     get_injected_power = get_calc_injected_power_fn(
         vminsqr, model.injections, pq_factors, loadcurve)
     result_data = calculate_results(
-        model, get_injected_power, tappositions_, voltages_cx)
+        model, get_injected_power, positions, voltages_cx)
     def br_data(columns=None):
         """Returns calculated electric data of branches.
 

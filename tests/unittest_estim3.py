@@ -1,5 +1,20 @@
 # -*- coding: utf-8 -*-
 """
+Copyright (C) 2023 pyprg
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 Created on Sun Apr  2 13:15:05 2023
 
 @author: pyprg
@@ -124,6 +139,7 @@ class Calculate_power_flow(unittest.TestCase):
         #      'Vcx': vnode_cx1[idx_v].reshape(-1)})
         # print(df_Vcx1)
         diff_max = norm(
+            #                                       10% | no slack
             (vnode_cx0[idx_v] - (vnode_cx1[idx_v] / 1.1))[1:], 
             np.inf)
         self.assertLess(diff_max, 6e-3, "voltage increase about 10%")

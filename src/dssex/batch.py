@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Copyright (C) 2022 pyprg
+Copyright (C) 2022, 2023 pyprg
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -14,6 +14,7 @@ GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 Created on Fri Dec 16 00:00:58 2022
 
 @author: pyprg
@@ -548,15 +549,13 @@ def _create_gb_of_terminals_n(branchterminals, branchtaps, positions=None):
     return gb_mn_tot.copy()
 
 def _get_branch_flow_values(
-        branchtaps, term_factor, positions, vnode_ri2, branchterminals):
+        term_factor, positions, vnode_ri2, branchterminals):
     """Calculates current, active and reactive power flow into branches from
     given terminals. 'branchterminals' is a subset, all other arguments are
     complete.
 
     Parameters
     ----------
-    branchtaps: pandas.DataFrame
-        data of taps
     term_factor: pandas.DataFrame (index_of_terminal) ->
         * .ftaps, float, factor for admittances applied at terminals
     positions: array_like<int>
@@ -576,10 +575,8 @@ def _get_branch_flow_values(
         * [:,2] P, active power
         * [:,3] Q, reactive power"""
     gb_mn_tot = create_gb_of_terminals_n(branchterminals, term_factor)
-    gb_mn_tot = _create_gb_of_terminals_n(
-        branchterminals, branchtaps, positions)
     # reverts columns to y_tot, y_mn
-    y_mn_tot = gb_mn_tot.view(dtype=np.complex128)[:,np.newaxis,::-1]
+    y_tot_mn = gb_mn_tot.view(dtype=np.complex128)[:,np.newaxis,::-1]
     # complex voltage
     voltages_cx = vnode_ri2.view(dtype=np.complex128)
     # voltages per node
@@ -587,7 +584,7 @@ def _get_branch_flow_values(
     Vcx_other_node = voltages_cx[branchterminals.index_of_other_node]
     Vcx = np.hstack([Vcx_node, -Vcx_other_node]).reshape(-1,2,1)
     # current into terminal (branch)
-    Icx = (y_mn_tot @ Vcx).reshape(-1,1)
+    Icx = (y_tot_mn @ Vcx).reshape(-1,1)
     Sterm = Vcx_node * Icx.conj()
     return np.hstack([Icx.view(dtype=float), Sterm.view(dtype=float)])
 
@@ -623,7 +620,7 @@ def _get_batch_values_br(
     slicer = _branch_flow_slicer[selector]
     get_branch_vals = lambda terminals: (
         _get_branch_flow_values(
-            model.branchtaps, term_factor, positions, vnode_ri2, terminals)[slicer])
+            term_factor, positions, vnode_ri2, terminals)[slicer])
     branchterminals = model.branchterminals
     return {
         id_of_batch:get_branch_vals(branchterminals.loc[df.index_of_terminal])
@@ -682,7 +679,7 @@ def _get_batch_flow_values(
         f'selector needs to be one of "I", "P" or "Q" but is "{selector}"'
 
 def get_batch_values(
-    model, factordefs, Vnode_ri2, kpq, fpositions, positions=None, quantities='', vminsqr=_VMINSQR):
+    model, factordefs, Vnode_ri2, kpq, positions=None, quantities='', vminsqr=_VMINSQR):
     """Provided, node voltages, scaling factors and tappositions are results
     and parameters of a power flow calculation with the grid-data of the model,
     'get_batch_values' returns calculated values for the selected quantities.
@@ -722,7 +719,7 @@ def get_batch_values(
     _vals = []
     quantities_upper = quantities.upper()
     if re.match(r'I|P|Q', quantities_upper):
-        term_factor = calculate_term_factor_n(factordefs, fpositions)
+        term_factor = calculate_term_factor_n(factordefs, positions)
     for sel in quantities_upper:
         if sel in 'IPQ':
             id_val = _get_batch_flow_values(

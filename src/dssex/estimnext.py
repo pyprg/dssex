@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 """
+Copyright (C) 2023 pyprg
+
 Created on Wed Mar 29 10:20:49 2023
 
 This program is free software: you can redistribute it and/or modify
