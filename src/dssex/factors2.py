@@ -21,7 +21,7 @@ Created on Sun Mar 19 12:17:49 2023
 @author: pyprg
 
 The function 'get_factors' returns data on factors to be applied to nominal
-active and reactive power of injections. Factors fall in one of the two
+active and reactive power of injections. Factors fall in one of two
 categories 'var' or 'const'. Factors of category 'var' are decision variables.
 Factors of category 'const' are parameters. Factors are specific for
 each step. A factor is initialized by a value of a factor from previous step

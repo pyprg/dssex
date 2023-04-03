@@ -56,10 +56,11 @@ class Power_flow_calculation_basic(unittest.TestCase):
         Minimal configuration."""
         vcx_slack = 0.9+0.2j
         model = make_model(grid.Slacknode('n_0', V=vcx_slack))
+        factordefs = ft.make_factordefs(model)
         # calculate
         expr = estim.create_v_symbols_gb_expressions(model, None)
         success, vnode_ri = estim.calculate_power_flow(
-            model, expr, vminsqr=_VMINSQR)
+            model, factordefs, expr, vminsqr=_VMINSQR)
         # test
         self.assertTrue(success, "calculate_power_flow shall succeed")
         vnode_cx = estim.ri_to_complex(vnode_ri)
@@ -74,10 +75,11 @@ class Power_flow_calculation_basic(unittest.TestCase):
         model = make_model(
             grid.Slacknode('n_0', V=vcx_slack),
             grid.Injection('consumer', 'n_0', P10=30.0))
+        factordefs = ft.make_factordefs(model)
         # calculate
         expr = estim.create_v_symbols_gb_expressions(model, None)
         success, vnode_ri = estim.calculate_power_flow(
-            model, expr, vminsqr=_VMINSQR)
+            model, factordefs, expr, vminsqr=_VMINSQR)
         # test
         self.assertTrue(success, "calculate_power_flow shall succeed")
         vnode_cx = estim.ri_to_complex(vnode_ri)
@@ -92,10 +94,11 @@ class Power_flow_calculation_basic(unittest.TestCase):
         model = make_model(
             grid.Slacknode('n_0', V=vcx_slack),
             grid.Branch('line', 'n_0', 'n_1', y_lo=1e3-1e3j, y_tr=1e-6+1e-6j))
+        factordefs = ft.make_factordefs(model)
         # calculate
         expr = estim.create_v_symbols_gb_expressions(model, None)
         success, vnode_ri = estim.calculate_power_flow(
-            model, expr, vminsqr=_VMINSQR)
+            model, factordefs, expr, vminsqr=_VMINSQR)
         # test
         self.assertTrue(success, "calculate_power_flow shall succeed")
         vnode_cx = estim.ri_to_complex(vnode_ri)
@@ -110,10 +113,11 @@ class Power_flow_calculation_basic(unittest.TestCase):
         model = make_model(
             grid_pfc,
             grid.Injection('consumer', 'n_1', P10=30.0))
+        factordefs = ft.make_factordefs(model)
         # calculate
         expr = estim.create_v_symbols_gb_expressions(model, None)
         success, vnode_ri = estim.calculate_power_flow(
-            model, expr, vminsqr=_VMINSQR)
+            model, factordefs, expr, vminsqr=_VMINSQR)
         # test
         self.assertTrue(success, "calculate_power_flow shall succeed")
         # check residual current
@@ -138,10 +142,11 @@ class Power_flow_calculation_basic(unittest.TestCase):
         pure reactive power consumer."""
         model = make_model(
             grid_pfc, grid.Injection('consumer', 'n_1', Q10=10.0))
+        factordefs = ft.make_factordefs(model)
         # calculate
         expr = estim.create_v_symbols_gb_expressions(model, None)
         success, vnode_ri = estim.calculate_power_flow(
-            model, expr, vminsqr=_VMINSQR)
+            model, factordefs, expr, vminsqr=_VMINSQR)
         # test
         self.assertTrue(success, "calculate_power_flow shall succeed")
         # check residual current
@@ -165,10 +170,11 @@ class Power_flow_calculation_basic(unittest.TestCase):
         """Power flow calculation with one branch and one power consumer."""
         model = make_model(
             grid_pfc, grid.Injection('consumer', 'n_1', P10=30.0, Q10=10.0))
+        factordefs = ft.make_factordefs(model)
         # calculate
         expr = estim.create_v_symbols_gb_expressions(model, None)
         success, vnode_ri = estim.calculate_power_flow(
-            model, expr, vminsqr=_VMINSQR)
+            model, factordefs, expr, vminsqr=_VMINSQR)
         # test
         self.assertTrue(success, "calculate_power_flow shall succeed")
         # check residual current
@@ -193,10 +199,11 @@ class Power_flow_calculation_basic(unittest.TestCase):
         pure active power generator."""
         model = make_model(
             grid_pfc, grid.Injection('generator', 'n_1', P10=-30.0))
+        factordefs = ft.make_factordefs(model)
         # calculate
         expr = estim.create_v_symbols_gb_expressions(model, None)
         success, vnode_ri = estim.calculate_power_flow(
-            model, expr, vminsqr=_VMINSQR)
+            model, factordefs, expr, vminsqr=_VMINSQR)
         # test
         self.assertTrue(success, "calculate_power_flow shall succeed")
         # check residual current
@@ -236,24 +243,24 @@ class Power_flow_calculation_taps(unittest.TestCase):
         Several taps at node_1/branch_1. Neutral tap."""
         model0 = make_model(
             grid_pfc2)
+        factordefs0 = ft.make_factordefs(model0)
         model1 = make_model(
             grid_pfc2,
-            grid.Branchtaps(
-                'tap_branch_1',
-                id_of_node='n_1',
-                id_of_branch='branch_1',
-                Vstep=.1/16,
-                positionmin=-16,
-                positionneutral=0,
-                positionmax=16,
-                position=0)) # <- neutral
+            #  taps
+            grid.Deff(
+                'tap_branch_1', type='const', min=-16, max=16,
+                value=0, m=-.1/16, n=1., is_discrete=True), # <- neutral
+            grid.Link(
+                objid='branch_1', id='tap_branch_1', nodeid='n_1',
+                cls=grid.Terminallink))
+        factordefs1 = ft.make_factordefs(model1)
         # calculate
         expr0 = estim.create_v_symbols_gb_expressions(model0, None)
         success0, vnode_ri0 = estim.calculate_power_flow(
-            model0, expr0, vminsqr=_VMINSQR)
+            model0, factordefs0, expr0, vminsqr=_VMINSQR)
         expr1 = estim.create_v_symbols_gb_expressions(model1, None)
         success1, vnode_ri1 = estim.calculate_power_flow(
-            model1, expr1, vminsqr=_VMINSQR)
+            model1, factordefs1, expr1, vminsqr=_VMINSQR)
         # test
         self.assertTrue(success0, "calculate_power_flow shall succeed")
         self.assertTrue(success1, "calculate_power_flow shall succeed")
@@ -279,31 +286,24 @@ class Power_flow_calculation_taps(unittest.TestCase):
         10 percent voltage increase by selected tap."""
         model0 = make_model(
             grid_pfc2)
+        factordefs0 = ft.make_factordefs(model0)
         model1 = make_model(
             grid_pfc2,
-            grid.Branchtaps(
-                'tap_branch_1',
-                id_of_node='n_1',
-                id_of_branch='branch_1',
-                Vstep=.1/16,
-                positionmin=-16,
-                positionneutral=0,
-                positionmax=16,
-                position=-16),# <- 10 percent increase
+            # taps
             grid.Deff(
-                'taps', type='const', min=-16, max=16, value=-16, 
-                m=-0.00625, n=1., is_discrete=True), # <- 10 percent increase
-            grid.Link(objid='branch_1', id='taps', nodeid='n_1', 
-                      cls=grid.Terminallink))
+                'taps', type='const', min=-16, max=16,
+                value=-16, m=-.1/16, n=1., is_discrete=True), # <- 10% increase
+            grid.Link(
+                objid='branch_1', id='taps', nodeid='n_1',
+                cls=grid.Terminallink))
+        factordefs1 = ft.make_factordefs(model1)
         # calculate
-        factordefs0 = ft.make_factordefs(model0)
         expr0 = xt.create_v_symbols_gb_expressions(model0, factordefs0)
         success0, vnode_ri0 = estim.calculate_power_flow(
-            model0, expr0, vminsqr=_VMINSQR)
-        factordefs1 = ft.make_factordefs(model1)
+            model0, factordefs0, expr0, vminsqr=_VMINSQR)
         expr1 = xt.create_v_symbols_gb_expressions(model1, factordefs1)
         success1, vnode_ri1 = estim.calculate_power_flow(
-            model1, expr1, vminsqr=_VMINSQR)
+            model1, factordefs1, expr1, vminsqr=_VMINSQR)
         # test
         self.assertTrue(success0, "calculate_power_flow shall succeed")
         self.assertTrue(success1, "calculate_power_flow shall succeed")
@@ -338,24 +338,27 @@ class Power_flow_calculation_taps(unittest.TestCase):
         10 percent voltage decrease by selected tap."""
         model0 = make_model(
             grid_pfc2)
+        factordefs0 = ft.make_factordefs(model0)
         model1 = make_model(
             grid_pfc2,
-            grid.Branchtaps(
-                'tap_branch_1',
-                id_of_node='n_1',
-                id_of_branch='branch_1',
-                Vstep=.1/16,
-                positionmin=-16,
-                positionneutral=0,
-                positionmax=16,
-                position=16)) # <- 10 percent decrease
+
+
+
+            # taps
+            grid.Deff(
+                'taps', type='const', min=-16, max=16,
+                value=16, m=-.1/16, n=1., is_discrete=True), # <- 10% decrease
+            grid.Link(
+                objid='branch_1', id='taps', nodeid='n_1',
+                cls=grid.Terminallink))
+        factordefs1 = ft.make_factordefs(model1)
         # calculate
-        expr0 = estim.create_v_symbols_gb_expressions(model0, None)
+        expr0 = xt.create_v_symbols_gb_expressions(model0, factordefs0)
         success0, vnode_ri0 = estim.calculate_power_flow(
-            model0, expr0, vminsqr=_VMINSQR)
-        expr1 = estim.create_v_symbols_gb_expressions(model1, None)
+            model0, factordefs0, expr0, vminsqr=_VMINSQR)
+        expr1 = xt.create_v_symbols_gb_expressions(model1, factordefs1)
         success1, vnode_ri1 = estim.calculate_power_flow(
-            model1, expr1, vminsqr=_VMINSQR)
+            model1, factordefs1, expr1, vminsqr=_VMINSQR)
         # test
         self.assertTrue(success0, "calculate_power_flow shall succeed")
         self.assertTrue(success1, "calculate_power_flow shall succeed")
@@ -407,15 +410,12 @@ grid_pfc3 = [
         id_of_node_B='n_2',
         y_lo=1e3-1e3j,
         y_tr=1e-6+1e-6j),
-    grid.Branchtaps(
-        id='tap_line1',
-        id_of_node='n_1',
-        id_of_branch='line_1',
-        Vstep=.1/16,
-        positionmin=-16,
-        positionneutral=0,
-        positionmax=16,
-        position=10),
+    grid.Deff(
+        'tap_line1', type='const', min=-16, max=16,
+        value=10, m=-.1/16, n=1., is_discrete=True),
+    grid.Link(
+        objid='line_1', id='tap_line1', nodeid='n_1',
+        cls=grid.Terminallink),
     grid.Injection(
         id='consumer_0',
         id_of_node='n_2',

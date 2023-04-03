@@ -574,12 +574,12 @@ def get_expressions(model, factordefs, vminsqr=_VMINSQR):
     ed = xt.create_v_symbols_gb_expressions(model, factordefs)
     ed['get_scaling_and_injection_data'] = (
         make_get_scaling_and_injection_data(
-            model, ed['Vnode_syms'], vminsqr))
+            model, factordefs, ed['Vnode_syms'], vminsqr))
     ed['inj_to_node'] = casadi.SX(model.mnodeinj)
     return ed
 
 def calculate_power_flow2(
-        model, expr, factor_data, Inode, tappositions=None, Vinit=None):
+        model, expr, factor_data, Inode, Vinit=None):
     """Solves the power flow problem using a rootfinding algorithm. The result
     is the initial voltage vector for the optimization.
 
@@ -606,9 +606,6 @@ def calculate_power_flow2(
         values for slack need to be set to slack voltage
         * Inode[:,0] - Ire, real part of current injected into node
         * Inode[:,1] - Iim, imaginary part of current injected into node
-    tappositions: array_like
-        optional
-        int, positions of taps
     Vinit: array_like
         optional
         float, initial guess of node voltages
@@ -621,11 +618,9 @@ def calculate_power_flow2(
     Vslack_syms = expr['Vslack_syms'][:,0], expr['Vslack_syms'][:,1]
     parameter_syms=casadi.vertcat(
         *Vslack_syms,
-        # expr['position_syms'],
         factor_data.vars,
         factor_data.consts)
     Vnode_syms = expr['Vnode_syms']
-    #Inode_ri = vstack(Inode_, 2)
     Inode_ri = vstack(Inode, 2)
     variable_syms = vstack(Vnode_syms, 2)
     fn_Iresidual = casadi.Function(
@@ -641,22 +636,18 @@ def calculate_power_flow2(
     Vinit_ = (
         casadi.vertcat([1.]*count_of_pfcnodes, [0.]*count_of_pfcnodes)
         if Vinit is None else Vinit)
-    tappositions_ = (
-        model.branchtaps.position if tappositions is None else tappositions)
     # Vslack must be negative as Vslack_result + Vslack_in_Inode = 0
     #   because the root is searched for with formula: Y * Vresult + Inode = 0
     Vslack_neg = -model.slacks.V
     values_of_parameters=casadi.vertcat(
         np.real(Vslack_neg), np.imag(Vslack_neg),
-        tappositions_,
         factor_data.values_of_vars,
         factor_data.values_of_consts)
     voltages = rf(Vinit_, values_of_parameters)
     return rf.stats()['success'], voltages
 
 def calculate_power_flow(
-        model, factordefs, v_syms_gb_ex, tappositions=None, Vinit=None,
-        vminsqr=_VMINSQR):
+        model, factordefs, v_syms_gb_ex, Vinit=None, vminsqr=_VMINSQR):
     """Solves the power flow problem using a rootfinding algorithm.
 
     Parameters
@@ -674,9 +665,6 @@ def calculate_power_flow(
         * 'Y_by_V', casadi.SX, expression for Y @ V
         create the argument with call
         'create_v_symbols_gb_expressions(model, factordefs)'
-    tappositions: array_like
-        optional
-        int, positions of taps
     Vinit: array_like
         optional
         float, initial guess of node voltages
@@ -698,7 +686,7 @@ def calculate_power_flow(
         Vslack_syms[:,0], Vslack_syms[:,1],
         casadi.SX(model.mnodeinj) @ Iinj_data[:,:2])
     return calculate_power_flow2(
-        model, v_syms_gb_ex, scaling_data, Inode_inj, tappositions, Vinit)
+        model, v_syms_gb_ex, scaling_data, Inode_inj, Vinit)
 
 ##############
 # Estimation #
@@ -1367,7 +1355,7 @@ def get_batch_constraints(values_of_constraints, expressions_of_batches):
         return casadi.SX(values_notna.to_numpy()) - expr
     return _SX_0r1c
 
-def get_optimize_vk(model, expressions, positions=None):
+def get_optimize_vk(model, expressions):
     """Prepares a function which optimizes node voltages and scaling factors.
 
     Parameters
@@ -1392,18 +1380,14 @@ def get_optimize_vk(model, expressions, positions=None):
     #   Vslack must be negative as Vslack_result + Vslack_in_Inode = 0
     #   because the root is searched for with formula: Y * Vresult + Inode = 0
     Vslacks_neg = -model.slacks.V
-    params_ = casadi.vertcat(
-        vstack(expressions['Vslack_syms']),
-        expressions['position_syms'])
-    positions_ = model.branchtaps.position if positions is None else positions
+    params_ = vstack(expressions['Vslack_syms'])
     values_of_parameters_ = casadi.vertcat(
-        np.real(Vslacks_neg), np.imag(Vslacks_neg), positions_)
+        np.real(Vslacks_neg), np.imag(Vslacks_neg))
     count_of_vri = 2 * model.shape_of_Y[0]
     Vmin = [-np.inf] * count_of_vri
     Vmax = [np.inf] * count_of_vri
     def optimize_vk(
-        Vnode_ri_ini, factor_data, Inode_inj, diff_data,
-        constraints=_SX_0r1c):
+        Vnode_ri_ini, factor_data, Inode_inj, diff_data, constraints=_SX_0r1c):
         """Solves an optimization task.
 
         Parameters
@@ -1678,8 +1662,7 @@ def get_calculate_from_result(model, expressions, factor_data, x):
 
 Stepdata = namedtuple(
     'Stepdata',
-    'model expressions scaling_data Inode_inj positions diff_data '
-    'constraints')
+    'model expressions scaling_data Inode_inj diff_data constraints')
 Stepdata.__doc__ = """Data for calling function 'optimize_step'.
 
 Parameters
@@ -1715,8 +1698,6 @@ factor_data: Factordata
 Inode_inj: casadi.SX (shape n,2)
     * Inode_inj[:,0] - Ire, real part of current injected into node
     * Inode_inj[:,1] - Iim, imaginary part of current injected into node
-positions: array_like
-    int, positions of taps, can be None
 diff_data: tuple
     data for objective function to be minimized
     table, four column vectors
@@ -1729,7 +1710,7 @@ constraints: casadi.SX (shape m,1)
 
 def get_step_data(
     model, expressions, step=0, k_prev=_DM_0r1c, objectives='',
-    constraints='', values_of_constraints=None, positions=None):
+    constraints='', values_of_constraints=None):
     """Prepares data for call of function optimize_step.
 
     Parameters
@@ -1781,9 +1762,6 @@ def get_step_data(
         * [1] numpy.array<str>, id_of_batch
         * [2] numpy.array<float>, vector (shape n,1), value
         values for constraints (refer to argument 'constraints')
-    positions: array_like
-        optional
-        int, positions of taps
 
     Returns
     -------
@@ -1804,7 +1782,7 @@ def get_step_data(
         if values_of_constraints is None or len(expr_of_batches[0])==0 else
         get_batch_constraints(values_of_constraints, expr_of_batches))
     return Stepdata(
-        model, expressions, scaling_data, Inode_inj, positions,
+        model, expressions, scaling_data, Inode_inj,
         diff_data, batch_constraints)
 
 def get_step_data_fns(model, factordefs):
@@ -1902,7 +1880,7 @@ def get_step_data_fns(model, factordefs):
     return make_step_data, next_step_data
 
 def optimize_step(
-    model, expressions, scaling_data, Inode_inj, positions, diff_data,
+    model, expressions, factor_data, Inode_inj, diff_data,
     constraints, Vnode_ri_ini=None):
     """Runs one optimization step. Calculates initial voltages if not provided.
 
@@ -1915,7 +1893,7 @@ def optimize_step(
         * 'Vnode_syms', casadi.SX (shape n,2)
         * 'Vslack_syms', casadi.SX (shape n,2)
         * 'position_syms', casadi.SX (shape n,1)
-    scaling_data: Factordata
+    factor_data: Factordata
         * .vars, casadi.SX, column vector, symbols for variables
           of scaling factors
         * .consts, casadi.SX, column vector, symbols for constants
@@ -1926,9 +1904,6 @@ def optimize_step(
     Inode_inj: casadi.SX (shape n,2)
         * Inode_inj[:,0] - Ire, real part of current injected into node
         * Inode_inj[:,1] - Iim, imaginary part of current injected into node
-    positions: array_like
-        optional
-        int, positions of taps
     diff_data: tuple
         data for objective function
         table, four column vectors
@@ -1954,11 +1929,11 @@ def optimize_step(
     if Vnode_ri_ini is None:
         # power flow calculation for initial voltages
         succ, Vnode_ri_ini = calculate_power_flow2(
-            model, expressions, scaling_data, Inode_inj, positions)
+            model, expressions, factor_data, Inode_inj)
         assert succ, 'calculation of power flow failed'
-    optimize = get_optimize_vk(model, expressions, positions)
+    optimize = get_optimize_vk(model, expressions)
     succ, x = optimize(
-        Vnode_ri_ini, scaling_data, Inode_inj, diff_data, constraints)
+        Vnode_ri_ini, factor_data, Inode_inj, diff_data, constraints)
     # result processing
     count_of_Vvalues = 2 * model.shape_of_Y[0]
     return (
@@ -2022,8 +1997,7 @@ def optimize_steps(
     scaling_data = step_data.scaling_data
     # power flow calculation for initial voltages
     succ, voltages_ri = calculate_power_flow2(
-        model, step_data.expressions, scaling_data,
-        step_data.Inode_inj, positions)
+        model, step_data.expressions, scaling_data, step_data.Inode_inj)
     k = scaling_data.values_of_vars
     yield -1, succ, voltages_ri, k, step_data.scaling_data
     for step, kv in enumerate(step_params):
