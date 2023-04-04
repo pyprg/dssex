@@ -94,8 +94,7 @@ class Estimate_minimal(unittest.TestCase):
             'for a model without injections')
 
 class Estimate_injection(unittest.TestCase):
-    """runs basic tests with one (slack-) node and one injection,
-    flow measurements are placed at injection"""
+    """runs basic tests with one (slack-) node and one injection"""
 
     def test_slack_inj(self):
         """one slacknode, one injection"""

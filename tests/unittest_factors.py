@@ -24,37 +24,19 @@ import unittest
 import context # adds parent folder of dssex to search path
 import numpy as np
 import pandas as pd
-import dssex.factors as ft
+import dssex.factors2 as ft
 import egrid.builder as grid
 from egrid import make_model
 from numpy.testing import assert_array_equal
 
 class Get_scaling_factor_data(unittest.TestCase):
 
-    empty_factors = pd.DataFrame(
-        [],
-        columns=[
-            'type', 'id_of_source', 'value', 'min', 'max', 'is_discrete',
-            'm', 'n'],
-        index=pd.MultiIndex.from_arrays(
-            arrays=[[],[]],
-            names=('step', 'id')))
-    empty_assocs = pd.DataFrame(
-        [],
-        columns=['id'],
-        index=pd.MultiIndex.from_arrays(
-            arrays=[[],[],[]],
-            names=('step', 'id_of_injection', 'part')))
-    empty_injids = pd.Series([], name='id', dtype=str)
-
     def test_no_data(self):
         """'get_scaling_factor_data' processes empty input"""
-        factors, injection_factor = ft.get_scaling_factor_data(
-            Get_scaling_factor_data.empty_injids,
-            Get_scaling_factor_data.empty_factors,
-            Get_scaling_factor_data.empty_assocs,
-            [2, 3],
-            None)
+        model = make_model()
+        factordefs = ft.make_factordefs(model)
+        factors, injection_factor = ft._get_scaling_factor_data(
+            model, factordefs, [2, 3], None)
         self.assertTrue(
             factors.empty,
             "get_scaling_factor_data returns no data for factors")
@@ -66,16 +48,16 @@ class Get_scaling_factor_data(unittest.TestCase):
     def test_default_scaling_factors(self):
         """'get_scaling_factor_data' creates default scaling factors
         if factors are not given explicitely"""
+        model = make_model(
+            grid.Injection(id='injid0', id_of_node='n_0'))
+        factordefs = ft.make_factordefs(model)
         index_of_step = 3
-        factors, injection_factor = ft.get_scaling_factor_data(
-            pd.Series(['injid0'], name='id', dtype=str),
-            Get_scaling_factor_data.empty_factors,
-            Get_scaling_factor_data.empty_assocs,
-            [index_of_step-1, index_of_step],
-            None)
+        steps = [index_of_step-1, index_of_step]
+        factors, injection_factor = ft._get_scaling_factor_data(
+            model, factordefs, steps, None)
         assert_array_equal(
             [idx[0] for idx in factors.index],
-            [index_of_step-1, index_of_step],
+            steps,
             err_msg="one factor per step")
         self.assertTrue(
             all(idx[1]=='const' for idx in factors.index),
@@ -94,13 +76,11 @@ class Get_scaling_factor_data(unittest.TestCase):
             grid.Deff(id=('kp', 'kq'), step=0),
             # link scaling factors to active and reactive power of consumer
             grid.Link(objid='consumer', id=('kp', 'kq'), part='pq', step=0))
+        factordefs = ft.make_factordefs(model)
         index_of_step = 1
-        factors, injection_factor = ft.get_scaling_factor_data(
-            model.injections.id,
-            model.factors,
-            model.injection_factor_associations,
-            [index_of_step-1, index_of_step],
-            None)
+        steps = [index_of_step-1, index_of_step]
+        factors, injection_factor = ft._get_scaling_factor_data(
+            model, factordefs, steps, None)
         self.assertEqual(
             factors.loc[0].shape[0],
             2,
@@ -132,13 +112,11 @@ class Get_scaling_factor_data(unittest.TestCase):
             grid.Deff(id=('kp', 'kq'), step=-1),
             # link scaling factors to active and reactive power of consumer
             grid.Link(objid='consumer', id=('kp', 'kq'), part='pq', step=-1))
+        factordefs = ft.make_factordefs(model)
         index_of_step = 1
-        factors, injection_factor = ft.get_scaling_factor_data(
-            model.injections.id,
-            model.factors,
-            model.injection_factor_associations,
-            [index_of_step-1, index_of_step],
-            None)
+        steps = [index_of_step-1, index_of_step]
+        factors, injection_factor = ft._get_scaling_factor_data(
+            model, factordefs, steps, None)
         factors_step_0 = factors.loc[0]
         self.assertEqual(
             len(factors_step_0),
@@ -165,13 +143,11 @@ class Get_scaling_factor_data(unittest.TestCase):
                 part='pq',
                 cls=grid.Terminallink,
                 step=-1))
+        factordefs = ft.make_factordefs(model)
         index_of_step = 0
-        factors, injection_factor = ft.get_scaling_factor_data(
-            model.injections.id,
-            model.factors,
-            model.injection_factor_associations,
-            [index_of_step],
-            None)
+        steps = [index_of_step]
+        factors, injection_factor = ft._get_scaling_factor_data(
+            model, factordefs, steps, None)
         self.assertEqual(
             len(factors),
             1,
@@ -202,13 +178,11 @@ class Get_taps_factor_data(unittest.TestCase):
                 nodeid='n_0',
                 cls=grid.Terminallink,
                 step=-1))
+        factordefs = ft.make_factordefs(model)
         index_of_step = 1
-        factors, terminal_factor = ft.get_taps_factor_data(
-            model.branchterminals[['id_of_branch','id_of_node']].reset_index(),
-            model.factors,
-            model.terminal_factor_associations,
-            steps=[index_of_step-1, index_of_step],
-            start=[3, 5])
+        steps = [index_of_step-1, index_of_step]
+        factors, injection_factor = ft._get_scaling_factor_data(
+            model, factordefs, steps, start=[3, 5])
         self.assertEqual(
             len(factors.loc[0]),
             1,
@@ -236,8 +210,8 @@ class Make_get_factor_data(unittest.TestCase):
             grid.Injection('consumer0', 'n_0'),
             grid.Injection('consumer1', 'n_0'))
         self.assertIsNotNone(model, "make_model makes models")
-        get_scaling_factor_data = ft.make_get_factor_data(model)
-        factor_data = get_scaling_factor_data(step=0)
+        factordefs = ft.make_factordefs(model)
+        factor_data = ft.make_factor_data2(model, factordefs, step=0)
         self.assertEqual(
             factor_data.kpq.shape,
             (2,2),
@@ -304,8 +278,8 @@ class Make_get_factor_data(unittest.TestCase):
                 nodeid='n_0',
                 cls=grid.Terminallink))
         self.assertIsNotNone(model, "make_model makes models")
-        get_factor_data = ft.make_get_factor_data(model)
-        factor_data = get_factor_data(step=0)
+        factordefs = ft.make_factordefs(model)
+        factor_data = ft.make_factor_data2(model, factordefs, step=0)
         self.assertEqual(
             factor_data.kpq.shape,
             (0,2),
@@ -359,8 +333,8 @@ class Make_get_factor_data(unittest.TestCase):
             # link scaling factors to active and reactive power of consumer
             grid.Link(objid='consumer', id=('kp', 'kq'), part='pq', step=0))
         self.assertIsNotNone(model, "make_model makes models")
-        get_scaling_factor_data = ft.make_get_factor_data(model)
-        factor_data = get_scaling_factor_data(step=0)
+        factordefs = ft.make_factordefs(model)
+        factor_data = ft.make_factor_data2(model, factordefs, step=0)
         self.assertEqual(
             factor_data.kpq.shape,
             (1,2),
@@ -421,8 +395,8 @@ class Make_get_factor_data(unittest.TestCase):
             # link scaling factors to active and reactive power of consumer
             grid.Link(objid='consumer', id=('kp', 'kq'), part='pq', step=1))
         self.assertIsNotNone(model, "make_model makes models")
-        get_scaling_factor_data = ft.make_get_factor_data(model)
-        factor_data = get_scaling_factor_data(step=1)
+        factordefs = ft.make_factordefs(model)
+        factor_data = ft.make_factor_data2(model, factordefs, step=1)
         self.assertEqual(
             factor_data.kpq.shape,
             (1,2),

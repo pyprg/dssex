@@ -92,7 +92,7 @@ class Calculate_power_flow(unittest.TestCase):
             grid.Branch('branch', 'n_0', 'n_1', y_lo=1e3),
             grid.Deff(id='taps', type='const', value=-16, m=-.00625, n=1.),
             grid.Link(
-                objid='branch', id='taps', nodeid='n_0', 
+                objid='branch', id='taps', nodeid='n_0',
                 cls=grid.Terminallink))
         success, vcx = pfc.calculate_power_flow(model)
         self.assertTrue(
@@ -115,17 +115,17 @@ class Calculate_power_flow(unittest.TestCase):
             grid.Branch('branch', 'n_0', 'n_1', y_lo=1e3),
             grid.Deff(id='taps', type='const', value=-16, m=-.00625, n=1.),
             grid.Link(
-                objid='branch', id='taps', nodeid='n_0', 
+                objid='branch', id='taps', nodeid='n_0',
                 cls=grid.Terminallink),
             grid.Branch('branch2', 'n_0', 'n_2', y_lo=1e3),
             grid.Deff(id='taps2', type='const', value=0., m=-.00625, n=1.),
             grid.Link(
-                objid='branch2', id='taps2', nodeid='n_0', 
+                objid='branch2', id='taps2', nodeid='n_0',
                 cls=grid.Terminallink),
             grid.Branch('branch3', 'n_0', 'n_3', y_lo=1e3),
             grid.Deff(id='taps3', type='var', value=16, m=-.00625, n=1.),
             grid.Link(
-                objid='branch3', id='taps3', nodeid='n_0', 
+                objid='branch3', id='taps3', nodeid='n_0',
                 cls=grid.Terminallink),
             grid.Branch('branch4', 'n_0', 'n_4', y_lo=1e3))
         success, vcx = pfc.calculate_power_flow(model)

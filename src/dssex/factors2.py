@@ -608,10 +608,11 @@ def _get_scaling_factor_data(model, factordefs, steps, start):
         generic_factor_steps['index_of_symbol'].astype('Int64'),
         how='left')
     no_symbol = factors_['index_of_symbol'].isna()
-    # range of indices for new scaling factor indices
-    factor_index_per_step = _factor_index_per_step(
-        factors_[no_symbol], start)
-    factors_.loc[no_symbol, 'index_of_symbol'] = factor_index_per_step
+    if no_symbol.any():
+        # range of indices for new scaling factor indices
+        factor_index_per_step = _factor_index_per_step(
+            factors_[no_symbol], start)
+        factors_.loc[no_symbol, 'index_of_symbol'] = factor_index_per_step
     factors = factors_.astype({'index_of_symbol':np.int64})
     # add data for initialization
     factors['index_of_source'] = _get_factor_ini_values(factors)

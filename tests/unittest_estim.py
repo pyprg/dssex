@@ -29,7 +29,7 @@ import dssex.estimnext as xt
 from functools import partial
 from numpy.linalg import norm
 from egrid import make_model
-import factors2 as ft
+import dssex.factors2 as ft
 
 # square of voltage magnitude, minimum value for load curve,
 #   if value is below _VMINSQR the load curves for P and Q converge

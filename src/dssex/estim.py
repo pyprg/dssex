@@ -1869,14 +1869,13 @@ def get_step_data_fns(model, factordefs):
         #++++++++++++++++++++++++
 
         batch_values = get_batch_values(
-            model, factordefs, voltages_ri2, kpq, ftaps, step_data.positions, constraints)
+            model, factordefs, voltages_ri2, kpq, ftaps, constraints)
         return make_step_data(
             step=step,
-            k_prev=k_var_const,
+            k_prev=casadi.DM(k_var_const),
             objectives=objectives,
             constraints=constraints,
-            values_of_constraints=batch_values,
-            positions=step_data.positions)
+            values_of_constraints=batch_values)
     return make_step_data, next_step_data
 
 def optimize_step(
@@ -1993,7 +1992,7 @@ def optimize_steps(
         * factor_data, Factordata
           factor data of step"""
     make_step_data, next_step_data = get_step_data_fns(model, factordefs)
-    step_data = make_step_data(step=0, positions=positions)
+    step_data = make_step_data(step=0)
     scaling_data = step_data.scaling_data
     # power flow calculation for initial voltages
     succ, voltages_ri = calculate_power_flow2(
