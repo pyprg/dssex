@@ -22,7 +22,6 @@ Created on Sat Sep 10 11:28:52 2022
 import casadi
 import pandas as pd
 import numpy as np
-import estimnext as xt
 from functools import partial
 from collections import defaultdict, namedtuple
 from scipy.sparse import coo_matrix
@@ -30,7 +29,7 @@ from dssex.injections import calculate_cubic_coefficients
 from dssex.batch import (
     get_values, get_batches, value_of_voltages, get_batch_values)
 #from dssex.factors import make_get_factor_data, get_values_of_factors
-import dssex.factors2 as ft #import make_factordefs
+import dssex.factors as ft #import make_factordefs
 # square of voltage magnitude, default value, minimum value for load curve,
 #   if value is below _VMINSQR the load curves for P and Q converge
 #   towards a linear load curve which is 0 when V=0; P(V=0)=0, Q(V=0)=0
@@ -364,45 +363,55 @@ def _reset_slack_current(
     Iinj_ri[slack_indices,1] = Vim_slack_syms # imag(Iinj)
     return Iinj_ri
 
-def _create_gb_mn_tot(branchterminals, branchtaps, position_syms):
-    """Creates g_mn, b_mn, g_mm, b_mm (mutual and self conductance
-    and susceptance) for each terminal taking tappositions into consideration.
+def get_term_factor_expressions(factordefs):
+    """Creates expressions for off-diagonal factors of branches.
+    Diagonal factors are just the square of the off-diagonal factors.
 
     Parameters
     ----------
-    branchterminals: pandas.DataFrame (index of terminal)
-        * .glo, mutual conductance, longitudinal
-        * .blo, mutual susceptance, longitudinal
-        * .g_tr_half, half of self conductance, transversal
-        * .b_tr_half, half of self susceptance, transversal
     branchtaps: pandas.DataFrame (index of taps)
         * .Vstep, float voltage diff per tap
         * .positionneutral, int
-    position_syms: casadi.SX
-        vector of position symbols for terms with taps (index of taps)
 
     Returns
     -------
-    casadi.SX
-        * [:,0] g_mn, mutual conductance
-        * [:,1] b_mn, mutual susceptance
-        * [:,2] g_tot, self conductance + mutual conductance
-        * [:,3] b_tot, self susceptance + mutual susceptance"""
-    # create gb_mn_mm
-    gb_mn_tot = _create_gb_expressions(branchterminals)
-    # create gb_mn_tot
-    gb_mn_tot[:,2] += gb_mn_tot[:,0]
-    gb_mn_tot[:,3] += gb_mn_tot[:,1]
-    if position_syms.size1():
-        foffd = get_tap_factors(branchtaps, position_syms)
-        count_of_rows = gb_mn_tot.size1()
-        foffd_term = casadi.SX.ones(count_of_rows)
-        foffd_term[branchtaps.index_of_terminal] = foffd
-        foffd_otherterm = casadi.SX.ones(count_of_rows)
-        foffd_otherterm[branchtaps.index_of_other_terminal] = foffd
-        gb_mn_tot[:, :2] *= (foffd_term * foffd_otherterm)
-        gb_mn_tot[:, 2:] *= (foffd_term * foffd_term)
-    return gb_mn_tot
+    tuple
+        * numpy.array, int, indices of terminals
+        * numpy.array, int, indices of other terminals
+        * casadi.SX"""
+    termfactor = (
+        factordefs
+        .gen_termfactor[
+            ['id', 'index_of_terminal', 'index_of_other_terminal']]
+        .join(factordefs.gen_factor_data, on='id', how='inner'))
+    symbol = factordefs.gen_factor_symbols[termfactor.index_of_symbol]
+    return (
+        termfactor.index_of_terminal.to_numpy(),
+        termfactor.index_of_other_terminal.to_numpy(),
+        # y = mx + n
+        (casadi.DM(termfactor.m) * symbol) + casadi.DM(termfactor.n))
+
+def make_fmn_ftot(count_of_terminals, factordefs):
+    """Creates expressions of terminal factors (taps factors).
+
+    Parameters
+    ----------
+    count_of_terminals: int
+        number of terminals
+    factordefs: Factordefs
+
+    Returns
+    -------
+    tuple
+        * casadi.SX, fmn, factor for y_mn admittances
+        * casadi.SX, ftot, factors for y_tot admittance"""
+    idx_term, idx_otherterm, foffd = get_term_factor_expressions(
+        factordefs)
+    foffd_term = casadi.SX.ones(count_of_terminals)
+    foffd_term[idx_term] = foffd
+    foffd_otherterm = casadi.SX.ones(count_of_terminals)
+    foffd_otherterm[idx_otherterm] = foffd
+    return (foffd_term * foffd_otherterm), (foffd_term * foffd_term)
 
 def create_v_symbols_gb_expressions(model, factordefs):
     """Creates symbols for node and slack voltages, tappositions,
@@ -415,6 +424,25 @@ def create_v_symbols_gb_expressions(model, factordefs):
     ----------
     model: egrid.model.Model
         data of electric grid
+    factordefs: Factordefs
+        * .gen_factor_data, pandas.DataFrame (id (str, ID of factor)) ->
+            * .step, -1
+            * .type, 'const'|'var'
+            * .id_of_source, str
+            * .value, float
+            * .min, float
+            * .max, float
+            * .is_discrete, bool
+            * .m, float
+            * .n, float
+            * .index_of_symbol, int
+        * .gen_factor_symbols, casadi.SX, shape(n,1)
+        * .gen_termfactor, pandas.DataFrame (id_of_branch, id_of_node) ->
+            * .step
+            * .id
+            * .index_of_symbol
+            * .index_of_terminal
+            * .index_of_other_terminal
 
     Returns
     -------
@@ -429,12 +457,21 @@ def create_v_symbols_gb_expressions(model, factordefs):
                 * gb_mn_tot[:,2] g_tot, self conductance + mutual conductance
                 * gb_mn_tot[:,3] b_tot, self susceptance + mutual susceptance
         * 'Y_by_V', casadi.SX, expression for Y @ V"""
-    count_of_pfcnodes = model.shape_of_Y[0]
-    Vnode_syms = create_V_symbols(count_of_pfcnodes)
-    position_syms = casadi.SX.sym('pos', len(model.branchtaps), 1)
-    gb_mn_tot = _create_gb_mn_tot(
-        model.branchterminals, model.branchtaps, position_syms)
+    Vnode_syms = create_V_symbols(model.shape_of_Y[0])
     terms = model.branchterminals
+    # create gb_mn_mm
+    #   g_mn, b_mn, g_mm, b_mm
+    gb_mn_tot = casadi.SX(
+        terms[['g_lo', 'b_lo', 'g_tr_half', 'b_tr_half']].to_numpy())
+    # create gb_mn_tot
+    #   g_mm + g_mn
+    gb_mn_tot[:,2] += gb_mn_tot[:,0]
+    #   b_mm + b_mn
+    gb_mn_tot[:,3] += gb_mn_tot[:,1]
+    if not factordefs.gen_termfactor.empty:
+        fmn, ftot = make_fmn_ftot(len(terms), factordefs)
+        gb_mn_tot[:, :2] *= fmn
+        gb_mn_tot[:, 2:] *= ftot
     G_, B_ = _create_gb_matrix(
         terms.index_of_node,
         terms.index_of_other_node,
@@ -448,7 +485,7 @@ def create_v_symbols_gb_expressions(model, factordefs):
         Vslack_syms=casadi.horzcat(
             casadi.SX.sym('Vre_slack', count_of_slacks),
             casadi.SX.sym('Vim_slack', count_of_slacks)),
-        position_syms=position_syms,
+        #position_syms=factordefs.gen_factor_symbols, #position_syms,
         gb_mn_tot=gb_mn_tot,
         Y_by_V=multiply_Y_by_V(Vnode_syms, G, B))
 
@@ -571,7 +608,7 @@ def get_expressions(model, factordefs, vminsqr=_VMINSQR):
             -> (tuple - Factordata, injection_data)
         * 'inj_to_node', casadi.SX, matrix, maps from
           injections to power flow calculation nodes"""
-    ed = xt.create_v_symbols_gb_expressions(model, factordefs)
+    ed = create_v_symbols_gb_expressions(model, factordefs)
     ed['get_scaling_and_injection_data'] = (
         make_get_scaling_and_injection_data(
             model, factordefs, ed['Vnode_syms'], vminsqr))
@@ -1856,18 +1893,8 @@ def get_step_data_fns(model, factordefs):
             optional, default ''
             string of characters 'I'|'P'|'Q'|'V' or empty string ''"""
         voltages_ri2 = ri_to_ri2(voltages_ri.toarray())
-
-        #+++++++++ new ++++++++++
-
         factor_data = ft.make_factor_data2(model, factordefs, step, k)
         kpq, ftaps, k_var_const = ft.get_values_of_factors(factor_data, k)
-
-        #+++++++++ old ++++++++++
-
-        # kpq, k_var_const = get_values_of_factors(step_data.scaling_data, k)
-
-        #++++++++++++++++++++++++
-
         batch_values = get_batch_values(
             model, factordefs, voltages_ri2, kpq, ftaps, constraints)
         return make_step_data(
@@ -1940,8 +1967,7 @@ def optimize_step(
         if count_of_Vvalues < x.size1() else
         (succ, x, _DM_0r1c))
 
-def optimize_steps(
-    model, factordefs, step_params=(), positions=None, vminsqr=_VMINSQR):
+def optimize_steps(model, factordefs, step_params=(), vminsqr=_VMINSQR):
     """Estimates grid status stepwise.
 
     Parameters
@@ -1973,9 +1999,6 @@ def optimize_steps(
                 of electric current at the location of given values
           'V' - adds constraints keeping the initial values
                 of voltages at the location of given values
-    positions: array_like
-        optional
-        int, positions of taps
     vminsqr: float (default _VMINSQR)
         minimum
 
@@ -2037,13 +2060,10 @@ def get_Vcx_kpq(factor_data, voltages_ri, k):
     kpq: numpy.array (shape m,2), float
         scaling factors per injection"""
     kpq, *_ = ft.get_values_of_factors(factor_data, k)
-
-    #kpq, _ = get_values_of_factors(factor_data, k)
     V = ri_to_complex(voltages_ri)
     return V, kpq
 
-def estimate(
-    model, step_params=(), positions=None, vminsqr=_VMINSQR):
+def estimate(model, step_params=(), vminsqr=_VMINSQR):
     """Estimates grid status stepwise.
 
     Parameters
@@ -2068,9 +2088,6 @@ def estimate(
                 of electric current at the location of given values
           'V' - adds constraints keeping the initial values
                 of voltages at the location of given values
-    positions: array_like
-        optional
-        int, positions of taps
     vminsqr: float (default _VMINSQR)
         minimum
 
@@ -2088,4 +2105,4 @@ def estimate(
     return (
         (step, succ, *get_Vcx_kpq(scaling_data, v_ri, k))
         for step, succ, v_ri, k, scaling_data in optimize_steps(
-            model, factordefs, step_params, positions, vminsqr))
+            model, factordefs, step_params, vminsqr))

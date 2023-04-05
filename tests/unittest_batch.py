@@ -25,9 +25,8 @@ import pandas as pd
 import egrid.builder as grid
 import dssex.pfcnum as pfc
 import dssex.estim as estim
-import dssex.estimnext as estimnext
 import dssex.batch as batch
-import dssex.factors2 as ft
+import dssex.factors as ft
 from functools import partial
 from numpy.linalg import norm
 from egrid import make_model
@@ -102,7 +101,7 @@ class Batch(unittest.TestCase):
         model = make_model(grid1, ipq_batches)
         factordefs = ft.make_factordefs(model)
         # calculate power flow
-        expr = estimnext.create_v_symbols_gb_expressions(model, factordefs)
+        expr = estim.create_v_symbols_gb_expressions(model, factordefs)
         success, vnode_ri = estim.calculate_power_flow(
             model, factordefs, expr, vminsqr=_VMINSQR)
         vnode_ri2 = np.hstack(np.vsplit(vnode_ri.toarray(),2))

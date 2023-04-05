@@ -21,7 +21,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 import unittest
 import context # adds parent folder of dssex to search path
 import numpy as np
-import dssex.factors2 as ft
+import dssex.factors as ft
 import egrid.builder as grid
 from itertools import repeat
 from egrid import make_model

@@ -25,11 +25,10 @@ import numpy as np
 import egrid.builder as grid
 import dssex.pfcnum as pfc
 import dssex.estim as estim
-import dssex.estimnext as xt
 from functools import partial
 from numpy.linalg import norm
 from egrid import make_model
-import dssex.factors2 as ft
+import dssex.factors as ft
 
 # square of voltage magnitude, minimum value for load curve,
 #   if value is below _VMINSQR the load curves for P and Q converge
@@ -58,7 +57,7 @@ class Power_flow_calculation_basic(unittest.TestCase):
         model = make_model(grid.Slacknode('n_0', V=vcx_slack))
         factordefs = ft.make_factordefs(model)
         # calculate
-        expr = estim.create_v_symbols_gb_expressions(model, None)
+        expr = estim.create_v_symbols_gb_expressions(model, factordefs)
         success, vnode_ri = estim.calculate_power_flow(
             model, factordefs, expr, vminsqr=_VMINSQR)
         # test
@@ -77,7 +76,7 @@ class Power_flow_calculation_basic(unittest.TestCase):
             grid.Injection('consumer', 'n_0', P10=30.0))
         factordefs = ft.make_factordefs(model)
         # calculate
-        expr = estim.create_v_symbols_gb_expressions(model, None)
+        expr = estim.create_v_symbols_gb_expressions(model, factordefs)
         success, vnode_ri = estim.calculate_power_flow(
             model, factordefs, expr, vminsqr=_VMINSQR)
         # test
@@ -96,7 +95,7 @@ class Power_flow_calculation_basic(unittest.TestCase):
             grid.Branch('line', 'n_0', 'n_1', y_lo=1e3-1e3j, y_tr=1e-6+1e-6j))
         factordefs = ft.make_factordefs(model)
         # calculate
-        expr = estim.create_v_symbols_gb_expressions(model, None)
+        expr = estim.create_v_symbols_gb_expressions(model, factordefs)
         success, vnode_ri = estim.calculate_power_flow(
             model, factordefs, expr, vminsqr=_VMINSQR)
         # test
@@ -115,7 +114,7 @@ class Power_flow_calculation_basic(unittest.TestCase):
             grid.Injection('consumer', 'n_1', P10=30.0))
         factordefs = ft.make_factordefs(model)
         # calculate
-        expr = estim.create_v_symbols_gb_expressions(model, None)
+        expr = estim.create_v_symbols_gb_expressions(model, factordefs)
         success, vnode_ri = estim.calculate_power_flow(
             model, factordefs, expr, vminsqr=_VMINSQR)
         # test
@@ -144,7 +143,7 @@ class Power_flow_calculation_basic(unittest.TestCase):
             grid_pfc, grid.Injection('consumer', 'n_1', Q10=10.0))
         factordefs = ft.make_factordefs(model)
         # calculate
-        expr = estim.create_v_symbols_gb_expressions(model, None)
+        expr = estim.create_v_symbols_gb_expressions(model, factordefs)
         success, vnode_ri = estim.calculate_power_flow(
             model, factordefs, expr, vminsqr=_VMINSQR)
         # test
@@ -172,7 +171,7 @@ class Power_flow_calculation_basic(unittest.TestCase):
             grid_pfc, grid.Injection('consumer', 'n_1', P10=30.0, Q10=10.0))
         factordefs = ft.make_factordefs(model)
         # calculate
-        expr = estim.create_v_symbols_gb_expressions(model, None)
+        expr = estim.create_v_symbols_gb_expressions(model, factordefs)
         success, vnode_ri = estim.calculate_power_flow(
             model, factordefs, expr, vminsqr=_VMINSQR)
         # test
@@ -201,7 +200,7 @@ class Power_flow_calculation_basic(unittest.TestCase):
             grid_pfc, grid.Injection('generator', 'n_1', P10=-30.0))
         factordefs = ft.make_factordefs(model)
         # calculate
-        expr = estim.create_v_symbols_gb_expressions(model, None)
+        expr = estim.create_v_symbols_gb_expressions(model, factordefs)
         success, vnode_ri = estim.calculate_power_flow(
             model, factordefs, expr, vminsqr=_VMINSQR)
         # test
@@ -255,10 +254,10 @@ class Power_flow_calculation_taps(unittest.TestCase):
                 cls=grid.Terminallink))
         factordefs1 = ft.make_factordefs(model1)
         # calculate
-        expr0 = estim.create_v_symbols_gb_expressions(model0, None)
+        expr0 = estim.create_v_symbols_gb_expressions(model0, factordefs0)
         success0, vnode_ri0 = estim.calculate_power_flow(
             model0, factordefs0, expr0, vminsqr=_VMINSQR)
-        expr1 = estim.create_v_symbols_gb_expressions(model1, None)
+        expr1 = estim.create_v_symbols_gb_expressions(model1, factordefs1)
         success1, vnode_ri1 = estim.calculate_power_flow(
             model1, factordefs1, expr1, vminsqr=_VMINSQR)
         # test
@@ -298,10 +297,10 @@ class Power_flow_calculation_taps(unittest.TestCase):
                 cls=grid.Terminallink))
         factordefs1 = ft.make_factordefs(model1)
         # calculate
-        expr0 = xt.create_v_symbols_gb_expressions(model0, factordefs0)
+        expr0 = estim.create_v_symbols_gb_expressions(model0, factordefs0)
         success0, vnode_ri0 = estim.calculate_power_flow(
             model0, factordefs0, expr0, vminsqr=_VMINSQR)
-        expr1 = xt.create_v_symbols_gb_expressions(model1, factordefs1)
+        expr1 = estim.create_v_symbols_gb_expressions(model1, factordefs1)
         success1, vnode_ri1 = estim.calculate_power_flow(
             model1, factordefs1, expr1, vminsqr=_VMINSQR)
         # test
@@ -353,10 +352,10 @@ class Power_flow_calculation_taps(unittest.TestCase):
                 cls=grid.Terminallink))
         factordefs1 = ft.make_factordefs(model1)
         # calculate
-        expr0 = xt.create_v_symbols_gb_expressions(model0, factordefs0)
+        expr0 = estim.create_v_symbols_gb_expressions(model0, factordefs0)
         success0, vnode_ri0 = estim.calculate_power_flow(
             model0, factordefs0, expr0, vminsqr=_VMINSQR)
-        expr1 = xt.create_v_symbols_gb_expressions(model1, factordefs1)
+        expr1 = estim.create_v_symbols_gb_expressions(model1, factordefs1)
         success1, vnode_ri1 = estim.calculate_power_flow(
             model1, factordefs1, expr1, vminsqr=_VMINSQR)
         # test

@@ -27,9 +27,8 @@ import pandas as pd
 import egrid.builder as grid
 import dssex.pfcnum as pfc
 import dssex.estim as estim
-import dssex.estimnext as estimnext
 import dssex.batch as batch
-import dssex.factors2 as ft
+import dssex.factors as ft
 from functools import partial
 from numpy.linalg import norm
 from egrid import make_model
@@ -84,7 +83,7 @@ class Calculate_power_flow(unittest.TestCase):
                 cls=grid.Terminallink))
         factordefs0 = ft.make_factordefs(model0)
         # calculate power flow
-        expr0 = estimnext.create_v_symbols_gb_expressions(model0, factordefs0)
+        expr0 = estim.create_v_symbols_gb_expressions(model0, factordefs0)
         success0, vnode_ri0 = estim.calculate_power_flow(
             model0, factordefs0, expr0, vminsqr=_VMINSQR)
         self.assertTrue(success0, "calculate_power_flow shall succeed")
@@ -117,7 +116,7 @@ class Calculate_power_flow(unittest.TestCase):
                 cls=grid.Terminallink))
         factordefs1 = ft.make_factordefs(model1)
         # calculate power flow
-        expr1 = estimnext.create_v_symbols_gb_expressions(model1, factordefs1)
+        expr1 = estim.create_v_symbols_gb_expressions(model1, factordefs1)
         success1, vnode_ri1 = estim.calculate_power_flow(
             model1, factordefs1, expr1, vminsqr=_VMINSQR)
         self.assertTrue(success1, "calculate_power_flow shall succeed")
