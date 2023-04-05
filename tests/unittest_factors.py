@@ -211,7 +211,9 @@ class Make_get_factor_data(unittest.TestCase):
             grid.Injection('consumer1', 'n_0'))
         self.assertIsNotNone(model, "make_model makes models")
         factordefs = ft.make_factordefs(model)
-        factor_data = ft.make_factor_data2(model, factordefs, step=0)
+        gen_factor_symbols = ft._create_symbols_with_ids(
+            factordefs.gen_factor_data.index)
+        factor_data = ft.make_factor_data2(model, factordefs, gen_factor_symbols, 0)
         self.assertEqual(
             factor_data.kpq.shape,
             (2,2),
@@ -279,7 +281,9 @@ class Make_get_factor_data(unittest.TestCase):
                 cls=grid.Terminallink))
         self.assertIsNotNone(model, "make_model makes models")
         factordefs = ft.make_factordefs(model)
-        factor_data = ft.make_factor_data2(model, factordefs, step=0)
+        gen_factor_symbols = ft._create_symbols_with_ids(
+            factordefs.gen_factor_data.index)
+        factor_data = ft.make_factor_data2(model, factordefs, gen_factor_symbols, 0)
         self.assertEqual(
             factor_data.kpq.shape,
             (0,2),
@@ -334,7 +338,9 @@ class Make_get_factor_data(unittest.TestCase):
             grid.Link(objid='consumer', id=('kp', 'kq'), part='pq', step=0))
         self.assertIsNotNone(model, "make_model makes models")
         factordefs = ft.make_factordefs(model)
-        factor_data = ft.make_factor_data2(model, factordefs, step=0)
+        gen_factor_symbols = ft._create_symbols_with_ids(
+            factordefs.gen_factor_data.index)
+        factor_data = ft.make_factor_data2(model, factordefs, gen_factor_symbols, 0)
         self.assertEqual(
             factor_data.kpq.shape,
             (1,2),
@@ -396,7 +402,9 @@ class Make_get_factor_data(unittest.TestCase):
             grid.Link(objid='consumer', id=('kp', 'kq'), part='pq', step=1))
         self.assertIsNotNone(model, "make_model makes models")
         factordefs = ft.make_factordefs(model)
-        factor_data = ft.make_factor_data2(model, factordefs, step=1)
+        gen_factor_symbols = ft._create_symbols_with_ids(
+            factordefs.gen_factor_data.index)
+        factor_data = ft.make_factor_data2(model, factordefs, gen_factor_symbols, 1)
         self.assertEqual(
             factor_data.kpq.shape,
             (1,2),

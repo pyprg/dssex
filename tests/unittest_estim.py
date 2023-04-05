@@ -56,10 +56,12 @@ class Power_flow_calculation_basic(unittest.TestCase):
         vcx_slack = 0.9+0.2j
         model = make_model(grid.Slacknode('n_0', V=vcx_slack))
         factordefs = ft.make_factordefs(model)
+        gen_factor_symbols = ft._create_symbols_with_ids(
+            factordefs.gen_factor_data.index)
         # calculate
-        expr = estim.create_v_symbols_gb_expressions(model, factordefs)
+        expr = estim.create_v_symbols_gb_expressions(model, factordefs, gen_factor_symbols)
         success, vnode_ri = estim.calculate_power_flow(
-            model, factordefs, expr, vminsqr=_VMINSQR)
+            model, factordefs, gen_factor_symbols, expr, vminsqr=_VMINSQR)
         # test
         self.assertTrue(success, "calculate_power_flow shall succeed")
         vnode_cx = estim.ri_to_complex(vnode_ri)
@@ -75,10 +77,12 @@ class Power_flow_calculation_basic(unittest.TestCase):
             grid.Slacknode('n_0', V=vcx_slack),
             grid.Injection('consumer', 'n_0', P10=30.0))
         factordefs = ft.make_factordefs(model)
+        gen_factor_symbols = ft._create_symbols_with_ids(
+            factordefs.gen_factor_data.index)
         # calculate
-        expr = estim.create_v_symbols_gb_expressions(model, factordefs)
+        expr = estim.create_v_symbols_gb_expressions(model, factordefs, gen_factor_symbols)
         success, vnode_ri = estim.calculate_power_flow(
-            model, factordefs, expr, vminsqr=_VMINSQR)
+            model, factordefs, gen_factor_symbols, expr, vminsqr=_VMINSQR)
         # test
         self.assertTrue(success, "calculate_power_flow shall succeed")
         vnode_cx = estim.ri_to_complex(vnode_ri)
@@ -94,10 +98,12 @@ class Power_flow_calculation_basic(unittest.TestCase):
             grid.Slacknode('n_0', V=vcx_slack),
             grid.Branch('line', 'n_0', 'n_1', y_lo=1e3-1e3j, y_tr=1e-6+1e-6j))
         factordefs = ft.make_factordefs(model)
+        gen_factor_symbols = ft._create_symbols_with_ids(
+            factordefs.gen_factor_data.index)
         # calculate
-        expr = estim.create_v_symbols_gb_expressions(model, factordefs)
+        expr = estim.create_v_symbols_gb_expressions(model, factordefs, gen_factor_symbols)
         success, vnode_ri = estim.calculate_power_flow(
-            model, factordefs, expr, vminsqr=_VMINSQR)
+            model, factordefs, gen_factor_symbols, expr, vminsqr=_VMINSQR)
         # test
         self.assertTrue(success, "calculate_power_flow shall succeed")
         vnode_cx = estim.ri_to_complex(vnode_ri)
@@ -113,10 +119,12 @@ class Power_flow_calculation_basic(unittest.TestCase):
             grid_pfc,
             grid.Injection('consumer', 'n_1', P10=30.0))
         factordefs = ft.make_factordefs(model)
+        gen_factor_symbols = ft._create_symbols_with_ids(
+            factordefs.gen_factor_data.index)
         # calculate
-        expr = estim.create_v_symbols_gb_expressions(model, factordefs)
+        expr = estim.create_v_symbols_gb_expressions(model, factordefs, gen_factor_symbols)
         success, vnode_ri = estim.calculate_power_flow(
-            model, factordefs, expr, vminsqr=_VMINSQR)
+            model, factordefs, gen_factor_symbols, expr, vminsqr=_VMINSQR)
         # test
         self.assertTrue(success, "calculate_power_flow shall succeed")
         # check residual current
@@ -142,10 +150,12 @@ class Power_flow_calculation_basic(unittest.TestCase):
         model = make_model(
             grid_pfc, grid.Injection('consumer', 'n_1', Q10=10.0))
         factordefs = ft.make_factordefs(model)
+        gen_factor_symbols = ft._create_symbols_with_ids(
+            factordefs.gen_factor_data.index)
         # calculate
-        expr = estim.create_v_symbols_gb_expressions(model, factordefs)
+        expr = estim.create_v_symbols_gb_expressions(model, factordefs, gen_factor_symbols)
         success, vnode_ri = estim.calculate_power_flow(
-            model, factordefs, expr, vminsqr=_VMINSQR)
+            model, factordefs, gen_factor_symbols, expr, vminsqr=_VMINSQR)
         # test
         self.assertTrue(success, "calculate_power_flow shall succeed")
         # check residual current
@@ -170,10 +180,12 @@ class Power_flow_calculation_basic(unittest.TestCase):
         model = make_model(
             grid_pfc, grid.Injection('consumer', 'n_1', P10=30.0, Q10=10.0))
         factordefs = ft.make_factordefs(model)
+        gen_factor_symbols = ft._create_symbols_with_ids(
+            factordefs.gen_factor_data.index)
         # calculate
-        expr = estim.create_v_symbols_gb_expressions(model, factordefs)
+        expr = estim.create_v_symbols_gb_expressions(model, factordefs, gen_factor_symbols)
         success, vnode_ri = estim.calculate_power_flow(
-            model, factordefs, expr, vminsqr=_VMINSQR)
+            model, factordefs, gen_factor_symbols, expr, vminsqr=_VMINSQR)
         # test
         self.assertTrue(success, "calculate_power_flow shall succeed")
         # check residual current
@@ -199,10 +211,12 @@ class Power_flow_calculation_basic(unittest.TestCase):
         model = make_model(
             grid_pfc, grid.Injection('generator', 'n_1', P10=-30.0))
         factordefs = ft.make_factordefs(model)
+        gen_factor_symbols = ft._create_symbols_with_ids(
+            factordefs.gen_factor_data.index)
         # calculate
-        expr = estim.create_v_symbols_gb_expressions(model, factordefs)
+        expr = estim.create_v_symbols_gb_expressions(model, factordefs, gen_factor_symbols)
         success, vnode_ri = estim.calculate_power_flow(
-            model, factordefs, expr, vminsqr=_VMINSQR)
+            model, factordefs, gen_factor_symbols, expr, vminsqr=_VMINSQR)
         # test
         self.assertTrue(success, "calculate_power_flow shall succeed")
         # check residual current
@@ -254,12 +268,16 @@ class Power_flow_calculation_taps(unittest.TestCase):
                 cls=grid.Terminallink))
         factordefs1 = ft.make_factordefs(model1)
         # calculate
-        expr0 = estim.create_v_symbols_gb_expressions(model0, factordefs0)
+        gen_factor_symbols0 = ft._create_symbols_with_ids(
+            factordefs0.gen_factor_data.index)
+        expr0 = estim.create_v_symbols_gb_expressions(model0, factordefs0, gen_factor_symbols0)
         success0, vnode_ri0 = estim.calculate_power_flow(
-            model0, factordefs0, expr0, vminsqr=_VMINSQR)
-        expr1 = estim.create_v_symbols_gb_expressions(model1, factordefs1)
+            model0, factordefs0, gen_factor_symbols0, expr0, vminsqr=_VMINSQR)
+        gen_factor_symbols1 = ft._create_symbols_with_ids(
+            factordefs1.gen_factor_data.index)
+        expr1 = estim.create_v_symbols_gb_expressions(model1, factordefs1, gen_factor_symbols1)
         success1, vnode_ri1 = estim.calculate_power_flow(
-            model1, factordefs1, expr1, vminsqr=_VMINSQR)
+            model1, factordefs1, gen_factor_symbols1, expr1, vminsqr=_VMINSQR)
         # test
         self.assertTrue(success0, "calculate_power_flow shall succeed")
         self.assertTrue(success1, "calculate_power_flow shall succeed")
@@ -297,12 +315,16 @@ class Power_flow_calculation_taps(unittest.TestCase):
                 cls=grid.Terminallink))
         factordefs1 = ft.make_factordefs(model1)
         # calculate
-        expr0 = estim.create_v_symbols_gb_expressions(model0, factordefs0)
+        gen_factor_symbols0 = ft._create_symbols_with_ids(
+            factordefs0.gen_factor_data.index)
+        expr0 = estim.create_v_symbols_gb_expressions(model0, factordefs0, gen_factor_symbols0)
         success0, vnode_ri0 = estim.calculate_power_flow(
-            model0, factordefs0, expr0, vminsqr=_VMINSQR)
-        expr1 = estim.create_v_symbols_gb_expressions(model1, factordefs1)
+            model0, factordefs0, gen_factor_symbols0, expr0, vminsqr=_VMINSQR)
+        gen_factor_symbols1 = ft._create_symbols_with_ids(
+            factordefs1.gen_factor_data.index)
+        expr1 = estim.create_v_symbols_gb_expressions(model1, factordefs1, gen_factor_symbols1)
         success1, vnode_ri1 = estim.calculate_power_flow(
-            model1, factordefs1, expr1, vminsqr=_VMINSQR)
+            model1, factordefs1, gen_factor_symbols1, expr1, vminsqr=_VMINSQR)
         # test
         self.assertTrue(success0, "calculate_power_flow shall succeed")
         self.assertTrue(success1, "calculate_power_flow shall succeed")
@@ -340,9 +362,6 @@ class Power_flow_calculation_taps(unittest.TestCase):
         factordefs0 = ft.make_factordefs(model0)
         model1 = make_model(
             grid_pfc2,
-
-
-
             # taps
             grid.Deff(
                 'taps', type='const', min=-16, max=16,
@@ -352,12 +371,16 @@ class Power_flow_calculation_taps(unittest.TestCase):
                 cls=grid.Terminallink))
         factordefs1 = ft.make_factordefs(model1)
         # calculate
-        expr0 = estim.create_v_symbols_gb_expressions(model0, factordefs0)
+        gen_factor_symbols0 = ft._create_symbols_with_ids(
+            factordefs0.gen_factor_data.index)
+        expr0 = estim.create_v_symbols_gb_expressions(model0, factordefs0, gen_factor_symbols0)
         success0, vnode_ri0 = estim.calculate_power_flow(
-            model0, factordefs0, expr0, vminsqr=_VMINSQR)
-        expr1 = estim.create_v_symbols_gb_expressions(model1, factordefs1)
+            model0, factordefs0, gen_factor_symbols0, expr0, vminsqr=_VMINSQR)
+        gen_factor_symbols1 = ft._create_symbols_with_ids(
+            factordefs1.gen_factor_data.index)
+        expr1 = estim.create_v_symbols_gb_expressions(model1, factordefs1, gen_factor_symbols1)
         success1, vnode_ri1 = estim.calculate_power_flow(
-            model1, factordefs1, expr1, vminsqr=_VMINSQR)
+            model1, factordefs1, gen_factor_symbols1, expr1, vminsqr=_VMINSQR)
         # test
         self.assertTrue(success0, "calculate_power_flow shall succeed")
         self.assertTrue(success1, "calculate_power_flow shall succeed")
@@ -437,8 +460,10 @@ class Power_flow_calculation_basic2(unittest.TestCase):
         results like function 'dssex.pfcnum.calculate_power_flow'."""
         model = make_model(grid_pfc3)
         factordefs = ft.make_factordefs(model)
-        expr = estim.get_expressions(model, factordefs)
-        step_data = estim.get_step_data(model, expr)
+        gen_factor_symbols = ft._create_symbols_with_ids(
+            factordefs.gen_factor_data.index)
+        expressions = estim.get_expressions(model, factordefs, gen_factor_symbols)
+        step_data = estim.get_step_data(model, expressions)
         succ_estim, Vnode_ri_estim, _ = estim.optimize_step(*step_data)
         self.assertTrue(succ_estim, 'estimation succeeds')
         Vnode_cx_estim = estim.ri_to_complex(Vnode_ri_estim.toarray())
@@ -480,7 +505,9 @@ class Optimize_step(unittest.TestCase):
             grid.Deff('kp', step=0),
             grid.Link(objid='consumer', part='p', id='kp', step=0))
         factordefs = ft.make_factordefs(model)
-        expressions = estim.get_expressions(model, factordefs)
+        gen_factor_symbols = ft._create_symbols_with_ids(
+            factordefs.gen_factor_data.index)
+        expressions = estim.get_expressions(model, factordefs, gen_factor_symbols)
         step_data = estim.get_step_data(
             model, expressions, objectives='P')
         succ, x_V, x_scaling = estim.optimize_step(*step_data)
@@ -513,7 +540,9 @@ class Optimize_step(unittest.TestCase):
             grid.Deff('kp', step=0),
             grid.Link(objid='consumer', part='p', id='kp', step=0))
         factordefs = ft.make_factordefs(model)
-        expressions = estim.get_expressions(model, factordefs)
+        gen_factor_symbols = ft._create_symbols_with_ids(
+            factordefs.gen_factor_data.index)
+        expressions = estim.get_expressions(model, factordefs, gen_factor_symbols)
         step_data = estim.get_step_data(
             model, expressions, objectives='P')
         succ, x_V, x_scaling = estim.optimize_step(*step_data)
@@ -546,7 +575,9 @@ class Optimize_step(unittest.TestCase):
             grid.Deff('kq', step=0),
             grid.Link(objid='consumer', part='q', id='kq', step=0))
         factordefs = ft.make_factordefs(model)
-        expressions = estim.get_expressions(model, factordefs)
+        gen_factor_symbols = ft._create_symbols_with_ids(
+            factordefs.gen_factor_data.index)
+        expressions = estim.get_expressions(model, factordefs, gen_factor_symbols)
         step_data = estim.get_step_data(
             model, expressions, objectives='Q')
         succ, x_V, x_scaling = estim.optimize_step(*step_data)
@@ -579,7 +610,9 @@ class Optimize_step(unittest.TestCase):
             grid.Deff('kq', step=0),
             grid.Link(objid='consumer', part='q', id='kq', step=0))
         factordefs = ft.make_factordefs(model)
-        expressions = estim.get_expressions(model, factordefs)
+        gen_factor_symbols = ft._create_symbols_with_ids(
+            factordefs.gen_factor_data.index)
+        expressions = estim.get_expressions(model, factordefs, gen_factor_symbols)
         step_data = estim.get_step_data(
             model, expressions, objectives='Q')
         succ, x_V, x_scaling = estim.optimize_step(*step_data)
@@ -612,7 +645,9 @@ class Optimize_step(unittest.TestCase):
             grid.Deff('kpq', step=0),
             grid.Link(objid='consumer', part='pq', id='kpq', step=0))
         factordefs = ft.make_factordefs(model)
-        expressions = estim.get_expressions(model, factordefs)
+        gen_factor_symbols = ft._create_symbols_with_ids(
+            factordefs.gen_factor_data.index)
+        expressions = estim.get_expressions(model, factordefs, gen_factor_symbols)
         step_data = estim.get_step_data(
             model, expressions, objectives='I')
         succ, x_V, x_scaling = estim.optimize_step(*step_data)
@@ -645,7 +680,9 @@ class Optimize_step(unittest.TestCase):
             grid.Deff('kpq', step=0),
             grid.Link(objid='consumer', id=('kpq', 'kpq'), part='pq', step=0))
         factordefs = ft.make_factordefs(model)
-        expressions = estim.get_expressions(model, factordefs)
+        gen_factor_symbols = ft._create_symbols_with_ids(
+            factordefs.gen_factor_data.index)
+        expressions = estim.get_expressions(model, factordefs, gen_factor_symbols)
         step_data = estim.get_step_data(
             model, expressions, objectives='I')
         succ, x_V, x_scaling = estim.optimize_step(*step_data)
@@ -677,7 +714,9 @@ class Optimize_step(unittest.TestCase):
             grid.Deff('kq', step=0),
             grid.Link(objid='consumer', id='kq', part='q', step=0))
         factordefs = ft.make_factordefs(model)
-        expressions = estim.get_expressions(model, factordefs)
+        gen_factor_symbols = ft._create_symbols_with_ids(
+            factordefs.gen_factor_data.index)
+        expressions = estim.get_expressions(model, factordefs, gen_factor_symbols)
         step_data = estim.get_step_data(
             model, expressions, objectives='V')
         succ, x_V, x_scaling = estim.optimize_step(*step_data)

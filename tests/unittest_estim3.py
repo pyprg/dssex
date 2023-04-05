@@ -69,23 +69,25 @@ order_of_nodes = pd.Series(
     range(4), dtype=np.int64, index=[f'n_{idx}' for idx in range(4)])
 
 class Calculate_power_flow(unittest.TestCase):
-    
+
     def test_taps_factor(self):
         pq_factors = np.ones((3,2), dtype=float)
-        # first: tapsposition == 0 -> no impact to voltage        
+        # first: tapsposition == 0 -> no impact to voltage
         model0 = make_model(
             grid1,
             grid.Deff(
                 'taps', type='const', min=-16, max=16, value=0,
                 m=-0.00625, n=1., is_discrete=True),
             grid.Link(
-                objid='line_0', id='taps', nodeid='n_0', 
+                objid='line_0', id='taps', nodeid='n_0',
                 cls=grid.Terminallink))
         factordefs0 = ft.make_factordefs(model0)
         # calculate power flow
-        expr0 = estim.create_v_symbols_gb_expressions(model0, factordefs0)
+        gen_factor_symbols0 = ft._create_symbols_with_ids(
+            factordefs0.gen_factor_data.index)
+        expr0 = estim.create_v_symbols_gb_expressions(model0, factordefs0, gen_factor_symbols0)
         success0, vnode_ri0 = estim.calculate_power_flow(
-            model0, factordefs0, expr0, vminsqr=_VMINSQR)
+            model0, factordefs0, gen_factor_symbols0, expr0, vminsqr=_VMINSQR)
         self.assertTrue(success0, "calculate_power_flow shall succeed")
         # check residual current
         vnode_cx0 = estim.ri_to_complex(vnode_ri0)
@@ -101,24 +103,26 @@ class Calculate_power_flow(unittest.TestCase):
         ed = pfc.calculate_electric_data(model0, vnode_cx0, pq_factors)
         idx_v = model0.nodes.reindex(order_of_nodes.index).index_of_node
         # df_Vcx0 = pd.DataFrame(
-        #     {'id_of_node': order_of_nodes.index, 
+        #     {'id_of_node': order_of_nodes.index,
         #       'Vcx': vnode_cx0[idx_v].reshape(-1)})
         # print(df_Vcx0)
         #
-        # second: tapsposition == -16 -> voltage increase ~10%        
+        # second: tapsposition == -16 -> voltage increase ~10%
         model1 = make_model(
             grid1,
             grid.Deff(
                 'taps', type='const', min=-16, max=16, value=-16, # <- V +10%
                 m=-0.00625, n=1., is_discrete=True),
             grid.Link(
-                objid='line_0', id='taps', nodeid='n_0', 
+                objid='line_0', id='taps', nodeid='n_0',
                 cls=grid.Terminallink))
         factordefs1 = ft.make_factordefs(model1)
         # calculate power flow
-        expr1 = estim.create_v_symbols_gb_expressions(model1, factordefs1)
+        gen_factor_symbols1 = ft._create_symbols_with_ids(
+            factordefs1.gen_factor_data.index)
+        expr1 = estim.create_v_symbols_gb_expressions(model1, factordefs1, gen_factor_symbols1)
         success1, vnode_ri1 = estim.calculate_power_flow(
-            model1, factordefs1, expr1, vminsqr=_VMINSQR)
+            model1, factordefs1, gen_factor_symbols1, expr1, vminsqr=_VMINSQR)
         self.assertTrue(success1, "calculate_power_flow shall succeed")
         # check residual current
         vnode_cx1 = estim.ri_to_complex(vnode_ri1)
@@ -134,12 +138,12 @@ class Calculate_power_flow(unittest.TestCase):
         ed = pfc.calculate_electric_data(model1, vnode_cx1, pq_factors)
         idx_v = model1.nodes.reindex(order_of_nodes.index).index_of_node
         # df_Vcx1 = pd.DataFrame(
-        #     {'id_of_node': order_of_nodes.index, 
+        #     {'id_of_node': order_of_nodes.index,
         #      'Vcx': vnode_cx1[idx_v].reshape(-1)})
         # print(df_Vcx1)
         diff_max = norm(
             #                                       10% | no slack
-            (vnode_cx0[idx_v] - (vnode_cx1[idx_v] / 1.1))[1:], 
+            (vnode_cx0[idx_v] - (vnode_cx1[idx_v] / 1.1))[1:],
             np.inf)
         self.assertLess(diff_max, 6e-3, "voltage increase about 10%")
 

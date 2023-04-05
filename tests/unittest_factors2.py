@@ -34,8 +34,6 @@ class Make_factordefs(unittest.TestCase):
         factordefs = ft.make_factordefs(model)
         self.assertTrue(
             factordefs.gen_factor_data.empty, 'no generic factors')
-        self.assertEqual(
-            factordefs.gen_factor_symbols.size1(), 0, 'no symbols')
         self.assertTrue(
             factordefs.gen_injfactor.empty, 'no generic injection factors')
         self.assertTrue(
@@ -70,7 +68,7 @@ class Make_factordefs(unittest.TestCase):
               'min': -np.inf, 'max': np.inf, 'is_discrete': False, 'm': 1.0,
               'n': 0.0, 'index_of_symbol': 0})
         self.assertEqual(
-            factordefs.gen_factor_symbols.name(),
+            factordefs.gen_factor_data.index[0],
             'kp',
             "generic factor has name 'kp'")
         assert_array_equal(
@@ -121,7 +119,7 @@ class Make_factordefs(unittest.TestCase):
               'min': -np.inf, 'max': np.inf, 'is_discrete': True, 'm': -0.00625,
               'n': 1.0, 'index_of_symbol': 0})
         self.assertEqual(
-            factordefs.gen_factor_symbols.name(),
+            factordefs.gen_factor_data.index[0],
             'taps',
             "generic factor has name 'taps'")
         assert_array_equal(
@@ -146,8 +144,9 @@ class Make_factor_data2(unittest.TestCase):
     def test_no_data(self):
         model = make_model()
         factordefs = ft.make_factordefs(model)
-        factordata = ft.make_factor_data2(
-            model, factordefs, 1)
+        gen_factor_symbols = ft._create_symbols_with_ids(
+            factordefs.gen_factor_data.index)
+        factordata = ft.make_factor_data2(model, factordefs, gen_factor_symbols, 1)
         self.assertEqual(
             factordata.kpq.shape,
             (0,2),
@@ -258,8 +257,9 @@ class Make_factor_data2(unittest.TestCase):
             factordefs.gen_factor_data.index_of_symbol,
             [0, 1],
             err_msg="indices of generic factor symbols shall be [0, 1]")
-        factordata = ft.make_factor_data2(
-            model, factordefs, 0)
+        gen_factor_symbols = ft._create_symbols_with_ids(
+            factordefs.gen_factor_data.index)
+        factor_data = ft.make_factor_data2(model, factordefs, gen_factor_symbols, 0)
 
 class Get_taps_factor_data(unittest.TestCase):
 
@@ -485,7 +485,9 @@ class Get_values_of_factors(unittest.TestCase):
         """"""
         model = make_model()
         factordefs = ft.make_factordefs(model)
-        factor_data = ft.make_factor_data2(model, factordefs, 0)
+        gen_factor_symbols = ft._create_symbols_with_ids(
+            factordefs.gen_factor_data.index)
+        factor_data = ft.make_factor_data2(model, factordefs, gen_factor_symbols, 0)
         fk, ftaps, factors = ft.get_values_of_factors(
             factor_data, np.zeros((0,1), dtype=float))
         self.assertEqual(fk.shape, (0, 2), 'no scaling factors')
@@ -505,7 +507,9 @@ class Get_values_of_factors(unittest.TestCase):
             grid.Injection('consumer', 'n_1'),
             grid.Injection('consumer2', 'n_1'))
         factordefs = ft.make_factordefs(model)
-        factor_data = ft.make_factor_data2(model, factordefs, 0)
+        gen_factor_symbols = ft._create_symbols_with_ids(
+            factordefs.gen_factor_data.index)
+        factor_data = ft.make_factor_data2(model, factordefs, gen_factor_symbols, 0)
         fk, ftaps, factors = ft.get_values_of_factors(
             factor_data, np.zeros((0,1), dtype=float))
         self.assertEqual(fk.shape, (2, 2), '2x2 scaling factors')
@@ -532,7 +536,9 @@ class Get_values_of_factors(unittest.TestCase):
             grid.Link(objid='consumer', id=('kp','kq'), part='pq'),
             grid.Link(objid='consumer2', id='kq', part='q'))
         factordefs = ft.make_factordefs(model)
-        factor_data = ft.make_factor_data2(model, factordefs, 0)
+        gen_factor_symbols = ft._create_symbols_with_ids(
+            factordefs.gen_factor_data.index)
+        factor_data = ft.make_factor_data2(model, factordefs, gen_factor_symbols, 0)
         solution_vector = np.array([27., 42.]).reshape(-1,1)
         fk, ftaps, factors = ft.get_values_of_factors(
             factor_data, solution_vector)
@@ -565,7 +571,9 @@ class Get_values_of_factors(unittest.TestCase):
                 objid='branch', id='taps',
                 nodeid='n_0', cls=grid.Terminallink))
         factordefs = ft.make_factordefs(model)
-        factor_data = ft.make_factor_data2(model, factordefs, 0)
+        gen_factor_symbols = ft._create_symbols_with_ids(
+            factordefs.gen_factor_data.index)
+        factor_data = ft.make_factor_data2(model, factordefs, gen_factor_symbols, 0)
         solution_vector = np.array([-3.]).reshape(-1,1)
         fk, ftaps, factors = ft.get_values_of_factors(
             factor_data, solution_vector)

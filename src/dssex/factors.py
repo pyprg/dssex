@@ -416,7 +416,7 @@ def make_factordefs(model):
     factors = (
         gen_factors.set_index('id').reindex(valid_factorids).reset_index())
     factors['index_of_symbol'] = range(len(factors))
-    symbols = _create_symbols_with_ids(factors.id)
+    #symbols = _create_symbols_with_ids(factors.id)
     # add index of symbol to termassoc,
     #   terminal factors are NEVER step-specific
     termassoc = (
@@ -435,7 +435,8 @@ def make_factordefs(model):
         .set_index(['id_of_branch', 'id_of_node']))
     return Factordefs(
         gen_factor_data=factors.set_index('id'),
-        gen_factor_symbols=symbols,
+        gen_factor_symbols=None,
+        #gen_factor_symbols=symbols,
         gen_injfactor=injassoc.set_index(['id_of_injection', 'part']),
         gen_termfactor=gen_termfactor,
         factorgroups=factorgroups,
@@ -710,7 +711,7 @@ def _get_taps_factor_data(model, factordefs, steps):
         term_factor)
 
 def make_factor_data(
-        factordefs, factors, injection_factors, terminal_factor,
+        factordefs, gen_factor_symbols, factors, injection_factors, terminal_factor,
         k_prev=_DM_0r1c):
     """Prepares data of scaling factors per step. Creates symbols for
     scaling factors.
@@ -782,7 +783,11 @@ def make_factor_data(
     count_of_generic_factors = len(factordefs.gen_factor_data)
     symbols_step = _create_symbols_with_ids(
         factors[count_of_generic_factors <= factors.index_of_symbol].id)
-    symbols = casadi.vertcat(factordefs.gen_factor_symbols, symbols_step)
+
+    symbols = casadi.vertcat(gen_factor_symbols, symbols_step)
+
+    # symbols = casadi.vertcat(factordefs.gen_factor_symbols, symbols_step)
+
     values = _get_values_of_symbols(factors, k_prev)
     select_symbols_values = partial(_select_rows, [symbols, values])
     factors_var = factors[factors.type=='var']
@@ -899,7 +904,7 @@ def setup_factors_for_step(model, factordefs, step):
         _loc(injection_factors, step).reset_index(),
         _loc(terminal_factor, step).reset_index())
 
-def make_factor_data2(model, factordefs, step=0, k_prev=_DM_0r1c):
+def make_factor_data2(model, factordefs, gen_factor_symbols, step=0, k_prev=_DM_0r1c):
     """Returns data of decision variables and of parameters for a specific
     step.
 
@@ -923,7 +928,7 @@ def make_factor_data2(model, factordefs, step=0, k_prev=_DM_0r1c):
     -------
     Factordata"""
     return make_factor_data(
-        factordefs, *setup_factors_for_step(model, factordefs, step), k_prev)
+        factordefs, gen_factor_symbols, *setup_factors_for_step(model, factordefs, step), k_prev)
 
 def get_values_of_factors(factor_data, x_factors):
     """Function for extracting factors of injections and terminals
