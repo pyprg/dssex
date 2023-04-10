@@ -504,7 +504,13 @@ def make_get_scaling_and_injection_data(
     model: egrid.model.Model
         data of electric grid
     factordefs: Factordefs
-
+        * .gen_factor_data, pandas.DataFrame
+        * .gen_injfactor, pandas.DataFrame
+        * .gen_termfactor, pandas.DataFrame
+        * .factorgroups: function
+            (iterable_of_int)-> (pandas.DataFrame)
+        * .injfactorgroups: function
+            (iterable_of_int)-> (pandas.DataFrame)
     Vnode_syms: casadi.SX
         three vectors of node voltage expressions
         * Vnode_syms[:,0], float, Vre vector of real node voltages
@@ -574,17 +580,13 @@ def get_expressions(model, factordefs, gen_factor_symbols, vminsqr=_VMINSQR):
     model : egrid.model.Model
         data of electric grid
     factordefs: Factordefs
-        * .gen_factor_data, pandas.DataFrame (id (str, ID of factor)) ->
-            * .step, -1
-            * .type, 'const'|'var'
-            * .id_of_source, str
-            * .value, float
-            * .min, float
-            * .max, float
-            * .is_discrete, bool
-            * .m, float
-            * .n, float
-            * .index_of_symbol, int
+        * .gen_factor_data, pandas.DataFrame
+        * .gen_injfactor, pandas.DataFrame
+        * .gen_termfactor, pandas.DataFrame
+        * .factorgroups: function
+            (iterable_of_int)-> (pandas.DataFrame)
+        * .injfactorgroups: function
+            (iterable_of_int)-> (pandas.DataFrame)
     vminsqr : float, optional
         minimum voltage at loads for original load curve, squared
 
@@ -692,6 +694,13 @@ def calculate_power_flow(
     model: egrid.model.Model
         data of electric grid
     factordefs: Factordefs
+        * .gen_factor_data, pandas.DataFrame
+        * .gen_injfactor, pandas.DataFrame
+        * .gen_termfactor, pandas.DataFrame
+        * .factorgroups: function
+            (iterable_of_int)-> (pandas.DataFrame)
+        * .injfactorgroups: function
+            (iterable_of_int)-> (pandas.DataFrame)
 
     v_syms_gb_ex: dict
         * 'Vnode_syms', casadi.SX, expressions of node Voltages
@@ -1834,6 +1843,13 @@ def get_step_data_fns(model, factordefs, gen_factor_symbols):
     model: egrid.model.Model
 
     factordefs: Factordefs
+        * .gen_factor_data, pandas.DataFrame
+        * .gen_injfactor, pandas.DataFrame
+        * .gen_termfactor, pandas.DataFrame
+        * .factorgroups: function
+            (iterable_of_int)-> (pandas.DataFrame)
+        * .injfactorgroups: function
+            (iterable_of_int)-> (pandas.DataFrame)
 
     Returns
     -------
@@ -1978,8 +1994,10 @@ def optimize_steps(model, factordefs, gen_factor_symbols, step_params=(), vminsq
         * .gen_factor_data, pandas.DataFrame
         * .gen_injfactor, pandas.DataFrame
         * .gen_termfactor, pandas.DataFrame
-        * .factorgroups, pandas.DataFrame
-        * .injfactorgroups, pandas.DataFrame
+        * .factorgroups: function
+            (iterable_of_int)-> (pandas.DataFrame)
+        * .injfactorgroups: function
+            (iterable_of_int)-> (pandas.DataFrame)
     gen_factor_symbols: casadi.SX, shape(n,1)
         symbols of generic (for each step) decision variables or parameters 
     step_params: array_like

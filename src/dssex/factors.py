@@ -89,7 +89,8 @@ Parameters
     * .index_of_other_terminal
 * .factorgroups: function
     (iterable_of_int)-> (pandas.DataFrame)
-* .injfactorgroups, pandas.DataFrame
+* .injfactorgroups: function
+    (iterable_of_int)-> (pandas.DataFrame)
 """
 
 Factordata = namedtuple(
@@ -434,13 +435,17 @@ def make_factordefs(model):
             right_on=['id_of_branch', 'id_of_node'])
         .set_index(['id_of_branch', 'id_of_node']))
     get_factorgroups = lambda steps: (
-        _selectgroups(factorgroups, steps).set_index(['step', 'id']))
+        _selectgroups(factorgroups, steps)
+        .set_index(['step', 'id']))
+    get_injfactorgroups = lambda steps: (
+        _selectgroups(injfactorgroups, steps)
+        .set_index(['step', 'id_of_injection', 'part']))
     return Factordefs(
         gen_factor_data=factors.set_index('id'),
         gen_injfactor=injassoc.set_index(['id_of_injection', 'part']),
         gen_termfactor=gen_termfactor,
         factorgroups=get_factorgroups,
-        injfactorgroups=injfactorgroups)
+        injfactorgroups=get_injfactorgroups)
 
 def _add_step_index(df, step_indices):
     """Copies data of df for each step index in step_indices.
@@ -522,8 +527,10 @@ def _get_scaling_factor_data(model, factordefs, steps, start):
         * .gen_factor_data, pandas.DataFrame
         * .gen_injfactor, pandas.DataFrame
         * .gen_termfactor, pandas.DataFrame
-        * .factorgroups, pandas.DataFrame
-        * .injfactorgroups, pandas.DataFrame
+        * .factorgroups: function
+            (iterable_of_int)-> (pandas.DataFrame)
+        * .injfactorgroups: function
+            (iterable_of_int)-> (pandas.DataFrame)
     steps: iterable
         int, indices of optimization steps, first step has index 0
     start: iterable | None
@@ -555,9 +562,7 @@ def _get_scaling_factor_data(model, factordefs, steps, start):
           * .kq, int, index of reactive power scaling factor in 1d-vector
           * .index_of_injection, int, index of affected injection"""
     generic_injfactor_steps = _add_step_index(factordefs.gen_injfactor, steps)
-    assoc_steps = (
-        _selectgroups(factordefs.injfactorgroups, steps)
-        .set_index(['step', 'id_of_injection', 'part']))
+    assoc_steps = factordefs.injfactorgroups(steps)
     # get generic_assocs which are not in assocs of step, this allows
     #   overriding the linkage of factors
     assoc_diff = generic_injfactor_steps.index.difference(assoc_steps.index)
@@ -640,8 +645,10 @@ def _get_taps_factor_data(model, factordefs, steps):
         * .gen_factor_data, pandas.DataFrame
         * .gen_injfactor, pandas.DataFrame
         * .gen_termfactor, pandas.DataFrame
-        * .factorgroups, pandas.DataFrame
-        * .injfactorgroups, pandas.DataFrame
+        * .factorgroups: function
+            (iterable_of_int)-> (pandas.DataFrame)
+        * .injfactorgroups: function
+            (iterable_of_int)-> (pandas.DataFrame)
     steps: iterable
         int, indices of optimization steps, first step has index 0
 
@@ -725,7 +732,13 @@ def make_factor_data(
     Parameters
     ----------
     factordefs: Factordefs
-
+        * .gen_factor_data, pandas.DataFrame
+        * .gen_injfactor, pandas.DataFrame
+        * .gen_termfactor, pandas.DataFrame
+        * .factorgroups: function
+            (iterable_of_int)-> (pandas.DataFrame)
+        * .injfactorgroups: function
+            (iterable_of_int)-> (pandas.DataFrame)
     factors: pandas.DataFrame
         sorted by 'index_of_symbol'
     injection_factors: pandas.DataFrame
@@ -837,8 +850,10 @@ def setup_factors_for_step(model, factordefs, step):
         * .gen_factor_data, pandas.DataFrame
         * .gen_injfactor, pandas.DataFrame
         * .gen_termfactor, pandas.DataFrame
-        * .factorgroups, pandas.DataFrame
-        * .injfactorgroups, pandas.DataFrame
+        * .factorgroups: function
+            (iterable_of_int)-> (pandas.DataFrame)
+        * .injfactorgroups: function
+            (iterable_of_int)-> (pandas.DataFrame)
     step: int
         index of optimization step, first index is 0
 
@@ -905,8 +920,10 @@ def make_factor_data2(model, factordefs, gen_factor_symbols, step=0, k_prev=_DM_
         * .gen_factor_data, pandas.DataFrame
         * .gen_injfactor, pandas.DataFrame
         * .gen_termfactor, pandas.DataFrame
-        * .factorgroups, pandas.DataFrame
-        * .injfactorgroups, pandas.DataFrame
+        * .factorgroups: function
+            (iterable_of_int)-> (pandas.DataFrame)
+        * .injfactorgroups: function
+            (iterable_of_int)-> (pandas.DataFrame)
     gen_factor_symbols: casadi.SX, shape(n,1)
         symbols of generic (for each step) decision variables or parameters
     step: int

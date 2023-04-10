@@ -56,14 +56,13 @@ def calculate_term_factor_n(factordefs, positions):
     Parameters
     ----------
     factordefs: Factordefs
-        * .gen_termfactor, pandas.DataFrame (id_of_branch, id_of_node) ->
-            * .id, str, ID of factor
-            * .index_of_terminal
-            * .index_of_other_terminal
-        * .gen_factor_data, pandas.DataFrame (id (str, ID of factor)) ->
-            * .value, float
-            * .m, float
-            * .n, float
+        * .gen_factor_data, pandas.DataFrame
+        * .gen_injfactor, pandas.DataFrame
+        * .gen_termfactor, pandas.DataFrame
+        * .factorgroups: function
+            (iterable_of_int)-> (pandas.DataFrame)
+        * .injfactorgroups: function
+            (iterable_of_int)-> (pandas.DataFrame)
     positions: numpy.array, int (shape n,1)
         vector of position values for terms with taps
 

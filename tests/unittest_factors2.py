@@ -82,8 +82,8 @@ class Make_factordefs(unittest.TestCase):
             1,
             "one generic factor")
         self.assertEqual(
-            factordefs.injfactorgroups.groups.groups,
-            {-1: [0]},
+            len(factordefs.injfactorgroups([-1])),
+            1,
             "one generic injection_factor relation")
 
     def test_taps_injection_factor(self):
