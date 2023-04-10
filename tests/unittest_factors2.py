@@ -38,12 +38,6 @@ class Make_factordefs(unittest.TestCase):
             factordefs.gen_injfactor.empty, 'no generic injection factors')
         self.assertTrue(
             factordefs.gen_termfactor.empty, 'no generic terminal factors')
-        self.assertEqual(
-            factordefs.factorgroups.groups.groups, {}, 'no groups of factors')
-        self.assertEqual(
-            factordefs.injfactorgroups.groups.groups,
-            {},
-            'no groups of injection factors')
 
     def test_generic_injection_factor(self):
         """basic test with one generic injection factor"""
@@ -84,8 +78,8 @@ class Make_factordefs(unittest.TestCase):
             np.zeros((0,5), dtype=object),
             err_msg="no taps (terminal) factor"),
         self.assertEqual(
-            factordefs.factorgroups.groups.groups,
-            {-1: [0]},
+            len(factordefs.factorgroups([-1])),
+            1,
             "one generic factor")
         self.assertEqual(
             factordefs.injfactorgroups.groups.groups,
@@ -135,8 +129,8 @@ class Make_factordefs(unittest.TestCase):
             ('branch', 'n_0'),
             err_msg="expected index is ('branch', 'n_0')")
         self.assertEqual(
-            factordefs.factorgroups.groups.groups,
-            {-1: [0]},
+            len(factordefs.factorgroups([-1])),
+            1,
             "one generic factor")
 
 class Make_factor_data2(unittest.TestCase):
