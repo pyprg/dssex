@@ -55,7 +55,7 @@ template: pandas.DataFrame
 
 Factordefs = namedtuple(
     'Factordefs',
-    'gen_factor_data gen_factor_symbols gen_injfactor gen_termfactor '
+    'gen_factor_data gen_injfactor gen_termfactor '
     'factorgroups injfactorgroups')
 Factordefs.__doc__ ="""
 Data of generic factors (step == -1),
@@ -78,7 +78,6 @@ Parameters
     * .m, float
     * .n, float
     * .index_of_symbol, int
-* .gen_factor_symbols, casadi.SX, shape(n,1)
 * .gen_injfactor, pandas.DataFrame (id_of_injection, part) ->
     * .step, -1
     * id, str, ID of factor
@@ -393,7 +392,6 @@ def make_factordefs(model):
     -------
     Factordefs
         * .gen_factor_data, pandas.DataFrame
-        * .gen_factor_symbols, casadi.SX, shape(n,1)
         * .gen_injfactor, pandas.DataFrame
         * .gen_termfactor, pandas.DataFrame
         * .factorgroups, pandas.DataFrame
@@ -435,8 +433,6 @@ def make_factordefs(model):
         .set_index(['id_of_branch', 'id_of_node']))
     return Factordefs(
         gen_factor_data=factors.set_index('id'),
-        gen_factor_symbols=None,
-        #gen_factor_symbols=symbols,
         gen_injfactor=injassoc.set_index(['id_of_injection', 'part']),
         gen_termfactor=gen_termfactor,
         factorgroups=factorgroups,
@@ -520,7 +516,6 @@ def _get_scaling_factor_data(model, factordefs, steps, start):
         data of electric grid
     factordefs: Generic_factors
         * .gen_factor_data, pandas.DataFrame
-        * .gen_factor_symbols, casadi.SX, shape(n,1)
         * .gen_injfactor, pandas.DataFrame
         * .gen_termfactor, pandas.DataFrame
         * .factorgroups, pandas.DataFrame
@@ -641,7 +636,6 @@ def _get_taps_factor_data(model, factordefs, steps):
         data of electric grid
     factordefs: Generic_factors
         * .gen_factor_data, pandas.DataFrame
-        * .gen_factor_symbols, casadi.SX, shape(n,1)
         * .gen_injfactor, pandas.DataFrame
         * .gen_termfactor, pandas.DataFrame
         * .factorgroups, pandas.DataFrame
@@ -783,11 +777,7 @@ def make_factor_data(
     count_of_generic_factors = len(factordefs.gen_factor_data)
     symbols_step = _create_symbols_with_ids(
         factors[count_of_generic_factors <= factors.index_of_symbol].id)
-
     symbols = casadi.vertcat(gen_factor_symbols, symbols_step)
-
-    # symbols = casadi.vertcat(factordefs.gen_factor_symbols, symbols_step)
-
     values = _get_values_of_symbols(factors, k_prev)
     select_symbols_values = partial(_select_rows, [symbols, values])
     factors_var = factors[factors.type=='var']
@@ -845,7 +835,6 @@ def setup_factors_for_step(model, factordefs, step):
         data of electric grid
     factordefs: Factordefs
         * .gen_factor_data, pandas.DataFrame
-        * .gen_factor_symbols, casadi.SX, shape(n,1)
         * .gen_injfactor, pandas.DataFrame
         * .gen_termfactor, pandas.DataFrame
         * .factorgroups, pandas.DataFrame
@@ -914,11 +903,12 @@ def make_factor_data2(model, factordefs, gen_factor_symbols, step=0, k_prev=_DM_
         data of electric grid
     factordefs: Factordefs
         * .gen_factor_data, pandas.DataFrame
-        * .gen_factor_symbols, casadi.SX, shape(n,1)
         * .gen_injfactor, pandas.DataFrame
         * .gen_termfactor, pandas.DataFrame
         * .factorgroups, pandas.DataFrame
         * .injfactorgroups, pandas.DataFrame
+    gen_factor_symbols: casadi.SX, shape(n,1)
+        symbols of generic (for each step) decision variables or parameters 
     step: int
         index of optimization step, first index is 0
     k_prev: casadi.DM optional

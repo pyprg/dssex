@@ -384,11 +384,7 @@ def get_term_factor_expressions(factordefs, gen_factor_symbols):
         .gen_termfactor[
             ['id', 'index_of_terminal', 'index_of_other_terminal']]
         .join(factordefs.gen_factor_data, on='id', how='inner'))
-
     symbol = gen_factor_symbols[termfactor.index_of_symbol]
-
-    # symbol = factordefs.gen_factor_symbols[termfactor.index_of_symbol]
-
     return (
         termfactor.index_of_terminal.to_numpy(),
         termfactor.index_of_other_terminal.to_numpy(),
@@ -440,13 +436,14 @@ def create_v_symbols_gb_expressions(model, factordefs, gen_factor_symbols):
             * .m, float
             * .n, float
             * .index_of_symbol, int
-        * .gen_factor_symbols, casadi.SX, shape(n,1)
         * .gen_termfactor, pandas.DataFrame (id_of_branch, id_of_node) ->
             * .step
             * .id
             * .index_of_symbol
             * .index_of_terminal
             * .index_of_other_terminal
+    gen_factor_symbols: casadi.SX, shape(n,1)
+        symbols of generic (for each step) decision variables or parameters 
 
     Returns
     -------
@@ -489,7 +486,6 @@ def create_v_symbols_gb_expressions(model, factordefs, gen_factor_symbols):
         Vslack_syms=casadi.horzcat(
             casadi.SX.sym('Vre_slack', count_of_slacks),
             casadi.SX.sym('Vim_slack', count_of_slacks)),
-        #position_syms=factordefs.gen_factor_symbols, #position_syms,
         gb_mn_tot=gb_mn_tot,
         Y_by_V=multiply_Y_by_V(Vnode_syms, G, B))
 
@@ -1980,11 +1976,12 @@ def optimize_steps(model, factordefs, gen_factor_symbols, step_params=(), vminsq
 
     factordefs: factor.Factordefs
         * .gen_factor_data, pandas.DataFrame
-        * .gen_factor_symbols, casadi.SX, shape(n,1)
         * .gen_injfactor, pandas.DataFrame
         * .gen_termfactor, pandas.DataFrame
         * .factorgroups, pandas.DataFrame
         * .injfactorgroups, pandas.DataFrame
+    gen_factor_symbols: casadi.SX, shape(n,1)
+        symbols of generic (for each step) decision variables or parameters 
     step_params: array_like
         dict {'objectives': objectives, 'constraints': constraints}
             if empty the function calculates power flow,
