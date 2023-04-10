@@ -99,13 +99,13 @@ class Batch(unittest.TestCase):
             grid.Vvalue('n_3')]
         pq_factors = np.ones((3,2), dtype=float)
         model = make_model(grid1, ipq_batches)
-        factordefs = ft.make_factordefs(model)
+        #factordefs = ft.make_factordefs(model)
         # calculate power flow
         gen_factor_symbols = ft._create_symbols_with_ids(
-            factordefs.gen_factor_data.index)
-        expr = estim.create_v_symbols_gb_expressions(model, factordefs, gen_factor_symbols)
+            model.factors.gen_factor_data.index)
+        expr = estim.create_v_symbols_gb_expressions(model, gen_factor_symbols)
         success, vnode_ri = estim.calculate_power_flow(
-            model, factordefs, gen_factor_symbols, expr, vminsqr=_VMINSQR)
+            model, gen_factor_symbols, expr, vminsqr=_VMINSQR)
         vnode_ri2 = np.hstack(np.vsplit(vnode_ri.toarray(),2))
         self.assertTrue(success, "calculate_power_flow shall succeed")
         # check residual current
@@ -122,7 +122,7 @@ class Batch(unittest.TestCase):
         ed = pfc.calculate_electric_data(model, vnode_cx, pq_factors)
         # act
         batch_values = batch.get_batch_values(
-            model, factordefs, vnode_ri2, pq_factors, None, 'IPQV')
+            model, vnode_ri2, pq_factors, None, 'IPQV')
         # test
         df_batch = (
             pd.DataFrame(

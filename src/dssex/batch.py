@@ -679,7 +679,7 @@ def _get_batch_flow_values(
         f'selector needs to be one of "I", "P" or "Q" but is "{selector}"'
 
 def get_batch_values(
-    model, factordefs, Vnode_ri2, kpq, positions=None, quantities='', vminsqr=_VMINSQR):
+    model, Vnode_ri2, kpq, positions=None, quantities='', vminsqr=_VMINSQR):
     """Provided, node voltages, scaling factors and tappositions are results
     and parameters of a power flow calculation with the grid-data of the model,
     'get_batch_values' returns calculated values for the selected quantities.
@@ -719,7 +719,7 @@ def get_batch_values(
     _vals = []
     quantities_upper = quantities.upper()
     if re.match(r'I|P|Q', quantities_upper):
-        term_factor = calculate_term_factor_n(factordefs, positions)
+        term_factor = calculate_term_factor_n(model.factors)
     for sel in quantities_upper:
         if sel in 'IPQ':
             id_val = _get_batch_flow_values(

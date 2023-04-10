@@ -34,9 +34,8 @@ class Get_scaling_factor_data(unittest.TestCase):
     def test_no_data(self):
         """'get_scaling_factor_data' processes empty input"""
         model = make_model()
-        factordefs = ft.make_factordefs(model)
         factors, injection_factor = ft._get_scaling_factor_data(
-            model, factordefs, [2, 3], None)
+            model, [2, 3], None)
         self.assertTrue(
             factors.empty,
             "get_scaling_factor_data returns no data for factors")
@@ -50,11 +49,10 @@ class Get_scaling_factor_data(unittest.TestCase):
         if factors are not given explicitely"""
         model = make_model(
             grid.Injection(id='injid0', id_of_node='n_0'))
-        factordefs = ft.make_factordefs(model)
         index_of_step = 3
         steps = [index_of_step-1, index_of_step]
         factors, injection_factor = ft._get_scaling_factor_data(
-            model, factordefs, steps, None)
+            model, steps, None)
         assert_array_equal(
             [idx[0] for idx in factors.index],
             steps,
@@ -76,11 +74,10 @@ class Get_scaling_factor_data(unittest.TestCase):
             grid.Deff(id=('kp', 'kq'), step=0),
             # link scaling factors to active and reactive power of consumer
             grid.Link(objid='consumer', id=('kp', 'kq'), part='pq', step=0))
-        factordefs = ft.make_factordefs(model)
         index_of_step = 1
         steps = [index_of_step-1, index_of_step]
         factors, injection_factor = ft._get_scaling_factor_data(
-            model, factordefs, steps, None)
+            model, steps, None)
         self.assertEqual(
             factors.loc[0].shape[0],
             2,
@@ -112,11 +109,10 @@ class Get_scaling_factor_data(unittest.TestCase):
             grid.Deff(id=('kp', 'kq'), step=-1),
             # link scaling factors to active and reactive power of consumer
             grid.Link(objid='consumer', id=('kp', 'kq'), part='pq', step=-1))
-        factordefs = ft.make_factordefs(model)
         index_of_step = 1
         steps = [index_of_step-1, index_of_step]
         factors, injection_factor = ft._get_scaling_factor_data(
-            model, factordefs, steps, None)
+            model, steps, None)
         factors_step_0 = factors.loc[0]
         self.assertEqual(
             len(factors_step_0),
@@ -143,11 +139,10 @@ class Get_scaling_factor_data(unittest.TestCase):
                 part='pq',
                 cls=grid.Terminallink,
                 step=-1))
-        factordefs = ft.make_factordefs(model)
         index_of_step = 0
         steps = [index_of_step]
         factors, injection_factor = ft._get_scaling_factor_data(
-            model, factordefs, steps, None)
+            model, steps, None)
         self.assertEqual(
             len(factors),
             1,
@@ -178,11 +173,10 @@ class Get_taps_factor_data(unittest.TestCase):
                 nodeid='n_0',
                 cls=grid.Terminallink,
                 step=-1))
-        factordefs = ft.make_factordefs(model)
         index_of_step = 1
         steps = [index_of_step-1, index_of_step]
         factors, injection_factor = ft._get_scaling_factor_data(
-            model, factordefs, steps, start=[3, 5])
+            model, steps, start=[3, 5])
         self.assertEqual(
             len(factors.loc[0]),
             1,
@@ -210,10 +204,9 @@ class Make_get_factor_data(unittest.TestCase):
             grid.Injection('consumer0', 'n_0'),
             grid.Injection('consumer1', 'n_0'))
         self.assertIsNotNone(model, "make_model makes models")
-        factordefs = ft.make_factordefs(model)
         gen_factor_symbols = ft._create_symbols_with_ids(
-            factordefs.gen_factor_data.index)
-        factor_data = ft.make_factor_data2(model, factordefs, gen_factor_symbols, 0)
+            model.factors.gen_factor_data.index)
+        factor_data = ft.make_factor_data2(model, gen_factor_symbols, 0)
         self.assertEqual(
             factor_data.kpq.shape,
             (2,2),
@@ -280,10 +273,9 @@ class Make_get_factor_data(unittest.TestCase):
                 nodeid='n_0',
                 cls=grid.Terminallink))
         self.assertIsNotNone(model, "make_model makes models")
-        factordefs = ft.make_factordefs(model)
         gen_factor_symbols = ft._create_symbols_with_ids(
-            factordefs.gen_factor_data.index)
-        factor_data = ft.make_factor_data2(model, factordefs, gen_factor_symbols, 0)
+            model.factors.gen_factor_data.index)
+        factor_data = ft.make_factor_data2(model, gen_factor_symbols, 0)
         self.assertEqual(
             factor_data.kpq.shape,
             (0,2),
@@ -337,10 +329,9 @@ class Make_get_factor_data(unittest.TestCase):
             # link scaling factors to active and reactive power of consumer
             grid.Link(objid='consumer', id=('kp', 'kq'), part='pq', step=0))
         self.assertIsNotNone(model, "make_model makes models")
-        factordefs = ft.make_factordefs(model)
         gen_factor_symbols = ft._create_symbols_with_ids(
-            factordefs.gen_factor_data.index)
-        factor_data = ft.make_factor_data2(model, factordefs, gen_factor_symbols, 0)
+            model.factors.gen_factor_data.index)
+        factor_data = ft.make_factor_data2(model, gen_factor_symbols, 0)
         self.assertEqual(
             factor_data.kpq.shape,
             (1,2),
@@ -401,10 +392,9 @@ class Make_get_factor_data(unittest.TestCase):
             # link scaling factors to active and reactive power of consumer
             grid.Link(objid='consumer', id=('kp', 'kq'), part='pq', step=1))
         self.assertIsNotNone(model, "make_model makes models")
-        factordefs = ft.make_factordefs(model)
         gen_factor_symbols = ft._create_symbols_with_ids(
-            factordefs.gen_factor_data.index)
-        factor_data = ft.make_factor_data2(model, factordefs, gen_factor_symbols, 1)
+            model.factors.gen_factor_data.index)
+        factor_data = ft.make_factor_data2(model, gen_factor_symbols, 1)
         self.assertEqual(
             factor_data.kpq.shape,
             (1,2),

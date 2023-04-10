@@ -31,7 +31,7 @@ class Make_factordefs(unittest.TestCase):
 
     def test_no_data(self):
         model = make_model()
-        factordefs = ft.make_factordefs(model)
+        factordefs = model.factors
         self.assertTrue(
             factordefs.gen_factor_data.empty, 'no generic factors')
         self.assertTrue(
@@ -53,7 +53,7 @@ class Make_factordefs(unittest.TestCase):
             # link scaling factors to active power of consumer
             #   factor for each step (generic, step=-1)
             grid.Link(objid='consumer', id='kp', part='p', step=-1))
-        factordefs = ft.make_factordefs(model)
+        factordefs = model.factors
         self.assertEqual(
             dict(
                 zip(factordefs.gen_factor_data.columns,
@@ -78,11 +78,11 @@ class Make_factordefs(unittest.TestCase):
             np.zeros((0,5), dtype=object),
             err_msg="no taps (terminal) factor"),
         self.assertEqual(
-            len(factordefs.factorgroups([-1])),
+            len(factordefs.get_groups([-1])),
             1,
             "one generic factor")
         self.assertEqual(
-            len(factordefs.injfactorgroups([-1])),
+            len(factordefs.get_injfactorgroups([-1])),
             1,
             "one generic injection_factor relation")
 
@@ -104,7 +104,7 @@ class Make_factordefs(unittest.TestCase):
             grid.Link(
                 objid='branch', id='taps', nodeid='n_0',
                 cls=grid.Terminallink, step=-1))
-        factordefs = ft.make_factordefs(model)
+        factordefs = model.factors
         self.assertEqual(
             dict(
                 zip(factordefs.gen_factor_data.columns,
@@ -129,7 +129,7 @@ class Make_factordefs(unittest.TestCase):
             ('branch', 'n_0'),
             err_msg="expected index is ('branch', 'n_0')")
         self.assertEqual(
-            len(factordefs.factorgroups([-1])),
+            len(model.factors.get_groups([-1])),
             1,
             "one generic factor")
 
@@ -137,10 +137,9 @@ class Make_factor_data2(unittest.TestCase):
 
     def test_no_data(self):
         model = make_model()
-        factordefs = ft.make_factordefs(model)
         gen_factor_symbols = ft._create_symbols_with_ids(
-            factordefs.gen_factor_data.index)
-        factordata = ft.make_factor_data2(model, factordefs, gen_factor_symbols, 1)
+            model.factors.gen_factor_data.index)
+        factordata = ft.make_factor_data2(model, gen_factor_symbols, 1)
         self.assertEqual(
             factordata.kpq.shape,
             (0,2),
@@ -242,26 +241,24 @@ class Make_factor_data2(unittest.TestCase):
             #     cls=grid.Terminallink,
             #     step=1)
             )
-        factordefs = ft.make_factordefs(model)
         assert_array_equal(
-            factordefs.gen_factor_data.index,
+            model.factors.gen_factor_data.index,
             ['kp', 'taps'],
             err_msg="IDs of generic factors shall be ['kp', 'taps']")
         assert_array_equal(
-            factordefs.gen_factor_data.index_of_symbol,
+            model.factors.gen_factor_data.index_of_symbol,
             [0, 1],
             err_msg="indices of generic factor symbols shall be [0, 1]")
         gen_factor_symbols = ft._create_symbols_with_ids(
-            factordefs.gen_factor_data.index)
-        factor_data = ft.make_factor_data2(model, factordefs, gen_factor_symbols, 0)
+            model.factors.gen_factor_data.index)
+        factor_data = ft.make_factor_data2(model, gen_factor_symbols, 0)
 
 class Get_taps_factor_data(unittest.TestCase):
 
     def test_no_data(self):
         model = make_model()
-        factordefs = ft.make_factordefs(model)
         factors, termfactor_crossref = ft._get_taps_factor_data(
-            model, factordefs, [0, 1])
+            model, [0, 1])
         self.assertTrue(factors.empty)
         self.assertTrue(termfactor_crossref.empty)
 
@@ -313,17 +310,16 @@ class Get_taps_factor_data(unittest.TestCase):
             #     cls=grid.Terminallink,
             #     step=1)
             )
-        factordefs = ft.make_factordefs(model)
         assert_array_equal(
-            factordefs.gen_factor_data.index,
+            model.factors.gen_factor_data.index,
             ['kp', 'taps'],
             err_msg="IDs of generic factors shall be ['kp', 'taps']")
         assert_array_equal(
-            factordefs.gen_factor_data.index_of_symbol,
+            model.factors.gen_factor_data.index_of_symbol,
             [0, 1],
             err_msg="indices of generic factor symbols shall be [0, 1]")
         factors, termfactor_crossref = ft._get_taps_factor_data(
-            model, factordefs, [0,1])
+            model, [0,1])
         print('add tests')
 
 class Get_scaling_factor_data(unittest.TestCase):
@@ -331,9 +327,8 @@ class Get_scaling_factor_data(unittest.TestCase):
     def test_no_data(self):
         """well, """
         model = make_model()
-        factordefs = ft.make_factordefs(model)
         factors, injfactor_crossref = ft._get_scaling_factor_data(
-            model, factordefs, [0, 1], repeat(len(factordefs.gen_factor_data)))
+            model, [0, 1], repeat(len(model.factors.gen_factor_data)))
         self.assertTrue(factors.empty)
         self.assertTrue(injfactor_crossref.empty)
 
@@ -369,17 +364,16 @@ class Get_scaling_factor_data(unittest.TestCase):
                 nodeid='n_0',
                 cls=grid.Terminallink,
                 step=-1))
-        factordefs = ft.make_factordefs(model)
         assert_array_equal(
-            factordefs.gen_factor_data.index,
+            model.factors.gen_factor_data.index,
             ['kp', 'taps'],
             err_msg="IDs of generic factors shall be ['kp', 'taps']")
         assert_array_equal(
-            factordefs.gen_factor_data.index_of_symbol,
+            model.factors.gen_factor_data.index_of_symbol,
             [0, 1],
             err_msg="indices of generic factor symbols shall be [0, 1]")
         factors, crossref = ft._get_scaling_factor_data(
-            model, factordefs, [0, 1], repeat(len(factordefs.gen_factor_data)))
+            model, [0, 1], repeat(len(model.factors.gen_factor_data)))
         assert_array_equal(
             factors.loc[0].index.get_level_values('id').sort_values(),
             ['_default_', 'kp', 'kq'],
@@ -437,17 +431,16 @@ class Get_scaling_factor_data(unittest.TestCase):
                 nodeid='n_0',
                 cls=grid.Terminallink,
                 step=-1))
-        factordefs = ft.make_factordefs(model)
         assert_array_equal(
-            factordefs.gen_factor_data.index,
+            model.factors.gen_factor_data.index,
             ['taps'],
             err_msg="IDs of generic factors shall be ['taps']")
         assert_array_equal(
-            factordefs.gen_factor_data.index_of_symbol,
+            model.factors.gen_factor_data.index_of_symbol,
             [0],
             err_msg="indices of generic factor symbols shall be [0]")
         factors, crossref = ft._get_scaling_factor_data(
-            model, factordefs, [0, 1], repeat(len(factordefs.gen_factor_data)))
+            model, [0, 1], repeat(len(model.factors.gen_factor_data)))
         assert_array_equal(
             factors.loc[0].index.get_level_values('id').sort_values(),
             ['_default_', 'kq'],
@@ -478,10 +471,9 @@ class Get_values_of_factors(unittest.TestCase):
     def test_no_data(self):
         """"""
         model = make_model()
-        factordefs = ft.make_factordefs(model)
         gen_factor_symbols = ft._create_symbols_with_ids(
-            factordefs.gen_factor_data.index)
-        factor_data = ft.make_factor_data2(model, factordefs, gen_factor_symbols, 0)
+            model.factors.gen_factor_data.index)
+        factor_data = ft.make_factor_data2(model, gen_factor_symbols, 0)
         fk, ftaps, factors = ft.get_values_of_factors(
             factor_data, np.zeros((0,1), dtype=float))
         self.assertEqual(fk.shape, (0, 2), 'no scaling factors')
@@ -500,10 +492,9 @@ class Get_values_of_factors(unittest.TestCase):
                 id_of_node_B='n_1'),
             grid.Injection('consumer', 'n_1'),
             grid.Injection('consumer2', 'n_1'))
-        factordefs = ft.make_factordefs(model)
         gen_factor_symbols = ft._create_symbols_with_ids(
-            factordefs.gen_factor_data.index)
-        factor_data = ft.make_factor_data2(model, factordefs, gen_factor_symbols, 0)
+            model.factors.gen_factor_data.index)
+        factor_data = ft.make_factor_data2(model, gen_factor_symbols, 0)
         fk, ftaps, factors = ft.get_values_of_factors(
             factor_data, np.zeros((0,1), dtype=float))
         self.assertEqual(fk.shape, (2, 2), '2x2 scaling factors')
@@ -529,10 +520,9 @@ class Get_values_of_factors(unittest.TestCase):
             grid.Deff(id=('kp','kq')),
             grid.Link(objid='consumer', id=('kp','kq'), part='pq'),
             grid.Link(objid='consumer2', id='kq', part='q'))
-        factordefs = ft.make_factordefs(model)
         gen_factor_symbols = ft._create_symbols_with_ids(
-            factordefs.gen_factor_data.index)
-        factor_data = ft.make_factor_data2(model, factordefs, gen_factor_symbols, 0)
+            model.factors.gen_factor_data.index)
+        factor_data = ft.make_factor_data2(model, gen_factor_symbols, 0)
         solution_vector = np.array([27., 42.]).reshape(-1,1)
         fk, ftaps, factors = ft.get_values_of_factors(
             factor_data, solution_vector)
@@ -564,10 +554,9 @@ class Get_values_of_factors(unittest.TestCase):
             grid.Link(
                 objid='branch', id='taps',
                 nodeid='n_0', cls=grid.Terminallink))
-        factordefs = ft.make_factordefs(model)
         gen_factor_symbols = ft._create_symbols_with_ids(
-            factordefs.gen_factor_data.index)
-        factor_data = ft.make_factor_data2(model, factordefs, gen_factor_symbols, 0)
+            model.factors.gen_factor_data.index)
+        factor_data = ft.make_factor_data2(model, gen_factor_symbols, 0)
         solution_vector = np.array([-3.]).reshape(-1,1)
         fk, ftaps, factors = ft.get_values_of_factors(
             factor_data, solution_vector)
