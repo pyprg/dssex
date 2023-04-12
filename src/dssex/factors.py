@@ -20,13 +20,15 @@ Created on Sun Mar 19 12:17:49 2023
 
 @author: pyprg
 
-The function 'get_factors' returns data on factors to be applied to nominal
-active and reactive power of injections. Factors fall in one of two
+The function 'make_factor_data2' returns data on factors to be applied
+to nominal active and reactive power of injections and factors to be applied
+to admittances of branches. The factors fall in one of two
 categories 'var' or 'const'. Factors of category 'var' are decision variables.
-Factors of category 'const' are parameters. Factors are specific for
-each step. A factor is initialized by a value of a factor from previous step
-or - if none exists - by a factor specific 'value' (which is an attribute of
-the input data).
+Factors of category 'const' are parameters. Factors are specific for an
+optimization step. A factor is initialized by a value of a factor from a
+previous step or - if none exists - by a factor specific 'value' (which is
+an attribute of the input data). Factors with step setting of -1 are
+generic factors, their data are copied for each step.
 """
 import casadi
 import pandas as pd
@@ -87,8 +89,7 @@ var_const_to_ftaps: array_like
     (selected) terminals (var_const[var_const_to_ftaps])"""
 
 def _select_rows(vecs, row_index):
-    """Creates column vectors from vecs by extracting elements by their
-    (row-) indices.
+    """Selects rows from vectors.
 
     Parameters
     ----------
@@ -205,8 +206,10 @@ def _get_factor_ini_values(factors):
     return ini.astype(dtype='Int64')
 
 def _get_default_factors(indices_of_steps):
-    """Generates one default scaling factor for each step. The factor is
-    of type 'const' has value 1.0, minimum and maximum are 1.0 too.
+    """Generates one default scaling factor for each step.
+
+    The factor is of type 'const' has value 1.0, minimum and maximum
+    are 1.0 too.
 
     Parameters
     ----------
@@ -257,7 +260,9 @@ def _factor_index_per_step(factors, start):
         dtype=np.int64)
 
 def _get_values_of_symbols(factor_data, value_of_previous_step):
-    """Returns values for symbols. When a symbol is a variable the value
+    """Returns values for symbols.
+
+    When a symbol is a variable the value
     is the initial value. Values are either given explicitely or are
     calculated in the previous calculation step.
 
@@ -290,6 +295,7 @@ def _get_values_of_symbols(factor_data, value_of_previous_step):
 
 def _add_step_index(df, step_indices):
     """Copies data of df for each step index in step_indices.
+
     Concatenates the data.
 
     Parameters
@@ -313,7 +319,9 @@ def _add_step_index(df, step_indices):
     return pd.concat([_new_index(idx) for idx in step_indices])
 
 def _get_injection_factors(step_factor_injection_part, factors):
-    """Creates crossreference from (step, injection) to IDs and
+    """Creates crossreference from injection to scaling factors.
+
+    In particular, creates crossreference from (step, injection) to IDs and
     indices of scaling factors for active and reactive power.
 
     Parameters
@@ -340,7 +348,8 @@ def _get_injection_factors(step_factor_injection_part, factors):
     return pd.DataFrame(
         [],
         columns=['id_p', 'id_q', 'kp', 'kq'],
-        index=pd.MultiIndex.from_arrays([[],[]], names=['step', 'id_of_injection']))
+        index=pd.MultiIndex.from_arrays(
+            [[],[]], names=['step', 'id_of_injection']))
 
 def _add_default_factors(required_factors):
     if required_factors.isna().any(axis=None):
@@ -357,8 +366,7 @@ def _add_default_factors(required_factors):
     return required_factors
 
 def _get_scaling_factor_data(model, steps, start):
-    """Creates and arranges indices for scaling factors and values for
-    initialization of scaling factors.
+    """Creates and arranges data of scaling factors.
 
     Parameters
     ----------
@@ -468,8 +476,7 @@ def _get_scaling_factor_data(model, steps, start):
     return factors.assign(devtype='injection'), injection_factors
 
 def _get_taps_factor_data(model, steps):
-    """Arranges indices for taps factors and values for initialization of
-    taps factors.
+    """Arranges data of taps factors and values for their initialization.
 
     Parameters
     ----------
@@ -541,19 +548,18 @@ def _get_taps_factor_data(model, steps):
 def make_factor_data(
         factordefs, gen_factor_symbols, factors, injection_factors, terminal_factor,
         k_prev=_DM_0r1c):
-    """Prepares data of scaling factors per step. Creates symbols for
-    scaling factors.
+    """Prepares data of scaling factors per step.
 
     Arguments for solver call:
 
-    Vectors of variables ('var') and of paramters ('const'), vectors of minimum
-    and of maximum variable values, vectors of initial values for variables
-    and values for paramters.
+    Vectors of decision variables ('var') and of paramters ('const'),
+    vectors of minimum and of maximum values, vectors of initial values for
+    decision variables and values for paramters.
 
     Data to reorder the solver result:
 
-    Sequences of indices for converting the vector of var/const to order
-    of factors (symbols), to the order of active power scaling factors,
+    Sequences of indices for converting the vector of var/const into the order
+    of factors (symbols), into the order of active power scaling factors,
     reactive power scaling factors and taps factors.
 
     Parameters
@@ -666,8 +672,7 @@ def make_factor_data(
             terminal_factor.index_of_symbol])
 
 def setup_factors_for_step(model, step):
-    """Returns data of decision variables and on parameters for a selected
-    step.
+    """Returns data of decision variables and of parameters for a given step.
 
     Parameters
     ----------
@@ -727,8 +732,7 @@ def setup_factors_for_step(model, step):
         _loc(terminal_factor, step).reset_index())
 
 def make_factor_data2(model, gen_factor_symbols, step=0, k_prev=_DM_0r1c):
-    """Returns data of decision variables and of parameters for a specific
-    step.
+    """Returns data of decision variables and of parameters for a given step.
 
     Parameters
     ----------

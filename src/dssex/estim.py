@@ -64,6 +64,7 @@ def create_V_symbols(count_of_nodes):
 
 def get_tap_factors(branchtaps, position_syms):
     """Creates expressions for off-diagonal factors of branches.
+
     Diagonal factors are just the square of the off-diagonal factors.
 
     Parameters
@@ -127,6 +128,7 @@ def _create_gb_matrix(index_of_node, index_of_other_node, shape, gb_mn_tot):
 
 def _reset_slack_0(matrix, count_of_rows):
     """Removes entries from first count_of_slacks rows of matrix.
+
     Returns new casadi.SX instance.
 
     Parameters
@@ -181,6 +183,7 @@ def create_mapping(from_index, to_index, shape):
 
 def multiply_Y_by_V(Vreim, G, B):
     """Creates the Y-matrix from G and B, creates a vector from Vreim.
+
     Multiplies Y @ V.
 
     Parameters
@@ -206,6 +209,7 @@ def multiply_Y_by_V(Vreim, G, B):
 
 def  _calculate_injected_current(Vri, Vabs_sqr, Exp_v, PQscaled):
     """Creates expression for real and imaginary parts of injected current.
+
     Injected power is calculated this way
     (P = |V|**Exvp * P10, Q = |V|**Exvq * Q10; with |V| - magnitude of V):
     ::
@@ -279,6 +283,7 @@ def  _calculate_injected_current(Vri, Vabs_sqr, Exp_v, PQscaled):
 def _injected_current(
         injections, node_to_inj, Vnode, factor_data, vminsqr=_VMINSQR):
     """Creates expressions for current flowing into injections.
+
     Also returns intermediate expressions used for calculation of
     current magnitude, active/reactive power flow.
 
@@ -365,6 +370,7 @@ def _reset_slack_current(
 
 def get_term_factor_expressions(factors, gen_factor_symbols):
     """Creates expressions for off-diagonal factors of branches.
+
     Diagonal factors are just the square of the off-diagonal factors.
 
     Parameters
@@ -414,8 +420,10 @@ def make_fmn_ftot(count_of_terminals, factordefs, gen_factor_symbols):
     return (foffd_term * foffd_otherterm), (foffd_term * foffd_term)
 
 def create_v_symbols_gb_expressions(model, gen_factor_symbols):
-    """Creates symbols for node and slack voltages, tappositions,
-    branch conductance/susceptance and an expression for Y @ V. The symbols
+    """Creates symbols for node and slack voltages. Creates expressions.
+
+    Expressions for branch conductance/susceptance and an expression for
+    Y @ V are prepared for further processing. The created symbols
     and expressions are regarded constant over multiple calculation steps.
     Diagonal of slack rows are set to 1 for conductance and 0 for susceptance,
     other values of slack rows are set to 0 in matrix 'Y @ V'.
@@ -478,9 +486,10 @@ def create_v_symbols_gb_expressions(model, gen_factor_symbols):
 
 def make_get_scaling_and_injection_data(
         model, gen_factor_symbols, Vnode_syms, vminsqr):
-    """Returns a function creating scaling_data and injection_data
-    for a given step, in general expressions which are specific
-    for the given step.
+    """Returns a function creating scaling_data and injection_data.
+
+    The data are created by the returned function for a given step, they are
+    specific for that step.
 
     Parameters
     ----------
@@ -594,8 +603,9 @@ def get_expressions(model, gen_factor_symbols, vminsqr=_VMINSQR):
 
 def calculate_power_flow2(
         model, expr, factor_data, Inode, Vinit=None):
-    """Solves the power flow problem using a rootfinding algorithm. The result
-    is the initial voltage vector for the optimization.
+    """Solves the power flow problem using a rootfinding algorithm.
+
+    The result is the initial voltage vector for the optimization.
 
     Parameters
     ----------
@@ -750,8 +760,9 @@ def get_injection_flow_expressions(ipqv, quantity, injections):
 
 def _power_into_branch(
         g_tot, b_tot, g_mn, b_mn, V_abs_sqr, Vre, Vim, Vre_other, Vim_other):
-    """Calculates active and reactive power flow
-    from admittances of a branch and the voltages at its terminals. Assumes
+    """Calculates active and reactive power flow.
+
+    Uses admittances of a branches and the voltages at their terminals. Assumes
     PI-equivalient circuit.
     ::
         S = VI'
@@ -877,9 +888,11 @@ def _power_into_branch(
     return P, Q
 
 def power_into_branch(gb_mn_tot, Vnode, terms):
-    """Creates expressions of active and reactive power flow for a subset of
-    branch terminals from admittances of branches and voltages at
-    branch terminals. Assumes PI-equivalent circuits.
+    """Creates expressions of active and reactive power flow.
+
+    Creates expressions for a subset of branch terminals from admittances
+    of branches and voltages at branch terminals. Assumes PI-equivalent
+    circuits.
 
     Parameters
     ----------
@@ -959,9 +972,11 @@ def _current_into_branch(
     return casadi.horzcat(Ire, Iim)
 
 def current_into_branch(gb_mn_tot, Vnode, terms):
-    """Generates expressions for real and imaginary current flowing into
-    given subset of branch terminals from expressions of branch admittances
-    and voltages at branch terminals. Assumes PI-equivalient circuit.
+    """Generates expressions for real and imaginary current into branches.
+
+    Expects a subset of branch terminals. Uses expressions of branch
+    admittances and voltages at branch terminals. Assumes PI-equivalient
+    circuit.
 
     Parameters
     ----------

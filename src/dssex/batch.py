@@ -42,8 +42,7 @@ _VMINSQR = 0.8**2
 _EPSILON = 1e-12
 
 def get_values(model, selector):
-    """Helper for returning I/P/Q/V-values from model using a
-    string 'I'|'P'|'Q'|'V'.
+    """Helper for returning I/P/Q/V-values from model.
 
     Parameters
     ----------
@@ -148,8 +147,8 @@ def _interpolate_injected_power_n(Vinj_abs_sqr, Exp_v, PQ, vminsqr):
 
 def _injected_power_n(
         injections, node_to_inj, Vnode_abs_sqr, kpq, vminsqr=_VMINSQR):
-    """Numerically calculates magnitudes of injected power flowing
-    into injections.
+    """Numerically calculates magnitudes of power flowing into injections.
+
     This function is intended for calculation of power for selected
     injections only.
 
@@ -227,8 +226,11 @@ def _calculate_injected_current_n(Vri, Vabs_sqr, Exp_v, PQscaled):
     return np.hstack([Ire, Iim])
 
 def _interpolate_injected_current_n(Vinj, Vabs_sqr, PQinj):
-    """Interpolates values of injected current in a voltage interval,
-    S = f(|V|).
+    """Interpolates values of injected current in a voltage interval.
+
+    Formula:
+    ::
+        S = f(|V|).
 
     Parameters
     ----------
@@ -261,8 +263,8 @@ def _interpolate_injected_current_n(Vinj, Vabs_sqr, PQinj):
 def _injected_current_n(
         injections, node_to_inj, Vnode_ri2, Vnode_abs_sqr, kpq,
         vminsqr=_VMINSQR):
-    """Numerically calculates magnitudes of injected currents flowing
-    into injections.
+    """Numerically calculates magnitudes of currents flowing into injections.
+
     This function is intended for calculation of currents for selected
     injections only.
 
@@ -321,8 +323,10 @@ def _injected_current_n(
 
 def _get_injected_value(
         node_to_inj, Vnode_ri2, Vabs_sqr, kpq, selector, vminsqr, injections):
-    """Returns one of electric current I, active power P or reactive power Q
-    selected by selector for given injections.
+    """Returns electric current I, active power P or reactive power Q.
+
+    The quantity is requested by selector. Real and imaginary
+    parts are returned for I.
 
     Parameters
     ----------
@@ -351,7 +355,7 @@ def _get_injected_value(
 
     Returns
     -------
-    numpy.array<float> (shape 1,2) or float"""
+    numpy.array<float> (shape n,1|2)"""
     if selector=='I':
         return np.sum(
             _injected_current_n(
@@ -369,8 +373,7 @@ def _get_injected_value(
         f'selector needs to be one of "I", "P" or "Q" but is "{selector}"'
 
 def get_batches(values, outputs, column_of_device_index):
-    """Creates an iterator over tuples (id_of_batch, pandas.DataFrame)
-    for given values and outputs.
+    """Creates an iterator over batch data for given values and outputs.
 
     Parameters
     ----------
@@ -488,8 +491,8 @@ def _calculate_factors_of_positions_n(branchtaps, positions):
         .reshape(-1,1))
 
 def _create_gb_of_terminals_n(branchterminals, branchtaps, positions=None):
-    """Creates a vectors (as a numpy array) of branch-susceptances and
-    branch-conductances.
+    """Creates a vectors of branch-susceptances and branch-conductances.
+
     The intended use is calculating a subset of terminal values.
     Arguments 'branchtaps' and 'positions' will be selected
     accordingly, hence, it is appropriate to pass the complete branchtaps
@@ -550,9 +553,9 @@ def _create_gb_of_terminals_n(branchterminals, branchtaps, positions=None):
 
 def _get_branch_flow_values(
         term_factor, positions, vnode_ri2, branchterminals):
-    """Calculates current, active and reactive power flow into branches from
-    given terminals. 'branchterminals' is a subset, all other arguments are
-    complete.
+    """Calculates current, active and reactive power flow into branches.
+
+    'branchterminals' is a subset, all other arguments are complete.
 
     Parameters
     ----------
@@ -593,9 +596,9 @@ _branch_flow_slicer = dict(I=np.s_[:,:2], P=np.s_[:,2], Q=np.s_[:,3])
 
 def _get_batch_values_br(
         model, term_factor, vnode_ri2, positions, selector, vminsqr=.8**2):
-    """Calculates a vector (numpy.array, shape n,1) of injected absolute
-    current, active power or reactive power. The expressions are based
-    on the batch definitions.
+    """Calculates a vector of absolute current, active power or reactive power.
+
+    The expressions are based on the batch definitions.
 
     Parameters
     ----------
@@ -631,8 +634,9 @@ def _get_batch_values_br(
 
 def _get_batch_flow_values(
         model, term_factor, Vnode_ri2, Vabs_sqr, kpq, positions, selector, vminsqr):
-    """Calculates a float value for each batch id. The returned values
-    are a subset of calculated values of a network model.
+    """Calculates a float value for each batch id.
+
+    The returned values are a subset of calculated values of a network model.
 
     Parameters
     ----------
@@ -680,12 +684,14 @@ def _get_batch_flow_values(
 
 def get_batch_values(
     model, Vnode_ri2, kpq, positions=None, quantities='', vminsqr=_VMINSQR):
-    """Provided, node voltages, scaling factors and tappositions are results
-    and parameters of a power flow calculation with the grid-data of the model,
+    """Numerically calculates I/P/Q/V per batch definition.
+
+    Provided, node voltages, scaling factors and tappositions are results
+    and parameters of a power flow calculation made with the data of the model,
     'get_batch_values' returns calculated values for the selected quantities.
     For instance, if quantity is 'P' the function returns the active power
-    according to the power flow calculation at the terminals active power
-    values (table 'PValues') are given for by the model.
+    according to the power flow calculation at those terminals which an
+    active power value (table 'PValues') is given for.
 
     Parameters
     ----------
