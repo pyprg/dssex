@@ -252,12 +252,13 @@ class Power_flow_calculation_taps(unittest.TestCase):
         model1 = make_model(
             grid_pfc2,
             #  taps
-            grid.Deff(
+            grid.Deft(
                 'tap_branch_1', type='const', min=-16, max=16,
                 value=0, m=-.1/16, n=1., is_discrete=True), # <- neutral
-            grid.Link(
-                objid='branch_1', id='tap_branch_1', nodeid='n_1',
-                cls=grid.Terminallink))
+            grid.Tlink(
+                id_of_node='n_1',
+                id_of_branch='branch_1',
+                id_of_factor='tap_branch_1'))
         # calculate
         gen_factor_symbols0 = ft._create_symbols_with_ids(
             model0.factors.gen_factor_data.index)
@@ -299,12 +300,11 @@ class Power_flow_calculation_taps(unittest.TestCase):
         model1 = make_model(
             grid_pfc2,
             # taps
-            grid.Deff(
+            grid.Deft(
                 'taps', type='const', min=-16, max=16,
                 value=-16, m=-.1/16, n=1., is_discrete=True), # <- 10% increase
-            grid.Link(
-                objid='branch_1', id='taps', nodeid='n_1',
-                cls=grid.Terminallink))
+            grid.Tlink(
+                id_of_node='n_1', id_of_branch='branch_1', id_of_factor='taps'))
         # calculate
         gen_factor_symbols0 = ft._create_symbols_with_ids(
             model0.factors.gen_factor_data.index)
@@ -355,12 +355,11 @@ class Power_flow_calculation_taps(unittest.TestCase):
         model1 = make_model(
             grid_pfc2,
             # taps
-            grid.Deff(
+            grid.Deft(
                 'taps', type='const', min=-16, max=16,
                 value=16, m=-.1/16, n=1., is_discrete=True), # <- 10% decrease
-            grid.Link(
-                objid='branch_1', id='taps', nodeid='n_1',
-                cls=grid.Terminallink))
+            grid.Tlink(
+                id_of_node='n_1', id_of_branch='branch_1', id_of_factor='taps'))
         # calculate
         gen_factor_symbols0 = ft._create_symbols_with_ids(
             model0.factors.gen_factor_data.index)
@@ -425,12 +424,11 @@ grid_pfc3 = [
         id_of_node_B='n_2',
         y_lo=1e3-1e3j,
         y_tr=1e-6+1e-6j),
-    grid.Deff(
+    grid.Deft(
         'tap_line1', type='const', min=-16, max=16,
         value=10, m=-.1/16, n=1., is_discrete=True),
-    grid.Link(
-        objid='line_1', id='tap_line1', nodeid='n_1',
-        cls=grid.Terminallink),
+    grid.Tlink(
+        id_of_node='n_1', id_of_branch='line_1', id_of_factor='tap_line1'),
     grid.Injection(
         id='consumer_0',
         id_of_node='n_2',
@@ -494,8 +492,12 @@ class Optimize_step(unittest.TestCase):
             grid.PValue('PQ_line_0', P=40.0),
             grid.Output('PQ_line_0', id_of_device='line_0', id_of_node='n_0'),
             # scaling factor kp for active power P of consumer
-            grid.Deff('kp', step=0),
-            grid.Link(objid='consumer', part='p', id='kp', step=0))
+            grid.Defk('kp', step=0),
+            grid.Klink(
+                id_of_injection='consumer',
+                part='p',
+                id_of_factor='kp',
+                step=0))
         gen_factor_symbols = ft._create_symbols_with_ids(
             model.factors.gen_factor_data.index)
         expressions = estim.get_expressions(model, gen_factor_symbols)
@@ -528,8 +530,12 @@ class Optimize_step(unittest.TestCase):
             grid.PValue('PQ_consumer', P=40.0),
             grid.Output('PQ_consumer', id_of_device='consumer'),
             # scaling factor kp for active power P of consumer
-            grid.Deff('kp', step=0),
-            grid.Link(objid='consumer', part='p', id='kp', step=0))
+            grid.Defk('kp', step=0),
+            grid.Klink(
+                id_of_injection='consumer',
+                part='p',
+                id_of_factor='kp',
+                step=0))
         gen_factor_symbols = ft._create_symbols_with_ids(
             model.factors.gen_factor_data.index)
         expressions = estim.get_expressions(model, gen_factor_symbols)
@@ -562,8 +568,12 @@ class Optimize_step(unittest.TestCase):
             grid.QValue('PQ_line_0', Q=40.0),
             grid.Output('PQ_line_0', id_of_device='line_0', id_of_node='n_0'),
             # scaling factor kq for reactive power Q of consumer
-            grid.Deff('kq', step=0),
-            grid.Link(objid='consumer', part='q', id='kq', step=0))
+            grid.Defk('kq', step=0),
+            grid.Klink(
+                id_of_injection='consumer',
+                part='q',
+                id_of_factor='kq',
+                step=0))
         gen_factor_symbols = ft._create_symbols_with_ids(
             model.factors.gen_factor_data.index)
         expressions = estim.get_expressions(model, gen_factor_symbols)
@@ -596,8 +606,12 @@ class Optimize_step(unittest.TestCase):
             grid.QValue('PQ_consumer', Q=40.0),
             grid.Output('PQ_consumer', id_of_device='consumer'),
             # scaling factor kq for reactive power Q of consumer
-            grid.Deff('kq', step=0),
-            grid.Link(objid='consumer', part='q', id='kq', step=0))
+            grid.Defk('kq', step=0),
+            grid.Klink(
+                id_of_injection='consumer',
+                part='q',
+                id_of_factor='kq',
+                step=0))
         gen_factor_symbols = ft._create_symbols_with_ids(
             model.factors.gen_factor_data.index)
         expressions = estim.get_expressions(model, gen_factor_symbols)
@@ -630,8 +644,12 @@ class Optimize_step(unittest.TestCase):
             grid.IValue('I_line_0', I=40.0),
             grid.Output('I_line_0', id_of_device='line_0', id_of_node='n_0'),
             # scaling factor kpq for active/reactive power P/Q of consumer
-            grid.Deff('kpq', step=0),
-            grid.Link(objid='consumer', part='pq', id='kpq', step=0))
+            grid.Defk('kpq', step=0),
+            grid.Klink(
+                id_of_injection='consumer',
+                part='pq',
+                id_of_factor='kpq',
+                step=0))
         gen_factor_symbols = ft._create_symbols_with_ids(
             model.factors.gen_factor_data.index)
         expressions = estim.get_expressions(model, gen_factor_symbols)
@@ -664,8 +682,12 @@ class Optimize_step(unittest.TestCase):
             grid.IValue('I_consumer', I=40.0),
             grid.Output('I_consumer', id_of_device='consumer'),
             # scaling factor kpq for active/reactive power P/Q of consumer
-            grid.Deff('kpq', step=0),
-            grid.Link(objid='consumer', id=('kpq', 'kpq'), part='pq', step=0))
+            grid.Defk('kpq', step=0),
+            grid.Klink(
+                id_of_injection='consumer',
+                part='pq',
+                id_of_factor=('kpq', 'kpq'),
+                step=0))
         gen_factor_symbols = ft._create_symbols_with_ids(
             model.factors.gen_factor_data.index)
         expressions = estim.get_expressions(model, gen_factor_symbols)
@@ -697,8 +719,12 @@ class Optimize_step(unittest.TestCase):
             # give magnitude of voltage at n_2
             grid.Vvalue('n_2', V=1.02),
             # scaling factor kq for reactive power Q of consumer
-            grid.Deff('kq', step=0),
-            grid.Link(objid='consumer', id='kq', part='q', step=0))
+            grid.Defk('kq', step=0),
+            grid.Klink(
+                id_of_injection='consumer',
+                part='q',
+                id_of_factor='kq',
+                step=0))
         gen_factor_symbols = ft._create_symbols_with_ids(
             model.factors.gen_factor_data.index)
         expressions = estim.get_expressions(model, gen_factor_symbols)

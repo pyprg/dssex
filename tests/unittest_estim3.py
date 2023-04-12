@@ -75,12 +75,11 @@ class Calculate_power_flow(unittest.TestCase):
         # first: tapsposition == 0 -> no impact to voltage
         model0 = make_model(
             grid1,
-            grid.Deff(
+            grid.Deft(
                 'taps', type='const', min=-16, max=16, value=0,
                 m=-0.00625, n=1., is_discrete=True),
-            grid.Link(
-                objid='line_0', id='taps', nodeid='n_0',
-                cls=grid.Terminallink))
+            grid.Tlink(
+                id_of_node='n_0', id_of_branch='line_0', id_of_factor='taps'))
         # calculate power flow
         gen_factor_symbols0 = ft._create_symbols_with_ids(
             model0.factors.gen_factor_data.index)
@@ -110,12 +109,11 @@ class Calculate_power_flow(unittest.TestCase):
         # second: tapsposition == -16 -> voltage increase ~10%
         model1 = make_model(
             grid1,
-            grid.Deff(
+            grid.Deft(
                 'taps', type='const', min=-16, max=16, value=-16, # <- V +10%
                 m=-0.00625, n=1., is_discrete=True),
-            grid.Link(
-                objid='line_0', id='taps', nodeid='n_0',
-                cls=grid.Terminallink))
+            grid.Tlink(
+                id_of_node='n_0', id_of_branch='line_0', id_of_factor='taps'))
         # calculate power flow
         gen_factor_symbols1 = ft._create_symbols_with_ids(
             model1.factors.gen_factor_data.index)

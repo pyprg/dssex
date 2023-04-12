@@ -138,8 +138,12 @@ class Estimate_injection(unittest.TestCase):
             grid.Slacknode('n_0', V=vcx_slack),
             grid.Injection('consumer', 'n_0', P10=s.real, Q10=s.imag),
             # scaling
-            grid.Deff(id='kp', step=0),
-            grid.Link(objid='consumer', id='kp', part='p', step=0),
+            grid.Defk(id='kp', step=0),
+            grid.Klink(
+                id_of_injection='consumer',
+                part='p',
+                id_of_factor='kp',
+                step=0),
             # measurement
             grid.PValue(id_of_batch='p_of_consumter', P=9, direction=1.),
             grid.Output(id_of_batch='p_of_consumer', id_of_device='consumer'))
@@ -178,9 +182,13 @@ class Estimate_injection(unittest.TestCase):
             grid.Slacknode('n_0', V=vcx_slack),
             grid.Injection('consumer', 'n_0', P10=s.real, Q10=s.imag),
             # scaling, define scaling factor
-            grid.Deff(id='kp', step=0),
+            grid.Defk(id='kp', step=0),
             # link scaling factor to active power of consumer
-            grid.Link(objid='consumer', id='kp', part='p', step=0),
+            grid.Klink(
+                id_of_injection='consumer',
+                part='p',
+                id_of_factor='kp',
+                step=0),
             # measurement
             grid.PValue(id_of_batch='p_of_consumer', P=20., direction=1.),
             grid.Output(id_of_batch='p_of_consumer', id_of_device='consumer'))
@@ -220,12 +228,12 @@ class Estimate_injection(unittest.TestCase):
             grid.Slacknode('n_0', V=vcx_slack),
             grid.Injection('consumer', 'n_0', P10=s.real, Q10=s.imag),
             # scaling, define scaling factor
-            grid.Deff(id='kpq', step=0),
+            grid.Defk(id='kpq', step=0),
             # link scaling factor to active and reactive power of consumer
-            grid.Link(
-                objid='consumer',
-                id=('kpq', 'kpq'),
+            grid.Klink(
+                id_of_injection='consumer',
                 part=('p','q'),
+                id_of_factor=('kpq', 'kpq'),
                 step=0),
             # measurement
             grid.PValue(id_of_batch='p_of_consumer', P=Pval, direction=1.),
@@ -274,12 +282,12 @@ class Estimate_injection(unittest.TestCase):
             grid.Slacknode('n_0', V=vcx_slack),
             grid.Injection('consumer', 'n_0', P10=s.real, Q10=s.imag),
             # scaling, define scaling factor
-            grid.Deff(id='kpq', step=0),
+            grid.Defk(id='kpq', step=0),
             # link scaling factor to active and reactive power of consumer
-            grid.Link(
-                objid='consumer',
-                id=('kpq', 'kpq'),
+            grid.Klink(
+                id_of_injection='consumer',
                 part=('p','q'),
+                id_of_factor=('kpq', 'kpq'),
                 step=0),
             # measurements
             grid.PValue(id_of_batch='pq_of_consumer', P=Pval),
@@ -322,13 +330,13 @@ class Estimate_injection(unittest.TestCase):
             grid.Slacknode('n_0', V=vcx_slack),
             grid.Injection('consumer', 'n_0', P10=s.real, Q10=s.imag),
             # scaling, define scaling factors
-            grid.Deff(id='kp', step=0),
-            grid.Deff(id='kq', step=0),
+            grid.Defk(id='kp', step=0),
+            grid.Defk(id='kq', step=0),
             # link scaling factors to active and reactive power of consumer
-            grid.Link(
-                objid='consumer',
-                id=('kp', 'kq'),
+            grid.Klink(
+                id_of_injection='consumer',
                 part=('p','q'),
+                id_of_factor=('kp', 'kq'),
                 step=0),
             # measurements
             grid.PValue(id_of_batch='pq_of_consumer', P=Pval),
@@ -374,12 +382,12 @@ class Estimate_injection(unittest.TestCase):
             # power independant of voltage
             grid.Injection('consumer', 'n_0', P10=s.real, Q10=s.imag),
             # scaling, define scaling factors
-            grid.Deff(id='kpq', step=0),
+            grid.Defk(id='kpq', step=0),
             # link scaling factors to active and reactive power of consumer
-            grid.Link(
-                objid='consumer',
-                id=('kpq', 'kpq'),
+            grid.Klink(
+                id_of_injection='consumer',
                 part=('p','q'),
+                id_of_factor=('kpq', 'kpq'),
                 step=0),
             # measurements
             grid.IValue(id_of_batch='i_of_consumer', I=Ival),
@@ -464,8 +472,12 @@ class Estimate_branch_injection(unittest.TestCase):
             grid.Branch('line', 'n_0', 'n_1', y_lo=1e3-1e3j, y_tr=1e-6+1e-6j),
             grid.Injection('consumer', 'n_1', P10=s.real, Q10=s.imag),
             # scaling
-            grid.Deff(id='kp', step=0),
-            grid.Link(objid='consumer', id='kp', part='p', step=0),
+            grid.Defk(id='kp', step=0),
+            grid.Klink(
+                id_of_injection='consumer',
+                part='p',
+                id_of_factor='kp',
+                step=0),
             # measurement
             grid.PValue(id_of_batch='p_at_line', P=9, direction=1.),
             grid.Output(
@@ -514,9 +526,13 @@ class Estimate_branch_injection(unittest.TestCase):
             grid.Branch('line', 'n_0', 'n_1', y_lo=1e3-1e3j, y_tr=1e-6+1e-6j),
             grid.Injection('consumer', 'n_1', P10=S.real, Q10=S.imag),
             # scaling, define scaling factor
-            grid.Deff(id='kp', step=0),
+            grid.Defk(id='kp', step=0),
             # link scaling factor to active power of consumer
-            grid.Link(objid='consumer', id='kp', part='p', step=0),
+            grid.Klink(
+                id_of_injection='consumer',
+                part='p',
+                id_of_factor='kp',
+                step=0),
             # measurement
             grid.PValue(id_of_batch='p_of_line', P=Pval),
             grid.Output(
@@ -554,9 +570,13 @@ class Estimate_branch_injection(unittest.TestCase):
             grid.Branch('line', 'n_0', 'n_1', y_lo=1e3-1e3j, y_tr=1e-6+1e-6j),
             grid.Injection('consumer', 'n_1', P10=S.real, Q10=S.imag),
             # scaling, define scaling factor
-            grid.Deff(id=('kpq'), step=0),
+            grid.Defk(id=('kpq'), step=0),
             # link scaling factor to active power of consumer
-            grid.Link(objid='consumer', id=('kpq', 'kpq'), part='pq', step=0),
+            grid.Klink(
+                id_of_injection='consumer',
+                part='pq',
+                id_of_factor=('kpq', 'kpq'),
+                step=0),
             # measurement
             grid.PValue(id_of_batch='p_of_line', P=Pval),
             grid.Output(
@@ -597,13 +617,13 @@ class Estimate_branch_injection(unittest.TestCase):
             grid.Branch('line', 'n_0', 'n_1', y_lo=1e3-1e3j, y_tr=1e-6+1e-6j),
             grid.Injection('consumer', 'n_1', P10=s.real, Q10=s.imag),
             # scaling, define scaling factors
-            grid.Deff(id='kp', step=0),
-            grid.Deff(id='kq', step=0),
+            grid.Defk(id='kp', step=0),
+            grid.Defk(id='kq', step=0),
             # link scaling factors to active and reactive power of consumer
-            grid.Link(
-                objid='consumer',
-                id=('kp', 'kq'),
+            grid.Klink(
+                id_of_injection='consumer',
                 part=('p','q'),
+                id_of_factor=('kp', 'kq'),
                 step=0),
             # measurements
             grid.PValue(id_of_batch='pq_of_line', P=Pval),
@@ -649,13 +669,13 @@ class Estimate_branch_injection(unittest.TestCase):
             grid.Branch('line', 'n_0', 'n_1', y_lo=1e3-1e3j, y_tr=1e-6+1e-6j),
             grid.Injection('consumer', 'n_1', P10=s.real, Q10=s.imag),
             # scaling, define scaling factors
-            grid.Deff(id='kp', step=(0,1)),
-            grid.Deff(id='kq', step=(0,1)),
+            grid.Defk(id='kp', step=(0,1)),
+            grid.Defk(id='kq', step=(0,1)),
             # link scaling factors to active and reactive power of consumer
-            grid.Link(
-                objid='consumer',
-                id=('kp', 'kq'),
+            grid.Klink(
+                id_of_injection='consumer',
                 part=('p','q'),
+                id_of_factor=('kp', 'kq'),
                 step=(0,1)),
             # measurements
             grid.PValue(id_of_batch='pq_of_line', P=Pval),
@@ -703,12 +723,12 @@ class Estimate_branch_injection(unittest.TestCase):
             grid.Branch('line', 'n_0', 'n_1', y_lo=1e3-1e3j, y_tr=1e-6+1e-6j),
             grid.Injection('consumer', 'n_1', P10=s.real, Q10=s.imag),
             # scaling, define scaling factors
-            grid.Deff(id='kpq', step=0),
+            grid.Defk(id='kpq', step=0),
             # link scaling factors to active and reactive power of consumer
-            grid.Link(
-                objid='consumer',
-                id=('kpq', 'kpq'),
+            grid.Klink(
+                id_of_injection='consumer',
                 part=('p','q'),
+                id_of_factor=('kpq', 'kpq'),
                 step=0),
             # measurements
             grid.IValue(id_of_batch='i_of_consumer', I=Ival),
@@ -742,9 +762,13 @@ class Estimate_branch_injection(unittest.TestCase):
             grid.Branch('line_1', 'n_1', 'n_2', y_lo=1e3-1e3j),
             grid.Injection('consumer', 'n_2', P10=30.0, Q10=10.0),
             # scaling, define scaling factors
-            grid.Deff(id='kq', step=0),
+            grid.Defk(id='kq', step=0),
             # link scaling factors to active and reactive power of consumer
-            grid.Link(objid='consumer', id='kq', part='q', step=0),
+            grid.Klink(
+                id_of_injection='consumer',
+                part='q',
+                id_of_factor='kq',
+                step=0),
             # measurement/setpoint
             grid.Vvalue(id_of_node='n_2', V=Vval))
         init, res = estim.estimate(

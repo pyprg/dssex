@@ -61,10 +61,10 @@ grid1 = (
     grid.Injection('consumer_1', 'n_2', P10=10.0, Q10=10.0),
     grid.Injection('consumer_2', 'n_3', P10=20.0, Q10=15.0),
     grid.Injection('consumer_3', 'n_3', P10=30.0, Q10=20.0),
-    grid.Deff(
+    grid.Deft(
         'taps', type='const', min=-16, max=16, value=-16,
         m=-0.00625, n=1., is_discrete=True), # <- 10 percent increase
-    grid.Link(objid='line_0', id='taps', nodeid='n_0', cls=grid.Terminallink)
+    grid.Tlink(id_of_branch='line_0', id_of_node='n_0', id_of_factor='taps')
     )
 
 class Batch(unittest.TestCase):

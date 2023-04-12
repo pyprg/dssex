@@ -71,9 +71,13 @@ class Get_scaling_factor_data(unittest.TestCase):
             grid.Slacknode('n_0'),
             grid.Injection('consumer', 'n_0'),
             # scaling, define scaling factors
-            grid.Deff(id=('kp', 'kq'), step=0),
+            grid.Defk(id=('kp', 'kq'), step=0),
             # link scaling factors to active and reactive power of consumer
-            grid.Link(objid='consumer', id=('kp', 'kq'), part='pq', step=0))
+            grid.Klink(
+                id_of_injection='consumer',
+                part='pq',
+                id_of_factor=('kp', 'kq'),
+                step=0))
         index_of_step = 1
         steps = [index_of_step-1, index_of_step]
         factors, injection_factor = ft._get_scaling_factor_data(
@@ -106,9 +110,13 @@ class Get_scaling_factor_data(unittest.TestCase):
             grid.Slacknode('n_0'),
             grid.Injection('consumer', 'n_0'),
             # scaling, define scaling factors
-            grid.Deff(id=('kp', 'kq'), step=-1),
+            grid.Defk(id=('kp', 'kq'), step=-1),
             # link scaling factors to active and reactive power of consumer
-            grid.Link(objid='consumer', id=('kp', 'kq'), part='pq', step=-1))
+            grid.Klink(
+                id_of_injection='consumer',
+                part='pq',
+                id_of_factor=('kp', 'kq'),
+                step=-1))
         index_of_step = 1
         steps = [index_of_step-1, index_of_step]
         factors, injection_factor = ft._get_scaling_factor_data(
@@ -131,13 +139,12 @@ class Get_scaling_factor_data(unittest.TestCase):
             grid.Slacknode('n_0'),
             grid.Injection('consumer', 'n_0'),
             # scaling, define scaling factors
-            grid.Deff(id=('kp', 'kq'), step=-1),
+            grid.Defk(id=('kp', 'kq'), step=-1),
             # link scaling factors to active and reactive power of consumer
-            grid.Link(
-                objid='consumer',
-                id=('kp', 'kq'),
-                part='pq',
-                cls=grid.Terminallink,
+            grid.Tlink(
+                id_of_branch='consumer',
+                id_of_node='n_0',
+                id_of_factor=('kp', 'kq'),
                 step=-1))
         index_of_step = 0
         steps = [index_of_step]
@@ -165,13 +172,12 @@ class Get_taps_factor_data(unittest.TestCase):
                 id_of_node_B='n_1'),
             grid.Injection('injection', 'n_1'),
             # scaling, define scaling factors
-            grid.Deff(id='taps', step=-1),
+            grid.Deft(id='taps', step=-1),
             # link scaling factors to active and reactive power of consumer
-            grid.Link(
-                objid='branch',
-                id='taps',
-                nodeid='n_0',
-                cls=grid.Terminallink,
+            grid.Tlink(
+                id_of_node='n_0',
+                id_of_branch='branch',
+                id_of_factor='taps',
                 step=-1))
         index_of_step = 1
         steps = [index_of_step-1, index_of_step]
@@ -265,13 +271,13 @@ class Make_get_factor_data(unittest.TestCase):
                 id_of_node_A='n_0',
                 id_of_node_B='n_1'),
             #grid.Injection('injection', 'n_1'),
-            grid.Deff(
-                'taps', value=0, min=-16, max=16, m=-10/16, is_discrete=True),
-            grid.Link(
-                objid='branch',
-                id='taps',
-                nodeid='n_0',
-                cls=grid.Terminallink))
+            grid.Deft(
+                'taps', type='var', value=0, min=-16, max=16, m=-10/16,
+                is_discrete=True),
+            grid.Tlink(
+                id_of_node='n_0',
+                id_of_branch='branch',
+                id_of_factor='taps'))
         self.assertIsNotNone(model, "make_model makes models")
         gen_factor_symbols = ft._create_symbols_with_ids(
             model.factors.gen_factor_data.index)
@@ -325,9 +331,13 @@ class Make_get_factor_data(unittest.TestCase):
             grid.Slacknode('n_0'),
             grid.Injection('consumer', 'n_0'),
             # scaling, define scaling factors
-            grid.Deff(id=('kp', 'kq'), step=0),
+            grid.Defk(id=('kp', 'kq'), step=0),
             # link scaling factors to active and reactive power of consumer
-            grid.Link(objid='consumer', id=('kp', 'kq'), part='pq', step=0))
+            grid.Klink(
+                id_of_injection='consumer',
+                part='pq',
+                id_of_factor=('kp', 'kq'),
+                step=0))
         self.assertIsNotNone(model, "make_model makes models")
         gen_factor_symbols = ft._create_symbols_with_ids(
             model.factors.gen_factor_data.index)
@@ -383,14 +393,18 @@ class Make_get_factor_data(unittest.TestCase):
             grid.Slacknode('n_0'),
             grid.Injection('consumer', 'n_0'),
             # scaling, define scaling factors
-            grid.Deff(
+            grid.Defk(
                 id=('kp', 'kq'),
                 value=.42,
                 min=-1.5,
                 max=10.3,
                 step=1),
             # link scaling factors to active and reactive power of consumer
-            grid.Link(objid='consumer', id=('kp', 'kq'), part='pq', step=1))
+            grid.Klink(
+                id_of_injection='consumer',
+                part='pq',
+                id_of_factor=('kp', 'kq'),
+                step=1))
         self.assertIsNotNone(model, "make_model makes models")
         gen_factor_symbols = ft._create_symbols_with_ids(
             model.factors.gen_factor_data.index)

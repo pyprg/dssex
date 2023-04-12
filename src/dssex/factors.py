@@ -34,7 +34,7 @@ import numpy as np
 from functools import partial
 from collections import namedtuple
 from itertools import chain, repeat
-from egrid.builder import DEFAULT_FACTOR_ID, deff, Factor
+from egrid.builder import DEFAULT_FACTOR_ID, Factor, Defk, expand_def
 # empty vector of values
 _DM_0r1c = casadi.DM(0,1)
 # empty vector of expressions
@@ -221,8 +221,16 @@ def _get_default_factors(indices_of_steps):
         columns according to fields of egrid.builder.Loadfactor"""
     return (
         pd.DataFrame(
-            deff(id_=DEFAULT_FACTOR_ID, type_='const', value=1.0,
-                  min_=1.0, max_=1.0, step=indices_of_steps),
+            #id type id_of_source value min max is_discrete m n step
+            expand_def(
+                Defk(
+                    id=DEFAULT_FACTOR_ID,
+                    type='const',
+                    id_of_source=DEFAULT_FACTOR_ID,
+                    value=1.0,
+                    min=1.0,
+                    max=1.0,
+                    step=indices_of_steps)),
             columns=Factor._fields)
         .set_index(['step', 'id']))
 

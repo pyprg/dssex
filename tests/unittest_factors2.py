@@ -49,10 +49,14 @@ class Make_factordefs(unittest.TestCase):
                 id_of_node_B='n_1'),
             grid.Injection('consumer', 'n_1'),
             # scaling, define scaling factors
-            grid.Deff(id='kp', step=-1),
+            grid.Defk(id='kp', step=-1),
             # link scaling factors to active power of consumer
             #   factor for each step (generic, step=-1)
-            grid.Link(objid='consumer', id='kp', part='p', step=-1))
+            grid.Klink(
+                id_of_injection='consumer',
+                part='p',
+                id_of_factor='kp',
+                step=-1))
         factordefs = model.factors
         self.assertEqual(
             dict(
@@ -96,21 +100,23 @@ class Make_factordefs(unittest.TestCase):
                 id_of_node_B='n_1'),
             grid.Injection('consumer', 'n_1'),
             # scaling, define scaling factors
-            grid.Deff(
+            grid.Deft(
                 id='taps', value=0., type='const', is_discrete=True,
                 m=-0.00625, n=1., step=-1),
             # link scaling factors to active power of consumer
             #   factor for each step (generic, step=-1)
-            grid.Link(
-                objid='branch', id='taps', nodeid='n_0',
-                cls=grid.Terminallink, step=-1))
+            grid.Tlink(
+                id_of_node='n_0',
+                id_of_branch='branch',
+                id_of_factor='taps',
+                step=-1))
         factordefs = model.factors
         self.assertEqual(
             dict(
                 zip(factordefs.gen_factor_data.columns,
                     factordefs.gen_factor_data.iloc[0].to_numpy())),
             {'step': -1, 'type': 'const', 'id_of_source': 'taps', 'value': 0.,
-              'min': -np.inf, 'max': np.inf, 'is_discrete': True, 'm': -0.00625,
+              'min': -16, 'max': 16, 'is_discrete': True, 'm': -0.00625,
               'n': 1.0, 'index_of_symbol': 0})
         self.assertEqual(
             factordefs.gen_factor_data.index[0],
@@ -209,29 +215,35 @@ class Make_factor_data2(unittest.TestCase):
             grid.Injection('consumer', 'n_1'),
             grid.Injection('consumer2', 'n_1'),
             # scaling, define scaling factors
-            grid.Deff(id='kp', step=-1),
-            grid.Deff(id='kq', step=0),
+            grid.Defk(id='kp', step=-1),
+            grid.Defk(id='kq', step=0),
             # link scaling factors to active and reactive power of consumer
             #   factor for each step (generic, step=-1)
-            grid.Link(objid='consumer', id='kp', part='p', step=-1),
-            #   factor for step 0 (specific, step=0)
-            grid.Link(objid='consumer', id='kq', part='q', step=0),
-            # tap factor, for each step (generic, step=-1)
-            grid.Deff(id='taps', is_discrete=True, step=-1),
-            # tap factor, for step 1
-            grid.Deff(id='taps', type='const', is_discrete=True, step=1),
-            # link generic tap factor to terminal
-            grid.Link(
-                objid='branch',
-                id='taps',
-                nodeid='n_0',
-                cls=grid.Terminallink,
+            grid.Klink(
+                id_of_injection='consumer',
+                part='p',
+                id_of_factor='kp',
                 step=-1),
-            grid.Link(
-                objid='branch',
-                id='taps',
-                nodeid='n_1',
-                cls=grid.Terminallink,
+            #   factor for step 0 (specific, step=0)
+            grid.Klink(
+                id_of_injection='consumer',
+                part='q',
+                id_of_factor='kq',
+                step=0),
+            # tap factor, for each step (generic, step=-1)
+            grid.Deft(id='taps', is_discrete=True, step=-1),
+            # tap factor, for step 1
+            grid.Deft(id='taps', type='const', is_discrete=True, step=1),
+            # link generic tap factor to terminal
+            grid.Tlink(
+                id_of_node='n_0',
+                id_of_branch='branch',
+                id_of_factor='taps',
+                step=-1),
+            grid.Tlink(
+                id_of_node='n_1',
+                id_of_branch='branch',
+                id_of_factor='taps',
                 step=-1),
             # # link step specific tap factor to terminal
             # grid.Link(
@@ -278,29 +290,35 @@ class Get_taps_factor_data(unittest.TestCase):
             grid.Injection('consumer', 'n_1'),
             grid.Injection('consumer2', 'n_1'),
             # scaling, define scaling factors
-            grid.Deff(id='kp', step=-1),
-            grid.Deff(id='kq', step=0),
+            grid.Defk(id='kp', step=-1),
+            grid.Defk(id='kq', step=0),
             # link scaling factors to active and reactive power of consumer
             #   factor for each step (generic, step=-1)
-            grid.Link(objid='consumer', id='kp', part='p', step=-1),
-            #   factor for step 0 (specific, step=0)
-            grid.Link(objid='consumer', id='kq', part='q', step=0),
-            # tap factor, for each step (generic, step=-1)
-            grid.Deff(id='taps', is_discrete=True, step=-1),
-            # tap factor, for step 1
-            grid.Deff(id='taps', type='const', is_discrete=True, step=1),
-            # link generic tap factor to terminal
-            grid.Link(
-                objid='branch',
-                id='taps',
-                nodeid='n_0',
-                cls=grid.Terminallink,
+            grid.Klink(
+                id_of_injection='consumer',
+                id_of_factor='kp',
+                part='p',
                 step=-1),
-            grid.Link(
-                objid='branch',
-                id='taps',
-                nodeid='n_1',
-                cls=grid.Terminallink,
+            #   factor for step 0 (specific, step=0)
+            grid.Klink(
+                id_of_injection='consumer',
+                id_of_factor='kq',
+                part='q',
+                step=0),
+            # tap factor, for each step (generic, step=-1)
+            grid.Deft(id='taps', is_discrete=True, step=-1),
+            # tap factor, for step 1
+            grid.Deft(id='taps', type='const', is_discrete=True, step=1),
+            # link generic tap factor to terminal
+            grid.Tlink(
+                id_of_node='n_0',
+                id_of_branch='branch',
+                id_of_factor='taps',
+                step=-1),
+            grid.Tlink(
+                id_of_node='n_1',
+                id_of_branch='branch',
+                id_of_factor='taps',
                 step=-1),
             # # link step specific tap factor to terminal
             # grid.Link(
@@ -348,21 +366,28 @@ class Get_scaling_factor_data(unittest.TestCase):
             grid.Injection('consumer', 'n_1'),
             grid.Injection('consumer2', 'n_1'),
             # scaling, define scaling factors
-            grid.Deff(id='kp', step=-1),
-            grid.Deff(id='kq', step=0),
+            grid.Defk(id='kp', step=-1),
+            grid.Defk(id='kq', step=0),
             # link scaling factors to active and reactive power of consumer
             #   factor for each step (generic, step=-1)
-            grid.Link(objid='consumer', id='kp', part='p', step=-1),
+            grid.Klink(
+                id_of_injection='consumer',
+                id_of_factor='kp',
+                part='p',
+                step=-1),
             #   factor for step 0 (specific, step=0)
-            grid.Link(objid='consumer', id='kq', part='q', step=0),
+            grid.Klink(
+                id_of_injection='consumer',
+                id_of_factor='kq',
+                part='q',
+                step=0),
             # tap factor, for each step (generic, step=-1)
-            grid.Deff(id='taps', is_discrete=True, step=-1),
+            grid.Deft(id='taps', is_discrete=True, step=-1),
             # link scaling factors to active and reactive power of consumer
-            grid.Link(
-                objid='branch',
-                id='taps',
-                nodeid='n_0',
-                cls=grid.Terminallink,
+            grid.Tlink(
+                id_of_branch='branch',
+                id_of_factor='taps',
+                id_of_node='n_0',
                 step=-1))
         assert_array_equal(
             model.factors.gen_factor_data.index,
@@ -415,21 +440,24 @@ class Get_scaling_factor_data(unittest.TestCase):
             grid.Injection('consumer', 'n_1'),
             grid.Injection('consumer2', 'n_1'),
             # scaling, define scaling factors
-            grid.Deff(id='kp', step=-1),
-            grid.Deff(id='kq', step=0),
+            grid.Defk(id='kp', step=-1),
+            grid.Defk(id='kq', step=0),
             # link scaling factors to active and reactive power of consumer
             #   factor for each step (generic, step=-1)
-            # grid.Link(objid='consumer', id='kp', part='p', step=-1),
+            # grid.Klink(id_of_injection='consumer', id_of_factor='kp', part='p', step=-1),
             #   factor for step 0 (specific, step=0)
-            grid.Link(objid='consumer', id='kq', part='q', step=0),
+            grid.Klink(
+                id_of_injection='consumer',
+                part='q',
+                id_of_factor='kq',
+                step=0),
             # tap factor, for each step (generic, step=-1)
-            grid.Deff(id='taps', is_discrete=True, step=-1),
+            grid.Deft(id='taps', is_discrete=True, step=-1),
             # link scaling factors to active and reactive power of consumer
-            grid.Link(
-                objid='branch',
-                id='taps',
-                nodeid='n_0',
-                cls=grid.Terminallink,
+            grid.Tlink(
+                id_of_node='n_0',
+                id_of_branch='branch',
+                id_of_factor='taps',
                 step=-1))
         assert_array_equal(
             model.factors.gen_factor_data.index,
@@ -517,9 +545,15 @@ class Get_values_of_factors(unittest.TestCase):
                 id_of_node_B='n_1'),
             grid.Injection('consumer', 'n_1'),
             grid.Injection('consumer2', 'n_1'),
-            grid.Deff(id=('kp','kq')),
-            grid.Link(objid='consumer', id=('kp','kq'), part='pq'),
-            grid.Link(objid='consumer2', id='kq', part='q'))
+            grid.Defk(id=('kp','kq')),
+            grid.Klink(
+                id_of_injection='consumer',
+                id_of_factor=('kp','kq'),
+                part='pq'),
+            grid.Klink(
+                id_of_injection='consumer2',
+                id_of_factor='kq',
+                part='q'))
         gen_factor_symbols = ft._create_symbols_with_ids(
             model.factors.gen_factor_data.index)
         factor_data = ft.make_factor_data2(model, gen_factor_symbols, 0)
@@ -550,21 +584,21 @@ class Get_values_of_factors(unittest.TestCase):
                 id_of_node_B='n_1'),
             grid.Injection('consumer', 'n_1'),
             grid.Injection('consumer2', 'n_1'),
-            grid.Deff(id='taps'),
-            grid.Link(
-                objid='branch', id='taps',
-                nodeid='n_0', cls=grid.Terminallink))
+            grid.Deft(id='taps'),
+            grid.Tlink(
+                id_of_branch='branch', id_of_factor='taps',
+                id_of_node='n_0'))
         gen_factor_symbols = ft._create_symbols_with_ids(
             model.factors.gen_factor_data.index)
         factor_data = ft.make_factor_data2(model, gen_factor_symbols, 0)
         solution_vector = np.array([-3.]).reshape(-1,1)
         fk, ftaps, factors = ft.get_values_of_factors(
             factor_data, solution_vector)
-        self.assertEqual(fk.shape, (2, 2), '2x2 scaling factors')
+        self.assertEqual(fk.shape, (2, 2), '2x2 taps factors')
         assert_array_equal(
             fk,
-            np.ones((2,2), dtype=float),
-            err_msg='all scaling factors are 1.')
+            np.zeros((2,2), dtype=float),
+            err_msg='all taps factors are 1.')
         self.assertEqual(
             ftaps,
             np.array([-3.]).reshape(-1,1),
