@@ -546,8 +546,8 @@ def _get_taps_factor_data(model, steps):
         term_factor)
 
 def make_factor_data(
-        factordefs, gen_factor_symbols, factors, injection_factors, terminal_factor,
-        k_prev=_DM_0r1c):
+        factordefs, gen_factor_symbols, factors, injection_factors,
+        terminal_factor, k_prev=_DM_0r1c):
     """Prepares data of scaling factors per step.
 
     Arguments for solver call:
@@ -594,7 +594,7 @@ def make_factor_data(
         index_of_terminal: numpy.array
             int, index of terminal which ftaps is assigned to
         vars: casadi.SX
-            column vector, symbols for variables of scaling factors
+            column vector, symbols for variables of factors
         values_of_vars: casadi.DM
             column vector, initial values for vars
         var_min: casadi.DM
@@ -604,7 +604,7 @@ def make_factor_data(
         is_discrete: numpy.array
             bool, flag for variable
         consts: casadi.SX
-            column vector, symbols for constants of scaling factors
+            column vector, symbols for constants (parameters) of factors
         values_of_consts: casadi.DM
             column vector, values for consts
         var_const_to_factor: array_like
