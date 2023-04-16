@@ -35,7 +35,7 @@ class Get_scaling_factor_data(unittest.TestCase):
         """'get_scaling_factor_data' processes empty input"""
         model = make_model()
         factors, injection_factor = ft._get_scaling_factor_data(
-            model, [2, 3], None)
+            model.factors, model.injections, [2, 3], None)
         self.assertTrue(
             factors.empty,
             "get_scaling_factor_data returns no data for factors")
@@ -52,7 +52,7 @@ class Get_scaling_factor_data(unittest.TestCase):
         index_of_step = 3
         steps = [index_of_step-1, index_of_step]
         factors, injection_factor = ft._get_scaling_factor_data(
-            model, steps, None)
+            model.factors, model.injections, steps, None)
         assert_array_equal(
             [idx[0] for idx in factors.index],
             steps,
@@ -81,7 +81,7 @@ class Get_scaling_factor_data(unittest.TestCase):
         index_of_step = 1
         steps = [index_of_step-1, index_of_step]
         factors, injection_factor = ft._get_scaling_factor_data(
-            model, steps, None)
+            model.factors, model.injections, steps, None)
         self.assertEqual(
             factors.loc[0].shape[0],
             2,
@@ -120,7 +120,7 @@ class Get_scaling_factor_data(unittest.TestCase):
         index_of_step = 1
         steps = [index_of_step-1, index_of_step]
         factors, injection_factor = ft._get_scaling_factor_data(
-            model, steps, None)
+            model.factors, model.injections, steps, None)
         factors_step_0 = factors.loc[0]
         self.assertEqual(
             len(factors_step_0),
@@ -149,7 +149,7 @@ class Get_scaling_factor_data(unittest.TestCase):
         index_of_step = 0
         steps = [index_of_step]
         factors, injection_factor = ft._get_scaling_factor_data(
-            model, steps, None)
+            model.factors, model.injections, steps, None)
         self.assertEqual(
             len(factors),
             1,
@@ -182,7 +182,7 @@ class Get_taps_factor_data(unittest.TestCase):
         index_of_step = 1
         steps = [index_of_step-1, index_of_step]
         factors, injection_factor = ft._get_scaling_factor_data(
-            model, steps, start=[3, 5])
+            model.factors, model.injections, steps, start=[3, 5])
         self.assertEqual(
             len(factors.loc[0]),
             1,
@@ -212,7 +212,7 @@ class Make_get_factor_data(unittest.TestCase):
         self.assertIsNotNone(model, "make_model makes models")
         gen_factor_symbols = ft._create_symbols_with_ids(
             model.factors.gen_factor_data.index)
-        factor_data = ft.make_factor_data2(model, gen_factor_symbols, 0)
+        factor_data = ft.make_factor_data(model, gen_factor_symbols, 0)
         self.assertEqual(
             factor_data.kpq.shape,
             (2,2),
@@ -281,7 +281,7 @@ class Make_get_factor_data(unittest.TestCase):
         self.assertIsNotNone(model, "make_model makes models")
         gen_factor_symbols = ft._create_symbols_with_ids(
             model.factors.gen_factor_data.index)
-        factor_data = ft.make_factor_data2(model, gen_factor_symbols, 0)
+        factor_data = ft.make_factor_data(model, gen_factor_symbols, 0)
         self.assertEqual(
             factor_data.kpq.shape,
             (0,2),
@@ -341,7 +341,7 @@ class Make_get_factor_data(unittest.TestCase):
         self.assertIsNotNone(model, "make_model makes models")
         gen_factor_symbols = ft._create_symbols_with_ids(
             model.factors.gen_factor_data.index)
-        factor_data = ft.make_factor_data2(model, gen_factor_symbols, 0)
+        factor_data = ft.make_factor_data(model, gen_factor_symbols, 0)
         self.assertEqual(
             factor_data.kpq.shape,
             (1,2),
@@ -408,7 +408,7 @@ class Make_get_factor_data(unittest.TestCase):
         self.assertIsNotNone(model, "make_model makes models")
         gen_factor_symbols = ft._create_symbols_with_ids(
             model.factors.gen_factor_data.index)
-        factor_data = ft.make_factor_data2(model, gen_factor_symbols, 1)
+        factor_data = ft.make_factor_data(model, gen_factor_symbols, 1)
         self.assertEqual(
             factor_data.kpq.shape,
             (1,2),

@@ -544,7 +544,7 @@ def make_get_scaling_and_injection_data(
             [:,5] Qip, reactive power interpolated
             [:,6] Vabs_sqr, square of voltage magnitude
             [:,7] interpolate?"""
-    get_factor_data = partial(ft.make_factor_data2, model, gen_factor_symbols)
+    get_factor_data = partial(ft.make_factor_data, model, gen_factor_symbols)
     # get_factor_data = make_get_factor_data(model)
     injections = model.injections
     node_to_inj = casadi.SX(model.mnodeinj).T
@@ -1884,7 +1884,7 @@ def get_step_data_fns(model, gen_factor_symbols):
             optional, default ''
             string of characters 'I'|'P'|'Q'|'V' or empty string ''"""
         voltages_ri2 = ri_to_ri2(voltages_ri.toarray())
-        factor_data = ft.make_factor_data2(model, gen_factor_symbols, step, k)
+        factor_data = ft.make_factor_data(model, gen_factor_symbols, step, k)
         kpq, ftaps, k_var_const = ft.get_values_of_factors(factor_data, k)
         batch_values = get_batch_values(
             model, voltages_ri2, kpq, ftaps, constraints)

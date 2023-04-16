@@ -20,7 +20,7 @@ Created on Sun Mar 19 12:17:49 2023
 
 @author: pyprg
 
-The function 'make_factor_data2' returns data on factors to be applied
+The function 'make_factor_data' returns data on factors to be applied
 to nominal active and reactive power of injections and factors to be applied
 to admittances of branches. The factors fall in one of two
 categories 'var' or 'const'. Factors of category 'var' are decision variables.
@@ -365,13 +365,15 @@ def _add_default_factors(required_factors):
         return required_factors.combine_first(default_factors)
     return required_factors
 
-def _get_scaling_factor_data(model, steps, start):
+def _get_scaling_factor_data(factordefs, injections, steps, start):
     """Creates and arranges data of scaling factors.
 
     Parameters
     ----------
-    model: egrid.model.Model
-        data of electric grid
+    factordefs: egrid.factors.Factors
+        data of scaling and taps factors
+    injections: pandas.DataFrame (index_of_injection)->
+        * .id, str, identifier of injection
     steps: iterable
         int, indices of optimization steps, first step has index 0
     start: iterable | None
@@ -402,7 +404,6 @@ def _get_scaling_factor_data(model, steps, start):
           * .kp, int, index of active power scaling factor in 1d-vector
           * .kq, int, index of reactive power scaling factor in 1d-vector
           * .index_of_injection, int, index of affected injection"""
-    factordefs = model.factors
     generic_injfactor_steps = _add_step_index(factordefs.gen_injfactor, steps)
     assoc_steps = factordefs.get_injfactorgroups(steps)
     # get generic_assocs which are not in assocs of step, this allows
@@ -432,7 +433,7 @@ def _get_scaling_factor_data(model, steps, start):
     #   - all requested steps
     #   - all injections
     step_injection_part__factor = _get_step_injection_part_to_factor(
-        model.injections.id, inj_assoc, steps)
+        injections.id, inj_assoc, steps)
     # step-to-factor index
     step_factor = (
         pd.MultiIndex.from_arrays(
@@ -467,7 +468,7 @@ def _get_scaling_factor_data(model, steps, start):
     # indices of injections ordered according to injection_factors
     injids = injection_factors.index.get_level_values(1)
     index_of_injection = (
-        pd.Series(model.injections.index, index=model.injections.id)
+        pd.Series(injections.index, index=injections.id)
         .reindex(injids)
         .array)
     injection_factors['index_of_injection'] = index_of_injection
@@ -475,13 +476,13 @@ def _get_scaling_factor_data(model, steps, start):
     factors.set_index(['step', 'type', 'id'], inplace=True)
     return factors.assign(devtype='injection'), injection_factors
 
-def _get_taps_factor_data(model, steps):
+def _get_taps_factor_data(factordefs, steps):
     """Arranges data of taps factors and values for their initialization.
 
     Parameters
     ----------
-    model: egrid.model.Model
-        data of electric grid
+    factordefs: egrid.factors.Factors
+
     steps: iterable
         int, indices of optimization steps, first step has index 0
 
@@ -508,7 +509,6 @@ def _get_taps_factor_data(model, steps):
           * .id, str, ID of factor
           * .index_of_symbol, int
           * .index_of_terminal, int"""
-    factordefs = model.factors
     generic_termfactor_steps = _add_step_index(
         factordefs.gen_termfactor, steps)
     # get generic_assocs which are not in assocs of step, this allows
@@ -545,10 +545,10 @@ def _get_taps_factor_data(model, steps):
             .set_index(['step', 'type', 'id']),
         term_factor)
 
-def make_factor_data(
+def _make_factor_data(
         count_of_generic_factors, factors, injection_factors, terminal_factor,
         gen_factor_symbols, k_prev=_DM_0r1c):
-    """Prepares data of scaling factors per step.
+    """Prepares data of factors per step.
 
     Arguments for solver call:
 
@@ -666,7 +666,7 @@ def make_factor_data(
         var_const_to_ftaps=var_const_to_factor[
             terminal_factor.index_of_symbol])
 
-def setup_factors_for_step(model, step):
+def get_factordata_for_step(model, step):
     """Returns data of decision variables and of parameters for a given step.
 
     Parameters
@@ -714,13 +714,15 @@ def setup_factors_for_step(model, step):
     # index for requested step and the step before requested step,
     #   data of step before are needed for initialization
     steps = [step - 1, step] if 0 < step else [0]
+    model_factors = model.factors
     # factors assigned to terminals
-    taps_factors, terminal_factor = _get_taps_factor_data(model, steps)
+    taps_factors, terminal_factor = _get_taps_factor_data(
+        model_factors, steps)
     # scaling factors for injections
-    count_of_generic_factors = len(model.factors.gen_factor_data)
+    count_of_generic_factors = len(model_factors.gen_factor_data)
     start = repeat(count_of_generic_factors)
     scaling_factors, injection_factors = _get_scaling_factor_data(
-        model, steps, start)
+        model.factors, model.injections, steps, start)
     factors = pd.concat([scaling_factors, taps_factors])
     factors.sort_values('index_of_symbol', inplace=True)
     return (
@@ -729,7 +731,7 @@ def setup_factors_for_step(model, step):
         _loc(injection_factors, step).reset_index(),
         _loc(terminal_factor, step).reset_index())
 
-def make_factor_data2(model, gen_factor_symbols, step=0, k_prev=_DM_0r1c):
+def make_factor_data(model, gen_factor_symbols, step=0, k_prev=_DM_0r1c):
     """Returns data of decision variables and of parameters for a given step.
 
     Parameters
@@ -746,8 +748,8 @@ def make_factor_data2(model, gen_factor_symbols, step=0, k_prev=_DM_0r1c):
     Returns
     -------
     Factordata"""
-    return make_factor_data(
-        *setup_factors_for_step(model, step),
+    return _make_factor_data(
+        *get_factordata_for_step(model, step),
         gen_factor_symbols,
         k_prev)
 
