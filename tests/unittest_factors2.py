@@ -151,14 +151,6 @@ class Make_factor_data(unittest.TestCase):
             (0,2),
             "no scaling factors")
         self.assertEqual(
-            factordata.ftaps.shape,
-            (0,1),
-            "no taps factors")
-        self.assertEqual(
-            factordata.index_of_terminal.shape,
-            (0,),
-            "no terminals with taps")
-        self.assertEqual(
             factordata.vars.shape,
             (0,1),
             "no decision variables")
@@ -346,7 +338,7 @@ class Get_scaling_factor_data(unittest.TestCase):
         """well, """
         model = make_model()
         factors, injfactor_crossref = ft._get_scaling_factor_data(
-            model.factors, model.injections, [0, 1], 
+            model.factors, model.injections, [0, 1],
             repeat(len(model.factors.gen_factor_data)))
         self.assertTrue(factors.empty)
         self.assertTrue(injfactor_crossref.empty)
@@ -399,7 +391,7 @@ class Get_scaling_factor_data(unittest.TestCase):
             [0, 1],
             err_msg="indices of generic factor symbols shall be [0, 1]")
         factors, crossref = ft._get_scaling_factor_data(
-            model.factors, model.injections, [0, 1], 
+            model.factors, model.injections, [0, 1],
             repeat(len(model.factors.gen_factor_data)))
         assert_array_equal(
             factors.loc[0].index.get_level_values('id').sort_values(),
@@ -470,7 +462,7 @@ class Get_scaling_factor_data(unittest.TestCase):
             [0],
             err_msg="indices of generic factor symbols shall be [0]")
         factors, crossref = ft._get_scaling_factor_data(
-            model.factors, model.injections, [0, 1], 
+            model.factors, model.injections, [0, 1],
             repeat(len(model.factors.gen_factor_data)))
         assert_array_equal(
             factors.loc[0].index.get_level_values('id').sort_values(),

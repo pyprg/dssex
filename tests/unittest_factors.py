@@ -286,14 +286,6 @@ class Make_get_factor_data(unittest.TestCase):
             factor_data.kpq.shape,
             (0,2),
             "no scaling factors")
-        self.assertEqual(
-            factor_data.ftaps.shape,
-            (1,1),
-            "one taps factor")
-        self.assertEqual(
-            factor_data.ftaps[0,0].name(),
-            'taps',
-            "taps factor has name 'taps'")
         assert_array_equal(
             factor_data.is_discrete,
             [True],
