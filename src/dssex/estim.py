@@ -484,9 +484,9 @@ def create_v_symbols_gb_expressions(model, gen_factor_symbols):
 # power flow calculation
 #
 
-def make_get_scaling_and_injection_data(
+def make_get_factor_and_injection_data(
         model, gen_factor_symbols, Vnode_syms, vminsqr):
-    """Returns a function creating scaling_data and injection_data.
+    """Returns a function creating factor_data and injection_data.
 
     The data are created by the returned function for a given step, they are
     specific for that step.
@@ -548,13 +548,13 @@ def make_get_scaling_and_injection_data(
     # get_factor_data = make_get_factor_data(model)
     injections = model.injections
     node_to_inj = casadi.SX(model.mnodeinj).T
-    def get_scaling_and_injection_data(step=0, k_prev=_DM_0r1c):
-        scaling_data = get_factor_data(step, k_prev)
+    def get_factor_and_injection_data(step=0, k_prev=_DM_0r1c):
+        factor_data = get_factor_data(step, k_prev)
         # injected node current
         Iinj_data = _injected_current(
-            injections, node_to_inj, Vnode_syms, scaling_data, vminsqr)
-        return scaling_data, Iinj_data
-    return get_scaling_and_injection_data
+            injections, node_to_inj, Vnode_syms, factor_data, vminsqr)
+        return factor_data, Iinj_data
+    return get_factor_and_injection_data
 
 def get_expressions(model, gen_factor_symbols, vminsqr=_VMINSQR):
     """Prepares data for estimation. Creates symbols and expressions.
@@ -587,7 +587,7 @@ def get_expressions(model, gen_factor_symbols, vminsqr=_VMINSQR):
             * gb_mn_tot[:,2] g_tot, self conductance + mutual conductance
             * gb_mn_tot[:,3] b_tot, self susceptance + mutual susceptance
         * 'Y_by_V', casadi.SX, expression for Y @ V
-        * 'get_scaling_and_injection_data', function
+        * 'get_factor_and_injection_data', function
           (int, casadi.DM) -> (tuple - Factordata, casadi.SX)
           which is a function
           (index_of_step, scaling_factors_of_previous_step)
@@ -595,8 +595,8 @@ def get_expressions(model, gen_factor_symbols, vminsqr=_VMINSQR):
         * 'inj_to_node', casadi.SX, matrix, maps from
           injections to power flow calculation nodes"""
     ed = create_v_symbols_gb_expressions(model, gen_factor_symbols)
-    ed['get_scaling_and_injection_data'] = (
-        make_get_scaling_and_injection_data(
+    ed['get_factor_and_injection_data'] = (
+        make_get_factor_and_injection_data(
             model, gen_factor_symbols, ed['Vnode_syms'], vminsqr))
     ed['inj_to_node'] = casadi.SX(model.mnodeinj)
     return ed
@@ -619,12 +619,12 @@ def calculate_power_flow2(
         * 'position_syms', casadi.SX, symbols of tap positions
         * 'Y_by_V', casadi.SX, expression for Y @ V
     factor_data: Factordata
-        * .vars, casadi.SX, symbols of variable scaling factors
+        * .vars, casadi.SX, symbols of factors (decision variables)
         * .values_of_vars, casadi.DM, initial values for vars
         * .var_min, casadi.DM, lower limits of vars
         * .var_max, casadi.DM, upper limits of vars
         * .is_discrete, numpy.array, bool, flag for variable
-        * .consts, casadi.SX, symbols of constant scaling factors
+        * .consts, casadi.SX, symbols of constant factors
         * .values_of_consts, casadi.DM, values for parameters ('consts')
     Inode: casadi.SX (shape n,2)
         values for slack need to be set to slack voltage
@@ -699,16 +699,16 @@ def calculate_power_flow(
     tuple
         * bool, success?
         * casadi.DM, float, voltage vector [real parts, imaginary parts]"""
-    get_scaling_and_injection_data = make_get_scaling_and_injection_data(
+    get_factor_and_injection_data = make_get_factor_and_injection_data(
         model, gen_factor_symbols, v_syms_gb_ex['Vnode_syms'], vminsqr)
-    scaling_data, Iinj_data = get_scaling_and_injection_data(step=0)
+    factor_data, Iinj_data = get_factor_and_injection_data(step=0)
     Vslack_syms = v_syms_gb_ex['Vslack_syms']
     Inode_inj = _reset_slack_current(
         model.slacks.index_of_node,
         Vslack_syms[:,0], Vslack_syms[:,1],
         casadi.SX(model.mnodeinj) @ Iinj_data[:,:2])
     return calculate_power_flow2(
-        model, v_syms_gb_ex, scaling_data, Inode_inj, Vinit)
+        model, v_syms_gb_ex, factor_data, Inode_inj, Vinit)
 
 ##############
 # Estimation #
@@ -1707,7 +1707,7 @@ expressions: dict
         * gb_mn_tot[:,2] g_tot, self conductance + mutual conductance
         * gb_mn_tot[:,3] b_tot, self susceptance + mutual susceptance
     * 'Y_by_V', casadi.SX, expression for Y @ V
-    * 'get_scaling_and_injection_data', function
+    * 'get_factor_and_injection_data', function
       (int, casadi.DM) -> (tuple - Factordata, casadi.SX)
       which is a function
       (index_of_step, scaling_factors_of_previous_step)
@@ -1755,7 +1755,7 @@ def get_step_data(
             * gb_mn_tot[:,2] g_tot, self conductance + mutual conductance
             * gb_mn_tot[:,3] b_tot, self susceptance + mutual susceptance
         * 'Y_by_V', casadi.SX, expression for Y @ V
-        * 'get_scaling_and_injection_data', function
+        * 'get_factor_and_injection_data', function
           (int, casadi.DM) -> (tuple - Factordata, casadi.SX)
           which is a function
           (index_of_step, scaling_factors_of_previous_step)
@@ -1793,8 +1793,8 @@ def get_step_data(
     Returns
     -------
     Stepdata"""
-    scaling_data, Iinj_data = (
-        expressions['get_scaling_and_injection_data'](step, k_prev))
+    factor_data, Iinj_data = (
+        expressions['get_factor_and_injection_data'](step, k_prev))
     Vslack_syms = expressions['Vslack_syms']
     Inode_inj = _reset_slack_current(
         model.slacks.index_of_node,
@@ -1809,7 +1809,7 @@ def get_step_data(
         if values_of_constraints is None or len(expr_of_batches[0])==0 else
         get_batch_constraints(values_of_constraints, expr_of_batches))
     return Stepdata(
-        model, expressions, scaling_data, Inode_inj,
+        model, expressions, factor_data, Inode_inj,
         diff_data, batch_constraints)
 
 def get_step_data_fns(model, gen_factor_symbols):
@@ -1884,7 +1884,10 @@ def get_step_data_fns(model, gen_factor_symbols):
             optional, default ''
             string of characters 'I'|'P'|'Q'|'V' or empty string ''"""
         voltages_ri2 = ri_to_ri2(voltages_ri.toarray())
+
         factor_data = ft.make_factor_data(model, gen_factor_symbols, step, k)
+
+
         kpq, ftaps, k_var_const = ft.get_values_of_factors(factor_data, k)
         batch_values = get_batch_values(
             model, voltages_ri2, kpq, ftaps, constraints)
@@ -2001,7 +2004,8 @@ def optimize_steps(
           factors for injections
         * factor_data, Factordata
           factor data of step"""
-    make_step_data, next_step_data = get_step_data_fns(model, gen_factor_symbols)
+    make_step_data, next_step_data = get_step_data_fns(
+        model, gen_factor_symbols)
     step_data = make_step_data(step=0)
     scaling_data = step_data.scaling_data
     # power flow calculation for initial voltages

@@ -545,127 +545,6 @@ def _get_taps_factor_data(factordefs, steps):
             .set_index(['step', 'type', 'id']),
         term_factor)
 
-def _make_factor_data(
-        count_of_generic_factors, factors, injection_factors, terminal_factor,
-        gen_factor_symbols, k_prev=_DM_0r1c):
-    """Prepares data of factors per step.
-
-    Arguments for solver call:
-
-    Vectors of decision variables ('var') and of paramters ('const'),
-    vectors of minimum and of maximum values, vectors of initial values for
-    decision variables and values for paramters.
-
-    Data to reorder the solver result:
-
-    Sequences of indices for converting the vector of var/const into the order
-    of factors (symbols), into the order of active power scaling factors,
-    reactive power scaling factors and taps factors.
-
-    Parameters
-    ----------
-    count_of_generic_factors: int
-    factors: pandas.DataFrame
-        sorted by 'index_of_symbol'
-
-    injection_factors: pandas.DataFrame
-
-    terminal_factors: pandas.DataFrame
-
-    gen_factor_symbols: casadi.SX
-        generic symbols (symbols present in each optimization step)
-    k_prev: casadi.DM
-        float, values of scaling factors from previous step,
-        variables and constants
-
-    Returns
-    -------
-    Factordata
-        kpq: casadi.SX
-            two column vectors, symbols for scaling factors of active and
-            reactive power per injection
-        ftaps: casadi.SX
-            vector, symbols for taps factors of terminals for terminals
-            addressed by index_of_terminal
-        index_of_terminal: numpy.array
-            int, index of terminal which ftaps is assigned to
-        vars: casadi.SX
-            column vector, symbols for variables of factors
-        values_of_vars: casadi.DM
-            column vector, initial values for vars
-        var_min: casadi.DM
-            lower limits of vars
-        var_max: casadi.DM
-            upper limits of vars
-        is_discrete: numpy.array
-            bool, flag for variable
-        consts: casadi.SX
-            column vector, symbols for constants (parameters) of factors
-        values_of_consts: casadi.DM
-            column vector, values for consts
-        var_const_to_factor: array_like
-            int, index_of_factor=>index_of_var_const
-            converts var_const to factor (var_const[var_const_to_factor])
-        var_const_to_kp: array_like
-            int, converts var_const to kp, one active power scaling factor
-            for each injection (var_const[var_const_to_kp])
-        var_const_to_kq: array_like
-            int, converts var_const to kq, one reactive power scaling factor
-            for each injection (var_const[var_const_to_kq])
-        var_const_to_ftaps: array_like
-            int, converts var_const to ftaps, factor assigned to
-            (selected) terminals (var_const[var_const_to_ftaps])"""
-    # a symbol for each factor
-    symbols_step = _create_symbols_with_ids(
-        factors[count_of_generic_factors <= factors.index_of_symbol].id)
-    symbols = casadi.vertcat(gen_factor_symbols, symbols_step)
-    values = _get_values_of_symbols(factors, k_prev)
-    select_symbols_values = partial(_select_rows, [symbols, values])
-    factors_var = factors[factors.type=='var']
-    symbols_of_vars, values_of_vars = select_symbols_values(
-        factors_var.index_of_symbol)
-    factors_consts = factors[factors.type=='const']
-    symbols_of_consts, values_of_consts = select_symbols_values(
-        factors_consts.index_of_symbol)
-    # the optimization result is provided as a concatenation of
-    #   values for decision variables and parameters, here we prepare indices
-    #   for mapping to kp/kq (which are ordered according to injections)
-    var_const_idxs = (
-        np.concatenate(
-            [factors_var.index_of_symbol.array,
-             factors_consts.index_of_symbol.array])
-        .astype(np.int64))
-    var_const_to_factor = np.zeros_like(var_const_idxs)
-    var_const_to_factor[var_const_idxs] = factors.index_of_symbol
-    return Factordata(
-        # kp/kq used in expression building
-        #   (columns of injections_factors.kp/kq store an index)
-        kpq=casadi.horzcat(
-            symbols[injection_factors.kp].reshape((-1,1)),
-            symbols[injection_factors.kq].reshape((-1,1))),
-        ftaps=symbols[terminal_factor.index_of_symbol].reshape((-1,1)),
-        index_of_terminal=terminal_factor.index_of_terminal.to_numpy(),
-        # vars, variables for solver preparation
-        vars=symbols_of_vars,
-        # initial values, argument in solver call
-        values_of_vars=values_of_vars,
-        # lower bound of scaling factors, argument in solver call
-        var_min=_make_DM_vector(factors_var['min']),
-        # upper bound of scaling factors, argument in solver call
-        var_max=_make_DM_vector(factors_var['max']),
-        # flag for variable
-        is_discrete=factors_var.is_discrete.to_numpy(),
-        # consts, constants for solver preparation
-        consts=symbols_of_consts,
-        # values of constants, argument in solver call
-        values_of_consts=values_of_consts,
-        # reordering of result
-        var_const_to_factor=var_const_to_factor,
-        var_const_to_kp=var_const_to_factor[injection_factors.kp],
-        var_const_to_kq=var_const_to_factor[injection_factors.kq],
-        var_const_to_ftaps=var_const_to_factor[
-            terminal_factor.index_of_symbol])
-
 def get_factordata_for_step(model, step):
     """Returns data of decision variables and of parameters for a given step.
 
@@ -731,6 +610,132 @@ def get_factordata_for_step(model, step):
         _loc(injection_factors, step).reset_index(),
         _loc(terminal_factor, step).reset_index())
 
+def _make_factor_data(
+        count_of_generic_factors, factors, injection_factors, terminal_factor,
+        gen_factor_symbols, k_prev=_DM_0r1c):
+    """Prepares data of factors per step.
+
+    Arguments for solver call:
+
+    Vectors of decision variables ('var') and of paramters ('const'),
+    vectors of minimum and of maximum values, vectors of initial values for
+    decision variables and values for paramters.
+
+    Data to reorder the solver result:
+
+    Sequences of indices for converting the vector of var/const into the order
+    of factors (symbols), into the order of active power scaling factors,
+    reactive power scaling factors and taps factors.
+
+    Parameters
+    ----------
+    count_of_generic_factors: int
+
+    factors: pandas.DataFrame
+        sorted by 'index_of_symbol'
+        * .type, 'var'|'const'
+        * .id, str
+        * .id_of_source, str
+        * .value, float
+        * .min, float
+        * .max, float
+        * .is_discrete, bool
+        * .m, float
+        * .n, float
+        * .index_of_symbol, int
+        * .index_of_source, int
+        * .devtype, 'injection'|'terminal'
+    injection_factors: pandas.DataFrame
+
+    terminal_factors: pandas.DataFrame
+
+    gen_factor_symbols: casadi.SX
+        generic symbols (symbols present in each optimization step)
+    k_prev: casadi.DM
+        float, values of scaling factors from previous step,
+        variables and constants
+
+    Returns
+    -------
+    Factordata
+        kpq: casadi.SX
+            two column vectors, symbols for scaling factors of active and
+            reactive power per injection
+        ftaps: casadi.SX
+            vector, symbols for taps factors of terminals for terminals
+            addressed by index_of_terminal
+        index_of_terminal: numpy.array
+            int, index of terminal which ftaps is assigned to
+        vars: casadi.SX
+            column vector, symbols for variables of factors
+        values_of_vars: casadi.DM
+            column vector, initial values for vars
+        var_min: casadi.DM
+            lower limits of vars
+        var_max: casadi.DM
+            upper limits of vars
+        is_discrete: numpy.array
+            bool, flag for variable
+        consts: casadi.SX
+            column vector, symbols for constants (parameters) of factors
+        values_of_consts: casadi.DM
+            column vector, values for consts
+        var_const_to_factor: array_like
+            int, index_of_factor=>index_of_var_const
+            converts var_const to factor (var_const[var_const_to_factor])
+        var_const_to_kp: array_like
+            int, converts var_const to kp, one active power scaling factor
+            for each injection (var_const[var_const_to_kp])
+        var_const_to_kq: array_like
+            int, converts var_const to kq, one reactive power scaling factor
+            for each injection (var_const[var_const_to_kq])
+        var_const_to_ftaps: array_like
+            int, converts var_const to ftaps, factor assigned to
+            (selected) terminals (var_const[var_const_to_ftaps])"""
+    # inital for vars, value for parameters (consts)
+    values = _get_values_of_symbols(factors, k_prev)
+
+
+    factors_var = factors[factors.type=='var']
+    values_of_vars = values[factors_var.index_of_symbol, 0]
+    factors_consts = factors[factors.type=='const']
+    values_of_consts = values[factors_consts.index_of_symbol, 0]
+    # the optimization result is provided as a concatenation of
+    #   values for decision variables and parameters, here we prepare indices
+    #   for mapping to kp/kq (which are ordered according to injections)
+    var_const_idxs = (
+        np.concatenate(
+            [factors_var.index_of_symbol.array,
+             factors_consts.index_of_symbol.array])
+        .astype(np.int64))
+    var_const_to_factor = np.zeros_like(var_const_idxs)
+    var_const_to_factor[var_const_idxs] = factors.index_of_symbol
+    return dict(
+        id_of_step_symbol = factors[count_of_generic_factors <= factors.index_of_symbol].id,
+        index_of_var_symbol = factors_var.index_of_symbol,
+        index_of_const_symbol = factors_consts.index_of_symbol,
+        index_of_kpq_symbol = injection_factors[['kp', 'kq']].to_numpy(),
+        index_of_ftaps_symbol = terminal_factor.index_of_symbol,
+
+
+        index_of_terminal=terminal_factor.index_of_terminal.to_numpy(),
+        # initial values, argument in solver call
+        values_of_vars=values_of_vars,
+        # lower bound of scaling factors, argument in solver call
+        var_min=_make_DM_vector(factors_var['min']),
+        # upper bound of scaling factors, argument in solver call
+        var_max=_make_DM_vector(factors_var['max']),
+        # flag for variable
+        is_discrete=factors_var.is_discrete.to_numpy(),
+        # values of constants, argument in solver call
+        values_of_consts=values_of_consts,
+        # reordering of result
+        var_const_to_factor=var_const_to_factor,
+        var_const_to_kp=var_const_to_factor[injection_factors.kp],
+        var_const_to_kq=var_const_to_factor[injection_factors.kq],
+        var_const_to_ftaps=var_const_to_factor[
+            terminal_factor.index_of_symbol])
+
 def make_factor_data(model, gen_factor_symbols, step=0, k_prev=_DM_0r1c):
     """Returns data of decision variables and of parameters for a given step.
 
@@ -748,10 +753,48 @@ def make_factor_data(model, gen_factor_symbols, step=0, k_prev=_DM_0r1c):
     Returns
     -------
     Factordata"""
-    return _make_factor_data(
+    factor_indices = _make_factor_data(
         *get_factordata_for_step(model, step),
         gen_factor_symbols,
         k_prev)
+
+    symbols = casadi.vertcat(
+        gen_factor_symbols,
+        _create_symbols_with_ids(factor_indices['id_of_step_symbol']))
+    index_of_kpq_symbols = factor_indices['index_of_kpq_symbol']
+    index_of_ftaps_symbols = factor_indices['index_of_ftaps_symbol']
+    index_of_var_symbols = factor_indices['index_of_var_symbol']
+    index_of_const_symbols = factor_indices['index_of_const_symbol']
+
+    kpq=casadi.horzcat(
+        symbols[index_of_kpq_symbols[:,0]].reshape((-1,1)),
+        symbols[index_of_kpq_symbols[:,1]].reshape((-1,1)))
+    ftaps=symbols[index_of_ftaps_symbols].reshape((-1,1))
+    vars=symbols[index_of_var_symbols].reshape((-1,1))
+    consts=symbols[index_of_const_symbols].reshape((-1,1))
+
+    return Factordata(
+
+        kpq=kpq,
+        ftaps=ftaps,
+
+        index_of_terminal=factor_indices['index_of_terminal'],
+
+        vars=vars,
+
+        values_of_vars=factor_indices['values_of_vars'],
+        var_min=factor_indices['var_min'],
+        var_max=factor_indices['var_max'],
+        is_discrete=factor_indices['is_discrete'],
+
+        consts=consts,
+
+        values_of_consts=factor_indices['values_of_consts'],
+        var_const_to_factor=factor_indices['var_const_to_factor'],
+        var_const_to_kp=factor_indices['var_const_to_kp'],
+        var_const_to_kq=factor_indices['var_const_to_kq'],
+        var_const_to_ftaps=factor_indices['var_const_to_ftaps']
+        )
 
 def get_values_of_factors(factor_data, x_factors):
     """Function for extracting factors of injections and terminals
