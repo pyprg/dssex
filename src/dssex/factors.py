@@ -546,8 +546,8 @@ def _get_taps_factor_data(model, steps):
         term_factor)
 
 def make_factor_data(
-        factordefs, gen_factor_symbols, factors, injection_factors,
-        terminal_factor, k_prev=_DM_0r1c):
+        count_of_generic_factors, factors, injection_factors, terminal_factor,
+        gen_factor_symbols, k_prev=_DM_0r1c):
     """Prepares data of scaling factors per step.
 
     Arguments for solver call:
@@ -564,20 +564,16 @@ def make_factor_data(
 
     Parameters
     ----------
-    factordefs: Factors
-        * .gen_factor_data, pandas.DataFrame
-        * .gen_injfactor, pandas.DataFrame
-        * .gen_termfactor, pandas.DataFrame
-        * .factorgroups: function
-            (iterable_of_int)-> (pandas.DataFrame)
-        * .injfactorgroups: function
-            (iterable_of_int)-> (pandas.DataFrame)
+    count_of_generic_factors: int
     factors: pandas.DataFrame
         sorted by 'index_of_symbol'
+
     injection_factors: pandas.DataFrame
 
     terminal_factors: pandas.DataFrame
 
+    gen_factor_symbols: casadi.SX
+        generic symbols (symbols present in each optimization step)
     k_prev: casadi.DM
         float, values of scaling factors from previous step,
         variables and constants
@@ -620,7 +616,6 @@ def make_factor_data(
             int, converts var_const to ftaps, factor assigned to
             (selected) terminals (var_const[var_const_to_ftaps])"""
     # a symbol for each factor
-    count_of_generic_factors = len(factordefs.gen_factor_data)
     symbols_step = _create_symbols_with_ids(
         factors[count_of_generic_factors <= factors.index_of_symbol].id)
     symbols = casadi.vertcat(gen_factor_symbols, symbols_step)
@@ -684,6 +679,7 @@ def setup_factors_for_step(model, step):
     Returns
     -------
     tuple
+        * count_of_generic_factors, int
         * factors: pandas.DataFrame
             sorted by 'index_of_symbol'
             * .type, 'var|'const', dedicsion variable or
@@ -721,12 +717,14 @@ def setup_factors_for_step(model, step):
     # factors assigned to terminals
     taps_factors, terminal_factor = _get_taps_factor_data(model, steps)
     # scaling factors for injections
-    start = repeat(len(model.factors.gen_factor_data))
+    count_of_generic_factors = len(model.factors.gen_factor_data)
+    start = repeat(count_of_generic_factors)
     scaling_factors, injection_factors = _get_scaling_factor_data(
         model, steps, start)
     factors = pd.concat([scaling_factors, taps_factors])
     factors.sort_values('index_of_symbol', inplace=True)
     return (
+        count_of_generic_factors,
         _loc(factors, step).reset_index(),
         _loc(injection_factors, step).reset_index(),
         _loc(terminal_factor, step).reset_index())
@@ -749,9 +747,8 @@ def make_factor_data2(model, gen_factor_symbols, step=0, k_prev=_DM_0r1c):
     -------
     Factordata"""
     return make_factor_data(
-        model.factors,
-        gen_factor_symbols,
         *setup_factors_for_step(model, step),
+        gen_factor_symbols,
         k_prev)
 
 def get_values_of_factors(factor_data, x_factors):
