@@ -38,6 +38,7 @@ _VMINSQR = 0.8**2
 _EPSILON = 1e-12
 # empty vector of values
 _DM_0r1c = casadi.DM(0,1)
+_EMPTY_0r1c = np.empty((0,1), dtype=float)
 # empty vector of expressions
 _SX_0r1c = casadi.SX(0,1)
 # options for solver IPOPT
@@ -548,7 +549,7 @@ def make_get_factor_and_injection_data(
     # get_factor_data = make_get_factor_data(model)
     injections = model.injections
     node_to_inj = casadi.SX(model.mnodeinj).T
-    def get_factor_and_injection_data(step=0, k_prev=_DM_0r1c):
+    def get_factor_and_injection_data(step=0, k_prev=_EMPTY_0r1c):
         factor_data = get_factor_data(step, k_prev)
         # injected node current
         Iinj_data = _injected_current(
@@ -1736,7 +1737,7 @@ constraints: casadi.SX (shape m,1)
     constraints for keeping quantities calculated in previous step constant"""
 
 def get_step_data(
-    model, expressions, step=0, k_prev=_DM_0r1c, objectives='',
+    model, expressions, step=0, k_prev=_EMPTY_0r1c, objectives='',
     constraints='', values_of_constraints=None):
     """Prepares data for call of function optimize_step.
 
@@ -1883,17 +1884,14 @@ def get_step_data_fns(model, gen_factor_symbols):
         constraints: str (optional)
             optional, default ''
             string of characters 'I'|'P'|'Q'|'V' or empty string ''"""
-        voltages_ri2 = ri_to_ri2(voltages_ri.toarray())
-
+        voltages_ri2 = ri_to_ri2(voltages_ri)
         factor_data = ft.make_factor_data(model, gen_factor_symbols, step, k)
-
-
         kpq, ftaps, k_var_const = ft.get_values_of_factors(factor_data, k)
         batch_values = get_batch_values(
             model, voltages_ri2, kpq, ftaps, constraints)
         return make_step_data(
             step=step,
-            k_prev=casadi.DM(k_var_const),
+            k_prev=k_var_const,
             objectives=objectives,
             constraints=constraints,
             values_of_constraints=batch_values)
@@ -1944,8 +1942,8 @@ def optimize_step(
         success?
     voltages_cx : numpy.array, complex (shape n,1)
         calculated complex node voltages
-    pq_factors : numpy.array, float (shape m,2)
-        scaling factors for injections"""
+    factors : numpy.array, float (shape m,2)
+        values for factors"""
     if Vnode_ri_ini is None:
         # power flow calculation for initial voltages
         succ, Vnode_ri_ini = calculate_power_flow2(
@@ -1956,10 +1954,10 @@ def optimize_step(
         Vnode_ri_ini, factor_data, Inode_inj, diff_data, constraints)
     # result processing
     count_of_Vvalues = 2 * model.shape_of_Y[0]
-    return (
-        (succ, *casadi.vertsplit(x, count_of_Vvalues))
-        if count_of_Vvalues < x.size1() else
-        (succ, x, _DM_0r1c))
+    if count_of_Vvalues < x.size1():
+        v, f = casadi.vertsplit(x, count_of_Vvalues)
+        return succ, v.toarray(), f.toarray()
+    return succ, x.toarray(), np.empty((0,1), dtype=float)
 
 def optimize_steps(
         model, gen_factor_symbols, step_params=(), vminsqr=_VMINSQR):
@@ -2050,9 +2048,9 @@ def get_Vcx_kpq(factor_data, voltages_ri, k):
         node voltages
     kpq: numpy.array (shape m,2), float
         scaling factors per injection"""
-    kpq, *_ = ft.get_values_of_factors(factor_data, k)
+    kpq, pos, vars_consts = ft.get_values_of_factors(factor_data, k)
     V = ri_to_complex(voltages_ri)
-    return V, kpq
+    return V, kpq, pos
 
 def estimate(model, step_params=(), vminsqr=_VMINSQR):
     """Estimates grid status stepwise.
@@ -2091,7 +2089,8 @@ def estimate(model, step_params=(), vminsqr=_VMINSQR):
         * voltages_cx : numpy.array, complex (shape n,1)
             calculated complex node voltages
         * pq_factors : numpy.array, float (shape m,2)
-            scaling factors for injections"""
+            scaling factors for injections
+        * tappositions"""
     gen_factor_symbols = ft._create_symbols_with_ids(
         model.factors.gen_factor_data.index)
     return (

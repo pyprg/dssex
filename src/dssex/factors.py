@@ -87,7 +87,6 @@ def make_factor_symbols(
     symbols = casadi.vertcat(
         gen_factor_symbols,
         _create_symbols_with_ids(id_of_step_symbol))
-    index_of_kpq_symbol = index_of_kpq_symbol
     return Factorsymbols(
         kpq=casadi.horzcat(
             symbols[index_of_kpq_symbol[:,0]].reshape((-1,1)),

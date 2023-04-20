@@ -41,7 +41,7 @@ class Estimate_minimal(unittest.TestCase):
             tail, [], 'estimate returns just initialization values')
         self.assertEqual(
             len(res),
-            4,
+            5,
             'estimate returns 4 values for the initialization step')
         self.assertEqual(
             res[0],
@@ -71,7 +71,7 @@ class Estimate_minimal(unittest.TestCase):
             tail, [], 'estimate returns just initialization values')
         self.assertEqual(
             len(res),
-            4,
+            5,
             'estimate returns 4 values for the initialization step')
         self.assertEqual(
             res[0],
@@ -110,7 +110,7 @@ class Estimate_injection(unittest.TestCase):
             tail, [], 'estimate returns just initialization values')
         self.assertEqual(
             len(res),
-            4,
+            5,
             'estimate returns 4 values for the initialization step')
         self.assertEqual(
             res[0],
@@ -154,7 +154,7 @@ class Estimate_injection(unittest.TestCase):
             res, tuple, 'estimate returns tuple')
         self.assertEqual(
             len(res),
-            4,
+            5,
             'estimate returns 4 values for the initialization step')
         self.assertEqual(
             res[0],
@@ -199,7 +199,7 @@ class Estimate_injection(unittest.TestCase):
             res, tuple, 'estimate returns tuple')
         self.assertEqual(
             len(res),
-            4,
+            5,
             'estimate returns 4 values for the otimization step')
         self.assertEqual(
             res[0],
@@ -245,7 +245,7 @@ class Estimate_injection(unittest.TestCase):
             res, tuple, 'estimate returns tuple')
         self.assertEqual(
             len(res),
-            4,
+            5,
             'estimate returns 4 values for the optimization step')
         self.assertEqual(
             res[0],
@@ -300,7 +300,7 @@ class Estimate_injection(unittest.TestCase):
             res, tuple, 'estimate returns tuple')
         self.assertEqual(
             len(res),
-            4,
+            5,
             'estimate returns 4 values for the optimization step')
         self.assertEqual(
             res[0],
@@ -349,7 +349,7 @@ class Estimate_injection(unittest.TestCase):
             res, tuple, 'estimate returns tuple')
         self.assertEqual(
             len(res),
-            4,
+            5,
             'estimate returns 4 values for the optimization step')
         self.assertEqual(
             res[0],
@@ -399,7 +399,7 @@ class Estimate_injection(unittest.TestCase):
             res, tuple, 'estimate returns tuple')
         self.assertEqual(
             len(res),
-            4,
+            5,
             'estimate returns 4 values for the optimization step')
         self.assertEqual(
             res[0],
@@ -438,7 +438,7 @@ class Estimate_branch_injection(unittest.TestCase):
             tail, [], 'estimate returns just initialization values')
         self.assertEqual(
             len(res),
-            4,
+            5,
             'estimate returns 4 values for the initialization step')
         self.assertEqual(
             res[0],
@@ -491,7 +491,7 @@ class Estimate_branch_injection(unittest.TestCase):
             res, tuple, 'estimate returns tuple')
         self.assertEqual(
             len(res),
-            4,
+            5,
             'estimate returns 4 values for the initialization step')
         self.assertEqual(
             res[0],

@@ -456,7 +456,7 @@ class Power_flow_calculation_basic2(unittest.TestCase):
         step_data = estim.get_step_data(model, expressions)
         succ_estim, Vnode_ri_estim, _ = estim.optimize_step(*step_data)
         self.assertTrue(succ_estim, 'estimation succeeds')
-        Vnode_cx_estim = estim.ri_to_complex(Vnode_ri_estim.toarray())
+        Vnode_cx_estim = estim.ri_to_complex(Vnode_ri_estim)
         succ_pfc, Vnode_cx_pfc = pfc.calculate_power_flow(
             model, loadcurve='interpolated')
         self.assertTrue(succ_pfc, 'power flow calculation succeeds')
@@ -505,8 +505,8 @@ class Optimize_step(unittest.TestCase):
             model, expressions, objectives='P')
         succ, x_V, x_scaling = estim.optimize_step(*step_data)
         self.assertTrue(succ, 'estimation succeeds')
-        V, k = estim.get_Vcx_kpq(step_data.scaling_data, x_V, x_scaling)
-        ed = pfc.calculate_electric_data(model, V, k)
+        V, k, pos = estim.get_Vcx_kpq(step_data.scaling_data, x_V, x_scaling)
+        ed = pfc.calculate_electric_data(model, V, k, pos)
         self.assertAlmostEqual(
             # exclude slacks
             np.max(np.abs(ed.residual_node_current()[model.count_of_slacks:])),
@@ -543,8 +543,8 @@ class Optimize_step(unittest.TestCase):
             model, expressions, objectives='P')
         succ, x_V, x_scaling = estim.optimize_step(*step_data)
         self.assertTrue(succ, 'estimation succeeds')
-        V, k = estim.get_Vcx_kpq(step_data.scaling_data, x_V, x_scaling)
-        ed = pfc.calculate_electric_data(model, V, k)
+        V, k, pos = estim.get_Vcx_kpq(step_data.scaling_data, x_V, x_scaling)
+        ed = pfc.calculate_electric_data(model, V, k, pos)
         self.assertAlmostEqual(
             # exclude slacks
             np.max(np.abs(ed.residual_node_current()[model.count_of_slacks:])),
@@ -581,8 +581,8 @@ class Optimize_step(unittest.TestCase):
             model, expressions, objectives='Q')
         succ, x_V, x_scaling = estim.optimize_step(*step_data)
         self.assertTrue(succ, 'estimation succeeds')
-        V, k = estim.get_Vcx_kpq(step_data.scaling_data, x_V, x_scaling)
-        ed = pfc.calculate_electric_data(model, V, k)
+        V, k, pos = estim.get_Vcx_kpq(step_data.scaling_data, x_V, x_scaling)
+        ed = pfc.calculate_electric_data(model, V, k, pos)
         self.assertAlmostEqual(
             # exclude slacks
             np.max(np.abs(ed.residual_node_current()[model.count_of_slacks:])),
@@ -619,8 +619,8 @@ class Optimize_step(unittest.TestCase):
             model, expressions, objectives='Q')
         succ, x_V, x_scaling = estim.optimize_step(*step_data)
         self.assertTrue(succ, 'estimation succeeds')
-        V, k = estim.get_Vcx_kpq(step_data.scaling_data, x_V, x_scaling)
-        ed = pfc.calculate_electric_data(model, V, k)
+        V, k, pos = estim.get_Vcx_kpq(step_data.scaling_data, x_V, x_scaling)
+        ed = pfc.calculate_electric_data(model, V, k, pos)
         self.assertAlmostEqual(
             # exclude slacks
             np.max(np.abs(ed.residual_node_current()[model.count_of_slacks:])),
@@ -657,8 +657,8 @@ class Optimize_step(unittest.TestCase):
             model, expressions, objectives='I')
         succ, x_V, x_scaling = estim.optimize_step(*step_data)
         self.assertTrue(succ, 'estimation succeeds')
-        V, k = estim.get_Vcx_kpq(step_data.scaling_data, x_V, x_scaling)
-        ed = pfc.calculate_electric_data(model, V, k)
+        V, k, pos = estim.get_Vcx_kpq(step_data.scaling_data, x_V, x_scaling)
+        ed = pfc.calculate_electric_data(model, V, k, pos)
         self.assertAlmostEqual(
             # exclude slacks
             np.max(np.abs(ed.residual_node_current()[model.count_of_slacks:])),
@@ -695,8 +695,8 @@ class Optimize_step(unittest.TestCase):
             model, expressions, objectives='I')
         succ, x_V, x_scaling = estim.optimize_step(*step_data)
         self.assertTrue(succ, 'estimation succeeds')
-        V, k = estim.get_Vcx_kpq(step_data.scaling_data, x_V, x_scaling)
-        ed = pfc.calculate_electric_data(model, V, k)
+        V, k, pos = estim.get_Vcx_kpq(step_data.scaling_data, x_V, x_scaling)
+        ed = pfc.calculate_electric_data(model, V, k, pos)
         self.assertAlmostEqual(
             # exclude slacks
             np.max(np.abs(ed.residual_node_current()[model.count_of_slacks:])),
@@ -732,8 +732,8 @@ class Optimize_step(unittest.TestCase):
             model, expressions, objectives='V')
         succ, x_V, x_scaling = estim.optimize_step(*step_data)
         self.assertTrue(succ, 'estimation succeeds')
-        V, k = estim.get_Vcx_kpq(step_data.scaling_data, x_V, x_scaling)
-        ed = pfc.calculate_electric_data(model, V, k)
+        V, k, ftaps = estim.get_Vcx_kpq(step_data.scaling_data, x_V, x_scaling)
+        ed = pfc.calculate_electric_data(model, V, k, ftaps)
         self.assertAlmostEqual(
             # exclude slacks
             np.max(np.abs(ed.residual_node_current()[model.count_of_slacks:])),
