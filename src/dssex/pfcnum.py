@@ -45,7 +45,7 @@ _VMINSQR = 0.8**2
 _zeros = np.zeros((0, 1), dtype=np.longdouble)
 _power_props = itemgetter('P10', 'Q10', 'Exp_v_p', 'Exp_v_q')
 
-def calculate_term_factor_n(factors, pos=None):
+def calculate_term_to_factor_n(factors, positions=None):
     """Calculates values for off-diagonal factors of branches having taps.
 
     Diagonal factors are just the square of the off-diagonal factors.
@@ -74,8 +74,9 @@ def calculate_term_factor_n(factors, pos=None):
         factors
         .gen_termfactor[['id', 'index_of_terminal']]
         .join(factors.gen_factor_data, on='id', how='inner'))
-    pos_ = termfactor.value.to_numpy() if pos is None else pos
+    pos_ = termfactor.value.to_numpy() if positions is None else positions
     if termfactor.empty:
+        # empty pandas.DataFrame
         return pd.DataFrame(
             [],
             columns=['ftaps'],
@@ -87,29 +88,32 @@ def calculate_term_factor_n(factors, pos=None):
         columns=['ftaps'],
         index=termfactor.index_of_terminal)
 
-def _calculate_f_mn_tot(index_of_other_terminal, term_factor):
+def _calculate_f_mn_tot(index_of_other_terminal, term_to_factor):
     """Calculates terminal factors (taps factors) for each terminal.
 
     Parameters
     ----------
     index_of_other_terminal: pandas.DataFrame (index_of_terminal) ->
         * .index_of_other_terminal, int
-    term_factor: pandas.DataFrame (index_of_terminal) ->
+    term_to_factor: pandas.DataFrame (index_of_terminal) ->
         * .ftaps, float, taps-factor
 
     Returns
     -------
     numpy.array, float (shape n,2)"""
     array = (
+        # adds factor of terminal to terminal
         index_of_other_terminal
-        .join(term_factor, how='left')
+        .join(term_to_factor, how='left')
         .set_index('index_of_other_terminal')
-        .join(term_factor, how='left', rsuffix='_other')
+        # adds factor of other terminal
+        .join(term_to_factor, how='left', rsuffix='_other')
         .fillna(1.)
+        # also swaps columns
         .to_numpy()[:,[1,0]])
     return array * array[:,[1]]
 
-def create_gb_of_terminals_n(branchterminals, term_factor):
+def create_gb_of_terminals_n(branchterminals, term_to_factor):
     """Creates vectors of branch-susceptances and branch-conductances.
 
     Parameters
@@ -119,7 +123,7 @@ def create_gb_of_terminals_n(branchterminals, term_factor):
         * .b_lo, float, longitudinal susceptance
         * .g_tr_half, float, transversal conductance
         * .b_tr_half, float, transversal susceptance
-    term_factor: pandas.DataFrame (index_of_terminal) ->
+    term_to_factor: pandas.DataFrame (index_of_terminal) ->
         * .ftaps, float
 
     Returns
@@ -137,12 +141,12 @@ def create_gb_of_terminals_n(branchterminals, term_factor):
     # gb_mn_mm -> gb_mn_tot
     gb_mn_tot[:, 2:] += gb_mn_tot[:, :2]
     f_mn_tot = _calculate_f_mn_tot(
-        branchterminals[['index_of_other_terminal']], term_factor)
+        branchterminals[['index_of_other_terminal']], term_to_factor)
     gb_mn_tot[:, :2] *= f_mn_tot[:,[0]]
     gb_mn_tot[:, 2:] *= f_mn_tot[:,[1]]
     return gb_mn_tot.copy()
 
-def create_gb(branchterminals, count_of_nodes, term_factor):
+def create_gb(branchterminals, count_of_nodes, term_to_factor):
     """Generates a conductance-susceptance matrix of branches.
 
     The conductance-susceptance matrix is equivalent to a
@@ -154,7 +158,7 @@ def create_gb(branchterminals, count_of_nodes, term_factor):
 
     count_of_nodes: int
         number of power flow calculation nodes
-    term_factor: pandas.DataFrame (index_of_terminal) ->
+    term_to_factor: pandas.DataFrame (index_of_terminal) ->
         * .ftaps, float
 
     Returns
@@ -162,7 +166,7 @@ def create_gb(branchterminals, count_of_nodes, term_factor):
     tuple
         * sparse matrix of branch conductances G
         * sparse matrix of branch susceptances B"""
-    gb_mn_tot = create_gb_of_terminals_n(branchterminals, term_factor)
+    gb_mn_tot = create_gb_of_terminals_n(branchterminals, term_to_factor)
     index_of_node = branchterminals.index_of_node
     index_of_other_node = branchterminals.index_of_other_node
     row = np.concatenate([index_of_node, index_of_node])
@@ -175,7 +179,7 @@ def create_gb(branchterminals, count_of_nodes, term_factor):
     b = coo_matrix((bvals, rowcol), shape=shape, dtype=float)
     return g, b
 
-def create_gb_matrix(model, term_factor):
+def create_gb_matrix(model, term_to_factor):
     """Generates a conductance-susceptance matrix of branches.
     
     The result is equivalent to a branch-admittance matrix. 
@@ -186,7 +190,7 @@ def create_gb_matrix(model, term_factor):
     ----------
     model: egrid.model.Model
         data of power network
-    term_factor: pandas.DataFrame (index_of_terminal) ->
+    term_to_factor: pandas.DataFrame (index_of_terminal) ->
         * .ftaps, float
 
     Returns
@@ -195,7 +199,7 @@ def create_gb_matrix(model, term_factor):
     count_of_nodes = model.shape_of_Y[0]
     terms = (
       model.branchterminals[~model.branchterminals.is_bridge].reset_index())
-    G, B = create_gb(terms, count_of_nodes, term_factor)
+    G, B = create_gb(terms, count_of_nodes, term_to_factor)
     count_of_slacks = model.count_of_slacks
     diag = diags(
         [1.] * count_of_slacks,
@@ -574,8 +578,8 @@ def calculate_power_flow(
               np.vstack([np.real(Vinit), np.imag(Vinit)]))
     Vslack_ = (
         model.slacks.V.to_numpy().reshape(-1,1) if Vslack is None else Vslack)
-    term_factor = calculate_term_factor_n(model.factors)
-    gb = create_gb_matrix(model, term_factor)
+    term_to_factor = calculate_term_to_factor_n(model.factors)
+    gb = create_gb_matrix(model, term_to_factor)
     mnodeinj = model.mnodeinj
     _next_voltage = partial(
         next_voltage,
@@ -600,7 +604,7 @@ def calculate_power_flow(
 # calculation with complex values
 #
 
-def get_y_terms(branchterminals, term_factor):
+def get_y_terms(branchterminals, term_to_factor):
     """Creates y_mn and y_tot of terminals. 
     
     Multiplies admittances of branches with factors retrieved from 
@@ -625,7 +629,7 @@ def get_y_terms(branchterminals, term_factor):
     y_mn = branchterminals.y_lo.to_numpy().reshape(-1,1)
     y_tot = y_tr + y_mn
     f_mn_tot = _calculate_f_mn_tot(
-        branchterminals[['index_of_other_terminal']], term_factor)
+        branchterminals[['index_of_other_terminal']], term_to_factor)
     return y_mn * f_mn_tot[:,[0]], y_tot * f_mn_tot[:,[1]]
 
 def create_y(terms, count_of_nodes, term_factor):
@@ -869,8 +873,8 @@ def get_y_branches(model, terms, term_is_at_A, pos):
     Returns
     -------
     numpy.array, complex, shape=(n, 2, 2)"""
-    term_factor = calculate_term_factor_n(model.factors, pos)
-    y_lo, y_tot = get_y_terms(terms, term_factor)
+    term_to_factor = calculate_term_to_factor_n(model.factors, pos)
+    y_lo, y_tot = get_y_terms(terms, term_to_factor)
     return get_branch_admittance_matrices(y_lo, y_tot, term_is_at_A)
 
 def get_v_branches(terms, voltages):
@@ -1040,8 +1044,8 @@ def get_residual_current_fn(model, get_injected_power):
     function
         (numpy.array<complex>) -> (numpy.ndarray<complex>)
         (voltage_of_nodes) -> (current_of_node)"""
-    term_factor = calculate_term_factor_n(model.factors)
-    Y = create_y_matrix(model, term_factor).tocsc()
+    term_to_factor = calculate_term_to_factor_n(model.factors)
+    Y = create_y_matrix(model, term_to_factor).tocsc()
     return partial(get_residual_current, model, get_injected_power, Y)
 
 def get_residual_current_fn2(model, get_injected_power, Vslack=None):
@@ -1063,8 +1067,8 @@ def get_residual_current_fn2(model, get_injected_power, Vslack=None):
         (numpy.array<complex>) -> (numpy.array<complex>)
         (voltage_at_nodes) -> (current_into_nodes)"""
     Vslack_ = model.slacks.V.to_numpy() if Vslack is None else Vslack
-    term_factor = calculate_term_factor_n(model.factors)
-    Y = create_y_matrix2(model, term_factor).tocsc()
+    term_to_factor = calculate_term_to_factor_n(model.factors)
+    Y = create_y_matrix2(model, term_to_factor).tocsc()
     return partial(
         get_residual_current2, model, get_injected_power, Vslack_, Y)
 

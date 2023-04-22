@@ -179,10 +179,10 @@ def make_factor_data(model, gen_factor_symbols, step=0, k_prev=_NPARRAY_0r1c):
         var_const_to_kq=fm.var_const_to_kq,
         var_const_to_ftaps=fm.var_const_to_ftaps)
 
-def get_values_of_factors(factor_data, x_factors):
+def get_values_of_factors(factordata, factors):
     """Function for extracting factors of injections and terminals
     (taps factors) from the result provided by the solver.
-    Enhances factors calculated by optimization with constant factors and
+    Enhances factors calculated by optimization with values of parameters and
     reorders the factors according to order of injections and terminals.
     Returns kp and kq for each injection. Returns a factor ftaps for terminals
     addressed by 'Factordefs.index_of_terminal' which is an argument to the
@@ -193,7 +193,7 @@ def get_values_of_factors(factor_data, x_factors):
 
     Parameters
     ----------
-    factor_data: Factordata
+    factordata: Factordata
         * .values_of_consts,
             array_like, float, column vector, values for consts
         * .var_const_to_factor,
@@ -208,7 +208,7 @@ def get_values_of_factors(factor_data, x_factors):
         * .var_const_to_ftaps,
             array_like int, converts var_const to ftaps, factor assigned to
             (selected) terminals (var_const[var_const_to_ftaps])
-    x_factors: numpy.array|casadi.DM, shape(k,1)
+    factors: numpy.array|casadi.DM, shape(k,1)
         float, result of optimization (subset)
 
     Result
@@ -218,11 +218,11 @@ def get_values_of_factors(factor_data, x_factors):
         * numpy.array (m,1), for selected terminals
         * numpy.array (n,1) var/const"""
     # concat values of decision variables and parameters
-    var_const = np.vstack([x_factors, factor_data.values_of_consts])
-    kp = var_const[factor_data.var_const_to_kp]
-    kq = var_const[factor_data.var_const_to_kq]
+    var_const = np.vstack([factors, factordata.values_of_consts])
+    kp = var_const[factordata.var_const_to_kp]
+    kq = var_const[factordata.var_const_to_kq]
     return (
         np.hstack([kp, kq]),
-        var_const[factor_data.var_const_to_ftaps],
-        var_const[factor_data.var_const_to_factor])
+        var_const[factordata.var_const_to_ftaps],
+        var_const[factordata.var_const_to_factor])
 

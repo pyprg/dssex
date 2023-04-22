@@ -32,7 +32,7 @@ import numpy as np
 from functools import partial
 from collections import defaultdict
 from pandas import concat
-from dssex.pfcnum import create_gb_of_terminals_n, calculate_term_factor_n
+from dssex.pfcnum import create_gb_of_terminals_n, calculate_term_to_factor_n
 from dssex.injections import calculate_cubic_coefficients
 # square of voltage magnitude, minimum value for load curve,
 #   if value is below _VMINSQR the load curves for P and Q converge
@@ -490,79 +490,15 @@ def _calculate_factors_of_positions_n(branchtaps, positions):
         .to_numpy()
         .reshape(-1,1))
 
-def _create_gb_of_terminals_n(branchterminals, branchtaps, positions=None):
-    """Creates a vectors of branch-susceptances and branch-conductances.
-
-    The intended use is calculating a subset of terminal values.
-    Arguments 'branchtaps' and 'positions' will be selected
-    accordingly, hence, it is appropriate to pass the complete branchtaps
-    and positions.
-
-    Parameters
-    ----------
-    branchterminals: pandas.DataFrame (index_of_terminal)
-        * .g_lo, float, longitudinal conductance
-        * .b_lo, float, longitudinal susceptance
-        * .g_tr_half, float, transversal conductance
-        * .b_tr_half, float, transversal susceptance
-    branchtaps: pandas.DataFrame (index_of_taps)
-        * .index_of_terminal, int
-        * .index_of_other_terminal, int
-        * .Vstep, float voltage diff per tap
-        * .positionneutral, int
-        * .position, int (if argument positions is None)
-    position: array_like (optional, accepts None)
-        int, vector of positions for branch-terminals with taps
-
-    Returns
-    -------
-    numpy.array (shape n,4)
-        gb_mn_tot[:,0] - g_mn
-        gb_mn_tot[:,1] - b_mn
-        gb_mn_tot[:,2] - g_tot
-        gb_mn_tot[:,3] - b_tot"""
-    index_of_branch_terminals = branchterminals.index
-    is_taps_at_term = branchtaps.index_of_terminal.isin(
-        index_of_branch_terminals)
-    taps_at_term = branchtaps[is_taps_at_term]
-    is_term_at_tap = index_of_branch_terminals.isin(
-        taps_at_term.index_of_terminal)
-    is_taps_at_other_term = (
-        branchtaps.index_of_other_terminal.isin(index_of_branch_terminals))
-    taps_at_other_term = branchtaps[is_taps_at_other_term]
-    is_other_term_at_tap = index_of_branch_terminals.isin(
-        taps_at_other_term.index_of_other_terminal)
-    positions_ = branchtaps.position if positions is None else positions
-    f_at_term = _calculate_factors_of_positions_n(
-        taps_at_term, positions_[is_taps_at_term])
-    f_at_other_term = _calculate_factors_of_positions_n(
-        taps_at_other_term, positions_[is_taps_at_other_term])
-    # g_lo, b_lo, g_trans, b_trans
-    gb_mn_tot = _get_gb_of_terminals_n(branchterminals)
-    # gb_mn_mm -> gb_mn_tot
-    gb_mn_tot[:, 2:] += gb_mn_tot[:, :2]
-    if f_at_term.size:
-        # diagonal and off-diagonal
-        gb_mn_tot[is_term_at_tap] *= f_at_term
-        # diagonal
-        gb_mn_tot[is_term_at_tap, 2:] *= f_at_term
-    if f_at_other_term.size:
-        # off-diagonal
-        gb_mn_tot[is_other_term_at_tap, :2] *= f_at_other_term
-    return gb_mn_tot.copy()
-
-def _get_branch_flow_values(
-        term_factor, positions, vnode_ri2, branchterminals):
+def _get_branch_flow_values(term_to_factor, vnode_ri2, branchterminals):
     """Calculates current, active and reactive power flow into branches.
 
     'branchterminals' is a subset, all other arguments are complete.
 
     Parameters
     ----------
-    term_factor: pandas.DataFrame (index_of_terminal) ->
+    term_to_factor: pandas.DataFrame (index_of_terminal) ->
         * .ftaps, float, factor for admittances applied at terminals
-    positions: array_like<int>
-        tap positions, accepts None
     vnode_ri2: numpy.array<float>, (shape 2n,1)
         voltages at nodes, real part than imaginary part
     branchterminals: pandas.DataFrame
@@ -577,7 +513,7 @@ def _get_branch_flow_values(
         * [:,1] Iim, imaginary part of current
         * [:,2] P, active power
         * [:,3] Q, reactive power"""
-    gb_mn_tot = create_gb_of_terminals_n(branchterminals, term_factor)
+    gb_mn_tot = create_gb_of_terminals_n(branchterminals, term_to_factor)
     # reverts columns to y_tot, y_mn
     y_tot_mn = gb_mn_tot.view(dtype=np.complex128)[:,np.newaxis,::-1]
     # complex voltage
@@ -595,7 +531,7 @@ def _get_branch_flow_values(
 _branch_flow_slicer = dict(I=np.s_[:,:2], P=np.s_[:,2], Q=np.s_[:,3])
 
 def _get_batch_values_br(
-        model, term_factor, vnode_ri2, positions, selector, vminsqr=.8**2):
+        model, term_to_factor, vnode_ri2, selector, vminsqr=.8**2):
     """Calculates a vector of absolute current, active power or reactive power.
 
     The expressions are based on the batch definitions.
@@ -604,7 +540,7 @@ def _get_batch_values_br(
     ----------
     model: egrid.model.Model
         model of electric network for calculation
-    term_factor: pandas.DataFrame (index_of_terminal) ->
+    term_to_factor: pandas.DataFrame (index_of_terminal) ->
         * .ftaps, float, factor for admittances applied at terminals
     vnode_ri2: numpy.array<float> (shape n,2)
         [:,0] Vnode_re, real part of node voltage
@@ -622,8 +558,7 @@ def _get_batch_values_br(
         id_of_batch => values for I/P/Q-calculation"""
     slicer = _branch_flow_slicer[selector]
     get_branch_vals = lambda terminals: (
-        _get_branch_flow_values(
-            term_factor, positions, vnode_ri2, terminals)[slicer])
+        _get_branch_flow_values(term_to_factor, vnode_ri2, terminals)[slicer])
     branchterminals = model.branchterminals
     return {
         id_of_batch:get_branch_vals(branchterminals.loc[df.index_of_terminal])
@@ -633,7 +568,7 @@ def _get_batch_values_br(
             'index_of_terminal')}
 
 def _get_batch_flow_values(
-        model, term_factor, Vnode_ri2, Vabs_sqr, kpq, positions, selector, vminsqr):
+        model, term_to_factor, Vnode_ri2, Vabs_sqr, kpq, selector, vminsqr):
     """Calculates a float value for each batch id.
 
     The returned values are a subset of calculated values of a network model.
@@ -642,7 +577,7 @@ def _get_batch_flow_values(
     ----------
     model: egrid.model.Model
         model of electric network for calculation
-    term_factor: pandas.DataFrame (index_of_terminal) ->
+    term_to_factor: pandas.DataFrame (index_of_terminal) ->
         * .ftaps, float, factor for admittances applied at terminals
     Vnode_ri2: numpy.array<float> (shape n,3)
         [:,0] Vnode_re, real part of node voltage
@@ -652,8 +587,6 @@ def _get_batch_flow_values(
     kpq: numpy.array (shape n,2)
         vector of injection scaling factors for active and reactive power,
         factors for all injections of model
-    positions: array_like<int>
-        tap positions, accepts None
     selector: 'I'|'P'|'Q'
         addresses current magnitude, active power or reactive power
     vminsqr: float
@@ -668,7 +601,7 @@ def _get_batch_flow_values(
     dd = defaultdict(lambda:np.empty(shape, dtype=float))
     dd.update(
         _get_batch_values_br(
-            model, term_factor, Vnode_ri2, positions, selector, vminsqr))
+            model, term_to_factor, Vnode_ri2, selector, vminsqr))
     inj_vals = _get_batch_values_inj(
         model, Vnode_ri2, Vabs_sqr, kpq, selector, vminsqr)
     for id_of_batch, val in inj_vals.items():
@@ -725,11 +658,11 @@ def get_batch_values(
     _vals = []
     quantities_upper = quantities.upper()
     if re.match(r'I|P|Q', quantities_upper):
-        term_factor = calculate_term_factor_n(model.factors)
+        term_to_factor = calculate_term_to_factor_n(model.factors)
     for sel in quantities_upper:
         if sel in 'IPQ':
             id_val = _get_batch_flow_values(
-                model, term_factor, Vnode_ri2, Vabs_sqr, kpq, positions, sel, vminsqr)
+                model, term_to_factor, Vnode_ri2, Vabs_sqr, kpq, sel, vminsqr)
             _quantities.extend([sel]*len(id_val))
             _ids.extend(id_val.keys())
             _vals.extend(id_val.values())
