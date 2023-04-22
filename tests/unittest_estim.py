@@ -55,12 +55,9 @@ class Power_flow_calculation_basic(unittest.TestCase):
         Minimal configuration."""
         vcx_slack = 0.9+0.2j
         model = make_model(grid.Slacknode('n_0', V=vcx_slack))
-        gen_factor_symbols = ft._create_symbols_with_ids(
-            model.factors.gen_factor_data.index)
-        expressions = estim.get_expressions(model, gen_factor_symbols)
         # calculate
         success, vnode_ri = estim.calculate_power_flow(
-            model, gen_factor_symbols, expressions, vminsqr=_VMINSQR)
+            model, vminsqr=_VMINSQR)
         # test
         self.assertTrue(success, "calculate_power_flow shall succeed")
         vnode_cx = estim.ri_to_complex(vnode_ri)
@@ -75,12 +72,9 @@ class Power_flow_calculation_basic(unittest.TestCase):
         model = make_model(
             grid.Slacknode('n_0', V=vcx_slack),
             grid.Injection('consumer', 'n_0', P10=30.0))
-        gen_factor_symbols = ft._create_symbols_with_ids(
-            model.factors.gen_factor_data.index)
-        expressions = estim.get_expressions(model, gen_factor_symbols)
         # calculate
         success, vnode_ri = estim.calculate_power_flow(
-            model, gen_factor_symbols, expressions, vminsqr=_VMINSQR)
+            model, vminsqr=_VMINSQR)
         # test
         self.assertTrue(success, "calculate_power_flow shall succeed")
         vnode_cx = estim.ri_to_complex(vnode_ri)
@@ -95,12 +89,9 @@ class Power_flow_calculation_basic(unittest.TestCase):
         model = make_model(
             grid.Slacknode('n_0', V=vcx_slack),
             grid.Branch('line', 'n_0', 'n_1', y_lo=1e3-1e3j, y_tr=1e-6+1e-6j))
-        gen_factor_symbols = ft._create_symbols_with_ids(
-            model.factors.gen_factor_data.index)
-        expressions = estim.get_expressions(model, gen_factor_symbols)
         # calculate
         success, vnode_ri = estim.calculate_power_flow(
-            model, gen_factor_symbols, expressions, vminsqr=_VMINSQR)
+            model, vminsqr=_VMINSQR)
         # test
         self.assertTrue(success, "calculate_power_flow shall succeed")
         vnode_cx = estim.ri_to_complex(vnode_ri)
@@ -115,12 +106,9 @@ class Power_flow_calculation_basic(unittest.TestCase):
         model = make_model(
             grid_pfc,
             grid.Injection('consumer', 'n_1', P10=30.0))
-        gen_factor_symbols = ft._create_symbols_with_ids(
-            model.factors.gen_factor_data.index)
-        expressions = estim.get_expressions(model, gen_factor_symbols)
         # calculate
         success, vnode_ri = estim.calculate_power_flow(
-            model, gen_factor_symbols, expressions, vminsqr=_VMINSQR)
+            model, vminsqr=_VMINSQR)
         # test
         self.assertTrue(success, "calculate_power_flow shall succeed")
         # check residual current
@@ -145,12 +133,9 @@ class Power_flow_calculation_basic(unittest.TestCase):
         pure reactive power consumer."""
         model = make_model(
             grid_pfc, grid.Injection('consumer', 'n_1', Q10=10.0))
-        gen_factor_symbols = ft._create_symbols_with_ids(
-            model.factors.gen_factor_data.index)
-        expressions = estim.get_expressions(model, gen_factor_symbols)
         # calculate
         success, vnode_ri = estim.calculate_power_flow(
-            model, gen_factor_symbols, expressions, vminsqr=_VMINSQR)
+            model, vminsqr=_VMINSQR)
         # test
         self.assertTrue(success, "calculate_power_flow shall succeed")
         # check residual current
@@ -174,12 +159,9 @@ class Power_flow_calculation_basic(unittest.TestCase):
         """Power flow calculation with one branch and one power consumer."""
         model = make_model(
             grid_pfc, grid.Injection('consumer', 'n_1', P10=30.0, Q10=10.0))
-        gen_factor_symbols = ft._create_symbols_with_ids(
-            model.factors.gen_factor_data.index)
-        expressions = estim.get_expressions(model, gen_factor_symbols)
         # calculate
         success, vnode_ri = estim.calculate_power_flow(
-            model, gen_factor_symbols, expressions, vminsqr=_VMINSQR)
+            model, vminsqr=_VMINSQR)
         # test
         self.assertTrue(success, "calculate_power_flow shall succeed")
         # check residual current
@@ -204,12 +186,9 @@ class Power_flow_calculation_basic(unittest.TestCase):
         pure active power generator."""
         model = make_model(
             grid_pfc, grid.Injection('generator', 'n_1', P10=-30.0))
-        gen_factor_symbols = ft._create_symbols_with_ids(
-            model.factors.gen_factor_data.index)
-        expressions = estim.get_expressions(model, gen_factor_symbols)
         # calculate
         success, vnode_ri = estim.calculate_power_flow(
-            model, gen_factor_symbols, expressions, vminsqr=_VMINSQR)
+            model, vminsqr=_VMINSQR)
         # test
         self.assertTrue(success, "calculate_power_flow shall succeed")
         # check residual current
@@ -260,18 +239,10 @@ class Power_flow_calculation_taps(unittest.TestCase):
                 id_of_branch='branch_1',
                 id_of_factor='tap_branch_1'))
         # calculate
-        gen_factor_symbols0 = ft._create_symbols_with_ids(
-            model0.factors.gen_factor_data.index)
-        expr0 = estim.create_v_symbols_gb_expressions(
-            model0, gen_factor_symbols0)
         success0, vnode_ri0 = estim.calculate_power_flow(
-            model0, gen_factor_symbols0, expr0, vminsqr=_VMINSQR)
-        gen_factor_symbols1 = ft._create_symbols_with_ids(
-            model1.factors.gen_factor_data.index)
-        expr1 = estim.create_v_symbols_gb_expressions(
-            model1, gen_factor_symbols1)
+            model0, vminsqr=_VMINSQR)
         success1, vnode_ri1 = estim.calculate_power_flow(
-            model1, gen_factor_symbols1, expr1, vminsqr=_VMINSQR)
+            model1, vminsqr=_VMINSQR)
         # test
         self.assertTrue(success0, "calculate_power_flow shall succeed")
         self.assertTrue(success1, "calculate_power_flow shall succeed")
@@ -306,18 +277,10 @@ class Power_flow_calculation_taps(unittest.TestCase):
             grid.Tlink(
                 id_of_node='n_1', id_of_branch='branch_1', id_of_factor='taps'))
         # calculate
-        gen_factor_symbols0 = ft._create_symbols_with_ids(
-            model0.factors.gen_factor_data.index)
-        expr0 = estim.create_v_symbols_gb_expressions(
-            model0, gen_factor_symbols0)
         success0, vnode_ri0 = estim.calculate_power_flow(
-            model0, gen_factor_symbols0, expr0, vminsqr=_VMINSQR)
-        gen_factor_symbols1 = ft._create_symbols_with_ids(
-            model1.factors.gen_factor_data.index)
-        expr1 = estim.create_v_symbols_gb_expressions(
-            model1, gen_factor_symbols1)
+            model0, vminsqr=_VMINSQR)
         success1, vnode_ri1 = estim.calculate_power_flow(
-            model1, gen_factor_symbols1, expr1, vminsqr=_VMINSQR)
+            model1, vminsqr=_VMINSQR)
         # test
         self.assertTrue(success0, "calculate_power_flow shall succeed")
         self.assertTrue(success1, "calculate_power_flow shall succeed")
@@ -359,20 +322,13 @@ class Power_flow_calculation_taps(unittest.TestCase):
                 'taps', type='const', min=-16, max=16,
                 value=16, m=-.1/16, n=1., is_discrete=True), # <- 10% decrease
             grid.Tlink(
-                id_of_node='n_1', id_of_branch='branch_1', id_of_factor='taps'))
+                id_of_node='n_1', id_of_branch='branch_1',
+                id_of_factor='taps'))
         # calculate
-        gen_factor_symbols0 = ft._create_symbols_with_ids(
-            model0.factors.gen_factor_data.index)
-        expr0 = estim.create_v_symbols_gb_expressions(
-            model0, gen_factor_symbols0)
         success0, vnode_ri0 = estim.calculate_power_flow(
-            model0, gen_factor_symbols0, expr0, vminsqr=_VMINSQR)
-        gen_factor_symbols1 = ft._create_symbols_with_ids(
-            model1.factors.gen_factor_data.index)
-        expr1 = estim.create_v_symbols_gb_expressions(
-            model1, gen_factor_symbols1)
+            model0, vminsqr=_VMINSQR)
         success1, vnode_ri1 = estim.calculate_power_flow(
-            model1, gen_factor_symbols1, expr1, vminsqr=_VMINSQR)
+            model1, vminsqr=_VMINSQR)
         # test
         self.assertTrue(success0, "calculate_power_flow shall succeed")
         self.assertTrue(success1, "calculate_power_flow shall succeed")

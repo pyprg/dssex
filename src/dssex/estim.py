@@ -579,7 +579,7 @@ def calculate_power_flow2(
         model, expr, factor_data, Inode, Vinit=None):
     """Solves the power flow problem using a rootfinding algorithm.
 
-    The result is the initial voltage vector for the optimization.
+    The result can be the initial voltage vector for an optimization.
 
     Parameters
     ----------
@@ -590,7 +590,6 @@ def calculate_power_flow2(
         * 'Vre_slack_syms', casadi.SX, symbols of slack voltages, real part
         * 'Vim_slack_syms', casadi.SX, symbols of slack voltages,
            imaginary part
-        * 'position_syms', casadi.SX, symbols of tap positions
         * 'Y_by_V', casadi.SX, expression for Y @ V
     factor_data: Factordata
         * .vars, casadi.SX, symbols of factors (decision variables)
@@ -601,6 +600,7 @@ def calculate_power_flow2(
         * .consts, casadi.SX, symbols of constant factors
         * .values_of_consts, casadi.DM, values for parameters ('consts')
     Inode: casadi.SX (shape n,2)
+        expressions for injected current per node
         values for slack need to be set to slack voltage
         * Inode[:,0] - Ire, real part of current injected into node
         * Inode[:,1] - Iim, imaginary part of current injected into node
@@ -625,11 +625,7 @@ def calculate_power_flow2(
         'fn_Iresidual',
         [variable_syms, parameter_syms],
         [expr['Y_by_V'] + Inode_ri])
-    rf = casadi.rootfinder(
-        'rf',
-        'nlpsol',
-        fn_Iresidual,
-        {'nlpsol':'ipopt'})
+    rf = casadi.rootfinder('rf', 'nlpsol', fn_Iresidual, {'nlpsol':'ipopt'})
     count_of_pfcnodes = model.shape_of_Y[0]
     Vinit_ = (
         casadi.vertcat([1.]*count_of_pfcnodes, [0.]*count_of_pfcnodes)
@@ -644,23 +640,13 @@ def calculate_power_flow2(
     voltages = rf(Vinit_, values_of_parameters)
     return rf.stats()['success'], voltages
 
-def calculate_power_flow(
-        model, gen_factor_symbols, v_syms_gb_ex, Vinit=None, vminsqr=_VMINSQR):
+def calculate_power_flow(model, Vinit=None, vminsqr=_VMINSQR):
     """Solves the power flow problem using a rootfinding algorithm.
 
     Parameters
     ----------
     model: egrid.model.Model
         data of electric grid
-    v_syms_gb_ex: dict
-        * 'Vnode_syms', casadi.SX, expressions of node Voltages
-        * 'Vre_slack_syms', casadi.SX, symbols of slack voltages, real part
-        * 'Vim_slack_syms', casadi.SX, symbols of slack voltages,
-           imaginary part
-        * 'position_syms', casadi.SX, symbols of tap positions
-        * 'Y_by_V', casadi.SX, expression for Y @ V
-        create the argument with call
-        'create_v_symbols_gb_expressions(model, factordefs, gen_factor_symbols)'
     Vinit: array_like
         optional
         float, initial guess of node voltages
@@ -673,6 +659,9 @@ def calculate_power_flow(
     tuple
         * bool, success?
         * casadi.DM, float, voltage vector [real parts, imaginary parts]"""
+    gen_factor_symbols = ft._create_symbols_with_ids(
+        model.factors.gen_factor_data.index)
+    v_syms_gb_ex = create_v_symbols_gb_expressions(model, gen_factor_symbols)
     get_factor_and_injection_data = make_get_factor_and_injection_data(
         model, gen_factor_symbols, v_syms_gb_ex['Vnode_syms'], vminsqr)
     factor_data, Iinj_data = get_factor_and_injection_data(step=0)
@@ -2041,16 +2030,16 @@ def estimate(model, step_params=(), vminsqr=_VMINSQR):
           'V' - objective function is created with terms for voltage
         * constraints, ''|'P'|'Q'|'I'|'V' (string or tuple of characters)
           'P' - adds constraints keeping the initial values
-                of active powers at the location of given 
+                of active powers at the location of given
                 active power values during this step
           'Q' - adds constraints keeping the initial values
-                of reactive powers at the location of given 
+                of reactive powers at the location of given
                 reactive power values during this step
           'I' - adds constraints keeping the initial values
-                of electric current at the location of given 
+                of electric current at the location of given
                 current values during this step
           'V' - adds constraints keeping the initial values
-                of voltages at the location of given 
+                of voltages at the location of given
                 voltage values during this step
     vminsqr: float (default _VMINSQR)
         minimum

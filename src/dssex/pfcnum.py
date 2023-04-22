@@ -181,9 +181,9 @@ def create_gb(branchterminals, count_of_nodes, term_to_factor):
 
 def create_gb_matrix(model, term_to_factor):
     """Generates a conductance-susceptance matrix of branches.
-    
-    The result is equivalent to a branch-admittance matrix. 
-    M[n,n] of slack nodes is set to 1, other values of slack nodes are zero. 
+
+    The result is equivalent to a branch-admittance matrix.
+    M[n,n] of slack nodes is set to 1, other values of slack nodes are zero.
     Hence, the returned matrix is unsymmetrical.
 
     Parameters
@@ -213,7 +213,7 @@ def create_gb_matrix(model, term_to_factor):
 
 def _get_squared_injected_power_fn(injections, pq_factors=None):
     """Calculates power flowing into injections.
-    
+
     Formula:
     ::
         +- -+   +-                            -+
@@ -271,7 +271,7 @@ def _get_squared_injected_power_fn(injections, pq_factors=None):
 
 def _get_original_injected_power_fn(injections, pq_factors=None):
     """Calculates power flowing through injections.
-    
+
     Injected power is calculated this way
     (P = |V|**Exvp * P10, Q = |V|**Exvq * Q10; with |V| - magnitude of V):
     ::
@@ -441,8 +441,8 @@ get_injected_power_fn = partial(get_calc_injected_power_fn, _VMINSQR)
 
 def calculate_injected_node_current(
         mnodeinj, mnodeinjT, calc_injected_power, idx_slack, Vslack, Vnode_ri):
-    """Calculates injected current per injection. 
-    
+    """Calculates injected current per injection.
+
     Special processing of slack nodes.
 
     Parameters
@@ -517,8 +517,8 @@ def next_voltage(
         Vnode_ri = gb_lu.solve(Iinj_node_ri)
 
 def solved(precision, gb, Vnode_ri, Iinj_node_ri):
-    """Success-predicate function. 
-    
+    """Success-predicate function.
+
     Evaluates solution Vnode_ri, Iinj_node_ri.
 
     Parameters
@@ -541,12 +541,12 @@ def solved(precision, gb, Vnode_ri, Iinj_node_ri):
 def calculate_power_flow(
         model, Vslack=None, Vinit=None,
         pq_factors=None, loadcurve='original', precision=1e-8, max_iter=30):
-    """Power flow calculating function. 
-    
-    The function solves the non-linear power flow problem by solving the linear equations Y * V_n+1 = I(V_n)
-    iteratively. V_n+1 is computed from Y and I(V_n). n: index of iteration.
-    While in- and output use complex values the solver uses separated
-    values for real and imaginary parts.
+    """Power flow calculating function.
+
+    The function solves the non-linear power flow problem by solving the linear
+    equations Y * V_n+1 = I(V_n) iteratively. V_n+1 is computed from
+    Y and I(V_n). n: index of iteration. While in- and output use complex
+    values the solver uses separated values for real and imaginary parts.
 
     Parameters
     ----------
@@ -605,9 +605,9 @@ def calculate_power_flow(
 #
 
 def get_y_terms(branchterminals, term_to_factor):
-    """Creates y_mn and y_tot of terminals. 
-    
-    Multiplies admittances of branches with factors retrieved from 
+    """Creates y_mn and y_tot of terminals.
+
+    Multiplies admittances of branches with factors retrieved from
     tap positions.
 
     Parameters
@@ -660,7 +660,7 @@ def create_y(terms, count_of_nodes, term_factor):
 
 def create_y_matrix(model, term_factor):
     """Generates the branch-admittance matrix.
-    
+
     M[n,n] of slack nodes is set to 1, other values of slack nodes are zero.
     Hence, the returned matrix is unsymmetrical.
 
@@ -756,7 +756,7 @@ def get_injected_current_per_node(calculate_injected_power, model, Vnode):
 
 def calculate_injection_results(calculate_injected_power, model, Vnode):
     """Calculates electric data of injections according to node voltage.
-    
+
     Returns active and reactive power in pu.
 
     Parameters
@@ -794,7 +794,7 @@ def calculate_injection_results(calculate_injected_power, model, Vnode):
 
 def get_crossrefs(terms, count_of_nodes):
     """Creates connectivity matrices.
-    
+
     In particular:
     ::
         index_of_terminal, index_of_node -> 1
@@ -945,7 +945,7 @@ def calculate_branch_results(model, Vnode, pos):
 
 def calculate_results(model, power_fn, Vnode, pos):
     """Calculates and arranges electric data of injections and branches.
-    
+
     Uses a given voltage vector which is typically the result of a power
     flow calculation.
 
@@ -1075,7 +1075,7 @@ def get_residual_current_fn2(model, get_injected_power, Vslack=None):
 def eval_residual_current(
         model, get_injected_power, Vnode=None):
     """Convenience function for evaluation of a power flow calculation result.
-    
+
     Calls function get_residual_current_fn and get_residual_current
 
     Parameters
@@ -1114,10 +1114,10 @@ residual_node_current: function
     ()->(numpy.array<complex>)"""
 
 def calculate_electric_data(
-        model, voltages_cx, pq_factors=None, pos=None, 
+        model, voltages_cx, pq_factors=None, pos=None,
         vminsqr=_VMINSQR, loadcurve='interpolated'):
     """Calculates and arranges electric data of injections and branches.
-    
+
     Uses a given voltage vector which is e.g. the result of a power
     flow calculation.
 

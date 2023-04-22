@@ -80,12 +80,8 @@ class Calculate_power_flow(unittest.TestCase):
             grid.Tlink(
                 id_of_node='n_0', id_of_branch='line_0', id_of_factor='taps'))
         # calculate power flow
-        gen_factor_symbols0 = ft._create_symbols_with_ids(
-            model0.factors.gen_factor_data.index)
-        expr0 = estim.create_v_symbols_gb_expressions(
-            model0, gen_factor_symbols0)
         success0, vnode_ri0 = estim.calculate_power_flow(
-            model0, gen_factor_symbols0, expr0, vminsqr=_VMINSQR)
+            model0, vminsqr=_VMINSQR)
         self.assertTrue(success0, "calculate_power_flow shall succeed")
         # check residual current
         vnode_cx0 = estim.ri_to_complex(vnode_ri0)
@@ -114,12 +110,8 @@ class Calculate_power_flow(unittest.TestCase):
             grid.Tlink(
                 id_of_node='n_0', id_of_branch='line_0', id_of_factor='taps'))
         # calculate power flow
-        gen_factor_symbols1 = ft._create_symbols_with_ids(
-            model1.factors.gen_factor_data.index)
-        expr1 = estim.create_v_symbols_gb_expressions(
-            model1, gen_factor_symbols1)
         success1, vnode_ri1 = estim.calculate_power_flow(
-            model1, gen_factor_symbols1, expr1, vminsqr=_VMINSQR)
+            model1, vminsqr=_VMINSQR)
         self.assertTrue(success1, "calculate_power_flow shall succeed")
         # check residual current
         vnode_cx1 = estim.ri_to_complex(vnode_ri1)

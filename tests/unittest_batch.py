@@ -101,11 +101,8 @@ class Batch(unittest.TestCase):
         model = make_model(grid1, ipq_batches)
         #factordefs = ft.make_factordefs(model)
         # calculate power flow
-        gen_factor_symbols = ft._create_symbols_with_ids(
-            model.factors.gen_factor_data.index)
-        expr = estim.create_v_symbols_gb_expressions(model, gen_factor_symbols)
         success, vnode_ri = estim.calculate_power_flow(
-            model, gen_factor_symbols, expr, vminsqr=_VMINSQR)
+            model, vminsqr=_VMINSQR)
         vnode_ri2 = np.hstack(np.vsplit(vnode_ri.toarray(),2))
         self.assertTrue(success, "calculate_power_flow shall succeed")
         # check residual current
