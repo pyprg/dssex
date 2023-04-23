@@ -1120,7 +1120,6 @@ def _get_batch_expressions_br(model, v_syms_gb_ex, quantity):
         model of electric network for calculation
     v_syms_gb_ex: dict
         * 'Vnode_syms', casadi.SX, vectors, symbols of node voltages
-        * 'position_syms', casadi.SX, vector, symbols of tap positions
         * 'gb_mn_tot', casadi.SX, vectors, conductance and susceptance of
           branches connected to terminals
     quantity: 'I'|'P'|'Q'
@@ -1178,7 +1177,9 @@ def _get_batch_expressions_inj(model, ipqv, quantity):
             'index_of_injection')}
 
 def get_batch_expressions(model, v_syms_gb_ex, ipqv, quantity):
-    """Creates a vector (casadi.SX, shape n,1) expressing calculated
+    """Expresses calculated values I/P/Q in terms of variables/parameters.
+
+    Creates a vector (casadi.SX, shape n,1) expressing calculated
     values for absolute current, active power or reactive power. The
     expressions are based on the batch definitions.
 
@@ -1188,7 +1189,6 @@ def get_batch_expressions(model, v_syms_gb_ex, ipqv, quantity):
         model of electric network for calculation
     v_syms_gb_ex: dict
         * 'Vnode_syms', casadi.SX, vectors, symbols of node voltages
-        * 'position_syms', casadi.SX, vector, symbols of tap positions
         * 'gb_mn_tot', casadi.SX, vectors, conductance and susceptance of
           branches connected to terminals
     ipqv: casadi.SX (n,8)
@@ -1221,7 +1221,9 @@ def get_batch_expressions(model, v_syms_gb_ex, ipqv, quantity):
         f'quantity needs to be one of "I", "P" or "Q" but is "{quantity}"'
 
 def get_batch_flow_expressions(model, v_syms_gb_ex, ipqv, quantity):
-    """Creates a vector (casadi.SX, shape n,1) expressing the difference
+    """Expresses differences between measured and calculated values.
+
+    Creates a vector (casadi.SX, shape n,1) expressing the difference
     between measured and calculated values for absolute current, active power
     or reactive power. The expressions are based on the batch definitions.
     Intended use is building the objective.
@@ -1232,7 +1234,6 @@ def get_batch_flow_expressions(model, v_syms_gb_ex, ipqv, quantity):
         model of electric network for calculation
     v_syms_gb_ex: dict
         * 'Vnode_syms', casadi.SX, vectors, symbols of node voltages
-        * 'position_syms', casadi.SX, vector, symbols of tap positions
         * 'gb_mn_tot', casadi.SX, vectors, conductance and susceptance of
           branches connected to terminals
     ipqv: casadi.SX (n,8)
@@ -1283,7 +1284,9 @@ def get_node_expressions(index_of_node, Vnode_ri):
     return _DM_0r1c
 
 def get_diff_expressions(model, expressions, ipqv, quantities):
-    """Creates a vector (casadi.SX, shape n,1) expressing the difference
+    """Expresses differences between measured and calculated values.
+
+    Creates a vector (casadi.SX, shape n,1) expressing the difference
     between measured and calculated values for absolute current, active power
     or reactive power and voltage. The expressions are based on the batch
     definitions or referenced node. Intended use is building the objective.
@@ -1343,8 +1346,7 @@ def get_diff_expressions(model, expressions, ipqv, quantities):
     return np.array(_quantities), np.array(_ids), casadi.DM(_vals), _exprs
 
 def get_batch_constraints(values_of_constraints, expressions_of_batches):
-    """Creates expressions for constraints for keeping batch values
-    constant.
+    """Creates expressions of constraints for keeping batch values constant.
 
     Parameters
     ----------
@@ -1481,6 +1483,7 @@ def _rm_slack_entries(expr, count_of_slacks):
 
 def get_optimize_vk2(model, expressions, positions=None):
     """Prepares a function which optimizes node voltages and scaling factors.
+
     Processes slack differently than function 'get_optimize_vk'. Slackrows
     are removed from admittance matrix. Slackvoltages are parameters.
 
@@ -1560,8 +1563,7 @@ def get_optimize_vk2(model, expressions, positions=None):
 #
 
 def vstack(m, column_count=0):
-    """Helper, stacks columns of matrix m vertically which creates
-    a vector.
+    """Helper, stacks columns of matrix m vertically which creates a vector.
 
     Parameters
     ----------
@@ -1637,21 +1639,25 @@ def make_calculate(symbols, values):
         return fn(*values)
     return _calculate
 
-def get_calculate_from_result(model, expressions, factor_data, x):
-    """Creates a function which calculates the values of casadi.SX expressions
+def get_calculate_from_result(model, vsyms, factordata, x):
+    """Returns a function numerically evaluating casadi.SX-expressions.
+
+    Creates a function which calculates the values of casadi.SX expressions
     using the result of the nlp-solver.
 
     Parameters
     ----------
     model: egrid.model.Model
         model of electric network for calculation
-    expressions: dict
+    vsyms: dict
         * 'Vnode_syms', casadi.SX, vectors, symbols of node voltages
-        * 'position_syms', casadi.SX, vector, symbols of tap positions
         * 'Vslack_syms', symbols of slack voltages
-    factor_data: Factordata
-        calculation step specific symbols
-    x: casadi.SX
+    factordata: Factordata
+        step specific symbols
+        * .vars, casadi.SX, decision variables
+        * .consts, casadi.SX, parameters
+        * .values_of_consts, casadi.DM
+    x: casadi.DM
         result vector calculated by nlp-solver
 
     Returns
@@ -1659,22 +1665,20 @@ def get_calculate_from_result(model, expressions, factor_data, x):
     function
         (casadi.SX) -> (casadi.DM)
         (expressions) -> (values)"""
-    Vnode_ri_syms = vstack(expressions['Vnode_syms'], 2)
+    Vnode_ri_syms = vstack(vsyms['Vnode_syms'], 2)
     count_of_v_ri = Vnode_ri_syms.size1()
     voltages_ri = x[:count_of_v_ri].toarray()
-    x_scaling = x[count_of_v_ri:]
+    values_of_factors = x[count_of_v_ri:]
     Vslacks_neg = -model.slacks.V
     return make_calculate(
-        (factor_data.vars,
-         factor_data.consts,
+        (factordata.vars,
+         factordata.consts,
          Vnode_ri_syms,
-         vstack(expressions['Vslack_syms'], 2),
-         expressions['position_syms']),
-        (x_scaling,
-         factor_data.values_of_consts,
+         vstack(vsyms['Vslack_syms'], 2)),
+        (values_of_factors,
+         factordata.values_of_consts,
          voltages_ri,
-         casadi.vertcat(np.real(Vslacks_neg), np.imag(Vslacks_neg)),
-         model.branchtaps.position))
+         casadi.vertcat(np.real(Vslacks_neg), np.imag(Vslacks_neg))))
 
 #
 # convenience functions for easier handling of estimation
@@ -1804,8 +1808,8 @@ def get_step_data(
         diff_data, batch_constraints)
 
 def get_step_data_fns(model, gen_factor_symbols):
-    """Creates two functions for generating step specific data,
-    'ini_step_data' and 'next_step_data'.
+    """Creates two functions for generating step specific data.
+
     Function 'ini_step_data' creates the step_data structure for the first run
     of function 'optimize_step'. Function 'next_step_data' for all
     subsequent runs.
@@ -1813,9 +1817,10 @@ def get_step_data_fns(model, gen_factor_symbols):
     Parameters
     ----------
     model: egrid.model.Model
-
+        data of a balanced distribution network
     gen_factor_symbols: casadi.SX
-
+        generic factor symbols, decision variables or parameters for
+        scaling factors of injections and terminal factors (taps factors)
 
     Returns
     -------
@@ -1855,8 +1860,9 @@ def get_step_data_fns(model, gen_factor_symbols):
     make_step_data = partial(get_step_data, model, expressions)
     def next_step_data(
             step, step_data, voltages_ri, k, objectives='', constraints=''):
-        """Creates data for function 'optimize_step'. A previous step must have
-        created step_data.
+        """Creates data for function 'optimize_step'.
+
+        A previous step must have created step_data.
 
         Parameters
         ----------

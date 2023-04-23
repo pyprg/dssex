@@ -508,7 +508,7 @@ def _get_branch_flow_values(term_to_factor, vnode_ri2, branchterminals):
 
     Returns
     -------
-    numpy.array<float>, (shape m,3)
+    numpy.array<float>, (shape m,4)
         * [:,0] Ire, real part of current
         * [:,1] Iim, imaginary part of current
         * [:,2] P, active power
