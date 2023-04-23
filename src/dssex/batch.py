@@ -658,7 +658,7 @@ def get_batch_values(
     _vals = []
     quantities_upper = quantities.upper()
     if re.match(r'I|P|Q', quantities_upper):
-        term_to_factor = calculate_term_to_factor_n(model.factors)
+        term_to_factor = calculate_term_to_factor_n(model.factors, positions)
     for sel in quantities_upper:
         if sel in 'IPQ':
             id_val = _get_batch_flow_values(

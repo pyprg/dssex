@@ -25,8 +25,8 @@ import context # adds parent folder of dssex to search path
 import numpy as np
 import pandas as pd
 import dssex.pfcnum as pfc
-from egrid import make_model
 import egrid.builder as grid
+from egrid import make_model
 from numpy.testing import assert_array_equal, assert_array_almost_equal
 
 class Calculate_power_flow(unittest.TestCase):
@@ -230,6 +230,37 @@ class Calculate_electric_data(unittest.TestCase):
             S_pu,
             np.array([[Sconsumer]], dtype=np.complex128),
             err_msg='calculate_electric_data shall return the complex current')
+
+    def test_positions_parameter(self):
+        """positions parameter overrides position value of model"""
+        vslack = .994+.023j
+        model_pos0 = make_model(
+            grid.Slacknode('n_0', vslack),
+            grid.Branch('branch', 'n_0', 'n_1', y_lo=1e3),
+            grid.Injection('consumer', 'n_1', P10=30, Q10=10),
+            # value is different than in calcualted model
+            grid.Deft(id='taps', type='const', value=0, m=-.00625, n=1.),
+            grid.Tlink(
+                id_of_node='n_0', id_of_branch='branch', id_of_factor='taps'))
+        model = make_model(
+            grid.Slacknode('n_0', vslack),
+            grid.Branch('branch', 'n_0', 'n_1', y_lo=1e3),
+            grid.Injection('consumer', 'n_1', P10=30, Q10=10),
+            grid.Deft(id='taps', type='const', value=-16, m=-.00625, n=1.),
+            grid.Tlink(
+                id_of_node='n_0', id_of_branch='branch', id_of_factor='taps'))
+        success, vcx = pfc.calculate_power_flow(model)
+        self.assertTrue(
+            success,
+            'calculate_power_flow succeeds with slack node,'
+            ' branch with tapchanger and injection')
+        ed_pos0 = pfc.calculate_electric_data(
+            model_pos0, vcx, positions=np.array([-16], dtype=float))
+        ed = pfc.calculate_electric_data(model, vcx)
+        assert_array_almost_equal(
+            ed_pos0.residual_node_current(),
+            ed.residual_node_current(),
+            err_msg="residual current shall be equal")
 
 if __name__ == '__main__':
     unittest.main()

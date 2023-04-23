@@ -574,8 +574,7 @@ def get_expressions(model, gen_factor_symbols, vminsqr=_VMINSQR):
     ed['inj_to_node'] = casadi.SX(model.mnodeinj)
     return ed
 
-def calculate_power_flow2(
-        model, expr, factordata, Inode, Vinit=None, ):
+def calculate_power_flow2(model, expr, factordata, Inode, Vinit=None):
     """Solves the power flow problem using a rootfinding algorithm.
 
     The result can be the initial voltage vector for an optimization.
@@ -1859,8 +1858,8 @@ def get_step_data_fns(model, gen_factor_symbols):
 def optimize_step(
     model, expressions, factordata, Inode_inj, diffdata,
     constraints, Vnode_ri_ini=None):
-    """Runs one optimization step. 
-    
+    """Runs one optimization step.
+
     Calculates initial voltages if not provided.
 
     Parameters
@@ -1901,7 +1900,7 @@ def optimize_step(
     succ : bool
         success?
     voltages_ri : numpy.array, complex (shape 2n,1)
-        calculated node voltages for n nodes, 
+        calculated node voltages for n nodes,
         n values for real part then n values for imaginary part
     factors : numpy.array, float (shape m,1)
         values for factors"""
@@ -1978,7 +1977,7 @@ def optimize_steps(model, gen_factorsymbols, step_params=(), vminsqr=_VMINSQR):
         objectives = kv.get('objectives', '')
         constraints = kv.get('constraints', '')
         step_data = next_step_data(
-            step, step_data, voltages_ri, values_of_vars, 
+            step, step_data, voltages_ri, values_of_vars,
             objectives, constraints)
         succ, voltages_ri, values_of_vars = optimize_step(
             *step_data, voltages_ri)

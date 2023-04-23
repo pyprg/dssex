@@ -45,7 +45,7 @@ _VMINSQR = 0.8**2
 _zeros = np.zeros((0, 1), dtype=np.longdouble)
 _power_props = itemgetter('P10', 'Q10', 'Exp_v_p', 'Exp_v_q')
 
-def calculate_term_to_factor_n(factors, positions=None):
+def calculate_term_to_factor_n(factors, positions):
     """Calculates values for off-diagonal factors of branches having taps.
 
     Diagonal factors are just the square of the off-diagonal factors.
@@ -63,7 +63,7 @@ def calculate_term_to_factor_n(factors, positions=None):
             (iterable_of_int)-> (pandas.DataFrame)
         * .injfactorgroups: function
             (iterable_of_int)-> (pandas.DataFrame)
-    pos: numpy.array
+    positions: numpy.array
         float, tap-position
 
     Returns
@@ -575,7 +575,7 @@ def calculate_power_flow(
               np.vstack([np.real(Vinit), np.imag(Vinit)]))
     Vslack_ = (
         model.slacks.V.to_numpy().reshape(-1,1) if Vslack is None else Vslack)
-    term_to_factor = calculate_term_to_factor_n(model.factors)
+    term_to_factor = calculate_term_to_factor_n(model.factors, positions=None)
     gb = create_gb_matrix(model, term_to_factor)
     mnodeinj = model.mnodeinj
     _next_voltage = partial(
@@ -853,7 +853,7 @@ def get_branch_admittance_matrices(y_lo, y_tot, term_is_at_A):
          y_22.reshape(-1, 1)])
         .reshape(-1, 2, 2))
 
-def get_y_branches(model, terms, term_is_at_A, pos):
+def get_y_branches(model, terms, term_is_at_A, positions):
     """Creates one admittance matrix per branch.
 
     Parameters
@@ -864,13 +864,13 @@ def get_y_branches(model, terms, term_is_at_A, pos):
 
     term_is_at_A: numpy.array, bool, index of terminal
        True if terminal is at side A of a branch
-    pos: numpy.array
+    positions: numpy.array
         float, tap-position
 
     Returns
     -------
     numpy.array, complex, shape=(n, 2, 2)"""
-    term_to_factor = calculate_term_to_factor_n(model.factors, pos)
+    term_to_factor = calculate_term_to_factor_n(model.factors, positions)
     y_lo, y_tot = get_y_terms(terms, term_to_factor)
     return get_branch_admittance_matrices(y_lo, y_tot, term_is_at_A)
 
@@ -893,7 +893,7 @@ def get_v_branches(terms, voltages):
     Votherterm = np.asarray(mtermothernode @ voltages)
     return np.hstack([Vterm, Votherterm]).reshape(-1, 2, 1)
 
-def calculate_branch_results(model, Vnode, pos):
+def calculate_branch_results(model, Vnode, positions):
     """Calculates P, Q per branch terminal. Calculates Ploss, Qloss per branch.
 
     Parameters
@@ -902,7 +902,7 @@ def calculate_branch_results(model, Vnode, pos):
         model of grid for calculation
     Vnode: numpy.array, complex
         voltages at nodes
-    pos: numpy.array
+    positions: numpy.array
         float, tap-positions
 
     Returns
@@ -913,7 +913,7 @@ def calculate_branch_results(model, Vnode, pos):
     branchterminals = model.branchterminals
     terms = branchterminals[(~branchterminals.is_bridge)].reset_index()
     term_is_at_A = terms.side == 'A'
-    Ybr = get_y_branches(model, terms, term_is_at_A, pos)
+    Ybr = get_y_branches(model, terms, term_is_at_A, positions)
     Vbr = get_v_branches(terms[term_is_at_A], Vnode)
     Ibr = Ybr @ Vbr
     # converts from single phase calculation to 3-phase system
@@ -940,7 +940,7 @@ def calculate_branch_results(model, Vnode, pos):
     dfi = pd.DataFrame(Ibr.reshape(-1,2), columns=('I0cx_pu', 'I1cx_pu'))
     return pd.concat([dfbr, dfres, dfi, dfv, dfv_abs], axis=1)
 
-def calculate_results(model, power_fn, Vnode, pos):
+def calculate_results(model, power_fn, Vnode, positions=None):
     """Calculates and arranges electric data of injections and branches.
 
     Uses a given voltage vector which is typically the result of a power
@@ -958,7 +958,7 @@ def calculate_results(model, power_fn, Vnode, pos):
             (active power P, reactive power Q)
     Vnode: array_like, complex
         node voltage vector
-    pos: numpy.array
+    positions: numpy.array
         float, tap position
 
     Returns
@@ -970,7 +970,7 @@ def calculate_results(model, power_fn, Vnode, pos):
                  if isinstance(power_fn, str) else power_fn)
     return {
         'injections': calculate_injection_results(power_fn_, model, Vnode),
-        'branches': calculate_branch_results(model, Vnode, pos)}
+        'branches': calculate_branch_results(model, Vnode, positions)}
 
 def get_residual_current(model, get_injected_power, Y, Vnode):
     """Calculates the complex residual current per node.
@@ -1041,9 +1041,11 @@ def get_residual_current_fn(model, get_injected_power):
     function
         (numpy.array<complex>) -> (numpy.ndarray<complex>)
         (voltage_of_nodes) -> (current_of_node)"""
-    term_to_factor = calculate_term_to_factor_n(model.factors)
-    Y = create_y_matrix(model, term_to_factor).tocsc()
-    return partial(get_residual_current, model, get_injected_power, Y)
+    def fn(Vnode, positions):
+        term_to_factor = calculate_term_to_factor_n(model.factors, positions)
+        Y = create_y_matrix(model, term_to_factor).tocsc()
+        return get_residual_current(model, get_injected_power, Y, Vnode)
+    return fn
 
 def get_residual_current_fn2(model, get_injected_power, Vslack=None):
     """Parameterizes function get_residual_current2.
@@ -1063,14 +1065,16 @@ def get_residual_current_fn2(model, get_injected_power, Vslack=None):
     function
         (numpy.array<complex>) -> (numpy.array<complex>)
         (voltage_at_nodes) -> (current_into_nodes)"""
-    Vslack_ = model.slacks.V.to_numpy() if Vslack is None else Vslack
-    term_to_factor = calculate_term_to_factor_n(model.factors)
-    Y = create_y_matrix2(model, term_to_factor).tocsc()
-    return partial(
-        get_residual_current2, model, get_injected_power, Vslack_, Y)
+    def fn(Vnode, positions):
+        Vslack_ = model.slacks.V.to_numpy() if Vslack is None else Vslack
+        term_to_factor = calculate_term_to_factor_n(model.factors)
+        Y = create_y_matrix2(model, term_to_factor).tocsc()
+        return get_residual_current2(
+            model, get_injected_power, Vslack_, Y, Vnode)
+    return fn
 
 def eval_residual_current(
-        model, get_injected_power, Vnode=None):
+        model, get_injected_power, Vnode, positions=None):
     """Convenience function for evaluation of a power flow calculation result.
 
     Calls function get_residual_current_fn and get_residual_current
@@ -1084,13 +1088,15 @@ def eval_residual_current(
         (square_of_absolute_node-voltage) -> (active power P, reactive power Q)
     Vnode: array_like, complex
         node voltage vector
+    positions: numpy.array
+        float, tap-position
 
     Returns
     -------
     numpy.ndarray
         complex, residual node current"""
     return (
-        get_residual_current_fn(model, get_injected_power)(Vnode)
+        get_residual_current_fn(model, get_injected_power)(Vnode, positions)
         .reshape(-1, 1))
 
 Electric_data = namedtuple(
@@ -1111,7 +1117,7 @@ residual_node_current: function
     ()->(numpy.array<complex>)"""
 
 def calculate_electric_data(
-        model, voltages_cx, pq_factors=None, pos=None,
+        model, voltages_cx, pq_factors=None, positions=None,
         vminsqr=_VMINSQR, loadcurve='interpolated'):
     """Calculates and arranges electric data of injections and branches.
 
@@ -1126,7 +1132,7 @@ def calculate_electric_data(
     pq_factors: numpy.array, float, (nx2)
         optional
         factors for active and reactive power
-    pos: numpy.array, float, (nx1)
+    positions: numpy.array, float, (nx1)
         optional
         factors for terminals (taps)
     vminsqr : float, optional
@@ -1146,7 +1152,7 @@ def calculate_electric_data(
     get_injected_power = get_calc_injected_power_fn(
         vminsqr, model.injections, pq_factors, loadcurve)
     result_data = calculate_results(
-        model, get_injected_power, voltages_cx, pos)
+        model, get_injected_power, voltages_cx, positions)
     def br_data(columns=None):
         """Returns calculated electric data of branches.
 
@@ -1202,4 +1208,4 @@ def calculate_electric_data(
             index=model.nodes.index,
             columns=['V_pu', 'Vcx_pu']),
         residual_node_current=lambda:eval_residual_current(
-            model, get_injected_power, Vnode=voltages_cx))
+            model, get_injected_power, voltages_cx, positions))
