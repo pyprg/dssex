@@ -58,7 +58,7 @@ def calculate_term_to_factor_n(factors, positions=None):
     factors: Factors
         * .gen_factor_data, pandas.DataFrame
         * .gen_injfactor, pandas.DataFrame
-        * .gen_termfactor, pandas.DataFrame
+        * .terminalfactors, pandas.DataFrame
         * .factorgroups: function
             (iterable_of_int)-> (pandas.DataFrame)
         * .injfactorgroups: function
@@ -70,10 +70,7 @@ def calculate_term_to_factor_n(factors, positions=None):
     -------
     pandas.DataFrame (index_of_terminal) ->
         * .ftaps, float"""
-    termfactor = (
-        factors
-        .gen_termfactor[['id', 'index_of_terminal']]
-        .join(factors.gen_factor_data, on='id', how='inner'))
+    termfactor = factors.terminalfactors
     pos_ = termfactor.value.to_numpy() if positions is None else positions
     if termfactor.empty:
         # empty pandas.DataFrame
@@ -1118,8 +1115,7 @@ def calculate_electric_data(
         vminsqr=_VMINSQR, loadcurve='interpolated'):
     """Calculates and arranges electric data of injections and branches.
 
-    Uses a given voltage vector which is e.g. the result of a power
-    flow calculation.
+    Uses a given voltage vector, e.g. the result of a power flow calculation.
 
     Parameters
     ----------

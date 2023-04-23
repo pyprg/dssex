@@ -135,7 +135,7 @@ var_const_to_ftaps: array_like
     int, converts var_const to ftaps, factor assigned to
     (selected) terminals (var_const[var_const_to_ftaps])"""
 
-def make_factor_data(model, gen_factor_symbols, step=0, k_prev=_NPARRAY_0r1c):
+def make_factor_data(model, gen_factor_symbols, step=0, f_prev=_NPARRAY_0r1c):
     """Returns data of decision variables and of parameters for a given step.
 
     Parameters
@@ -146,13 +146,13 @@ def make_factor_data(model, gen_factor_symbols, step=0, k_prev=_NPARRAY_0r1c):
         symbols of generic (for each step) decision variables or parameters
     step: int
         index of optimization step, first index is 0
-    k_prev: numpy.array, optional
+    f_prev: numpy.array, optional
         float, factors of previous optimization step
 
     Returns
     -------
     Factordata"""
-    fm = ef.make_factor_meta(model, step, k_prev)
+    fm = ef.make_factor_meta(model, step, f_prev)
     symbols = make_factor_symbols(
         gen_factor_symbols,
         fm.id_of_step_symbol,
@@ -179,7 +179,7 @@ def make_factor_data(model, gen_factor_symbols, step=0, k_prev=_NPARRAY_0r1c):
         var_const_to_kq=fm.var_const_to_kq,
         var_const_to_ftaps=fm.var_const_to_ftaps)
 
-def get_values_of_factors(factordata, factors):
+def separate_factors(factordata, factors):
     """Function for extracting factors of injections and terminals
     (taps factors) from the result provided by the solver.
     Enhances factors calculated by optimization with values of parameters and

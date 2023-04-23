@@ -26,7 +26,7 @@ import egrid.builder as grid
 from egrid import make_model
 from numpy.testing import assert_array_equal
 
-class Get_values_of_factors(unittest.TestCase):
+class Separate_factors(unittest.TestCase):
 
     def test_no_data(self):
         """"""
@@ -34,7 +34,7 @@ class Get_values_of_factors(unittest.TestCase):
         gen_factor_symbols = ft._create_symbols_with_ids(
             model.factors.gen_factor_data.index)
         factor_data = ft.make_factor_data(model, gen_factor_symbols, 0)
-        fk, ftaps, factors = ft.get_values_of_factors(
+        fk, ftaps, factors = ft.separate_factors(
             factor_data, np.zeros((0,1), dtype=float))
         self.assertEqual(fk.shape, (0, 2), 'no scaling factors')
         self.assertEqual(ftaps.shape, (0, 1), 'no taps (terminal) factors')
@@ -55,7 +55,7 @@ class Get_values_of_factors(unittest.TestCase):
         gen_factor_symbols = ft._create_symbols_with_ids(
             model.factors.gen_factor_data.index)
         factor_data = ft.make_factor_data(model, gen_factor_symbols, 0)
-        fk, ftaps, factors = ft.get_values_of_factors(
+        fk, ftaps, factors = ft.separate_factors(
             factor_data, np.zeros((0,1), dtype=float))
         self.assertEqual(fk.shape, (2, 2), '2x2 scaling factors')
         assert_array_equal(
@@ -90,7 +90,7 @@ class Get_values_of_factors(unittest.TestCase):
             model.factors.gen_factor_data.index)
         factor_data = ft.make_factor_data(model, gen_factor_symbols, 0)
         solution_vector = np.array([27., 42.]).reshape(-1,1)
-        fk, ftaps, factors = ft.get_values_of_factors(
+        fk, ftaps, factors = ft.separate_factors(
             factor_data, solution_vector)
         self.assertEqual(fk.shape, (2, 2), '2x2 scaling factors')
         assert_array_equal(
@@ -124,7 +124,7 @@ class Get_values_of_factors(unittest.TestCase):
             model.factors.gen_factor_data.index)
         factor_data = ft.make_factor_data(model, gen_factor_symbols, 0)
         solution_vector = np.array([-3.]).reshape(-1,1)
-        fk, ftaps, factors = ft.get_values_of_factors(
+        fk, ftaps, factors = ft.separate_factors(
             factor_data, solution_vector)
         self.assertEqual(fk.shape, (2, 2), '2x2 taps factors')
         assert_array_equal(
