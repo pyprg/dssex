@@ -20,7 +20,7 @@ Created on Mon Mar  6 22:50:14 2023
 @author: pyprg
 """
 DEFAULT_NETWORK = """
-         slack=True   y_lo=1e3-1e3j             y_lo=2e3-2e3j
+         slack=True   y_lo=1e3-1e3j           y_lo=2e3-2e3j
         n0<----------cable--------->n1<------line------>n2
                                     |                   |
                                     |                   |
@@ -43,7 +43,7 @@ def calculate_pf(model, step_params=()):
     A multiline string can be the model e.g
     (the default input if no args are given)
     ::
-         slack=True   y_lo=1e3-1e3j             y_lo=2e3-2e3j
+         slack=True   y_lo=1e3-1e3j           y_lo=2e3-2e3j
         n0<----------cable--------->n1<------line------>n2
                                     |                   |
                                     |                   |

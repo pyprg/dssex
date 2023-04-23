@@ -344,14 +344,14 @@ def _reset_slack_current(
     Iinj_ri[slack_indices,1] = Vim_slack_syms # imag(Iinj)
     return Iinj_ri
 
-def get_term_factor_expressions(factors, gen_factor_symbols):
+def get_term_factor_expressions(terminalfactors, gen_factor_symbols):
     """Creates expressions for off-diagonal factors of branches.
 
     Diagonal factors are just the square of the off-diagonal factors.
 
     Parameters
     ----------
-    factors: egrid.factors.Factors
+    terminalfactors: pandas.DataFrame
 
     gen_factor_symbols: casadi.SX
 
@@ -361,22 +361,21 @@ def get_term_factor_expressions(factors, gen_factor_symbols):
         * numpy.array, int, indices of terminals
         * numpy.array, int, indices of other terminals
         * casadi.SX"""
-    termfactor = factors.terminalfactors
-    symbol = gen_factor_symbols[termfactor.index_of_symbol]
+    symbol = gen_factor_symbols[terminalfactors.index_of_symbol]
     return (
-        termfactor.index_of_terminal.to_numpy(),
-        termfactor.index_of_other_terminal.to_numpy(),
+        terminalfactors.index_of_terminal.to_numpy(),
+        terminalfactors.index_of_other_terminal.to_numpy(),
         # y = mx + n
-        (casadi.DM(termfactor.m) * symbol) + casadi.DM(termfactor.n))
+        (casadi.DM(terminalfactors.m) * symbol) + casadi.DM(terminalfactors.n))
 
-def make_fmn_ftot(count_of_terminals, factordefs, gen_factor_symbols):
+def make_fmn_ftot(count_of_terminals, terminalfactors, gen_factor_symbols):
     """Creates expressions of terminal factors (taps factors).
 
     Parameters
     ----------
     count_of_terminals: int
         number of terminals
-    factordefs: Factordefs
+    terminalfactors: pandas.DataFrame
 
     Returns
     -------
@@ -384,12 +383,52 @@ def make_fmn_ftot(count_of_terminals, factordefs, gen_factor_symbols):
         * casadi.SX, fmn, factor for y_mn admittances
         * casadi.SX, ftot, factors for y_tot admittance"""
     idx_term, idx_otherterm, foffd = get_term_factor_expressions(
-        factordefs, gen_factor_symbols)
+        terminalfactors, gen_factor_symbols)
     foffd_term = casadi.SX.ones(count_of_terminals)
     foffd_term[idx_term] = foffd
     foffd_otherterm = casadi.SX.ones(count_of_terminals)
     foffd_otherterm[idx_otherterm] = foffd
     return (foffd_term * foffd_otherterm), (foffd_term * foffd_term)
+
+def _create_gb_mn_tot_terms(terminals, terminalfactors, gen_factor_symbols):
+    """Creates conductance and  susceptance expressions for each terminal.
+
+    Parameters
+    ----------
+    terminals: pandas.DataFrame
+
+    terminalfactors: pandas.DataFrame
+
+    gen_factor_symbols: casadi.SX, shape(m,1)
+        symbols of generic decision variables or generic parameters,
+        generic variables/parameters are present in each optimization step,
+        they are identical in each step, whereas the collection of
+        step-specific variables and parameters change from step to step
+
+    Returns
+    -------
+    casadi.SX
+        * 'gb_mn_tot', conductance g / susceptance b per branch terminal
+                * gb_mn_tot[:,0] g_mn, mutual conductance
+                * gb_mn_tot[:,1] b_mn, mutual susceptance
+                * gb_mn_tot[:,2] g_tot, self conductance + mutual conductance
+                * gb_mn_tot[:,3] b_tot, self susceptance + mutual susceptance
+    """
+    # create gb_mn_mm
+    #   g_mn, b_mn, g_mm, b_mm
+    gb_mn_tot = casadi.SX(
+        terminals[['g_lo', 'b_lo', 'g_tr_half', 'b_tr_half']].to_numpy())
+    # create gb_mn_tot
+    #   g_mm + g_mn
+    gb_mn_tot[:,2] += gb_mn_tot[:,0]
+    #   b_mm + b_mn
+    gb_mn_tot[:,3] += gb_mn_tot[:,1]
+    if not terminalfactors.empty:
+        fmn, ftot = make_fmn_ftot(
+            len(terminals), terminalfactors, gen_factor_symbols)
+        gb_mn_tot[:, :2] *= fmn
+        gb_mn_tot[:, 2:] *= ftot
+    return gb_mn_tot
 
 def create_v_symbols_gb_expressions(model, gen_factor_symbols):
     """Creates symbols for node and slack voltages. Creates expressions.
@@ -404,7 +443,11 @@ def create_v_symbols_gb_expressions(model, gen_factor_symbols):
     ----------
     model: egrid.model.Model
         data of electric grid
-    gen_factor_symbols: casadi.SX, shape(n,1)
+    Vnode_syms: casadi.SX, shape(n,3)
+        * [:,0] Vre, real part of complex voltage
+        * [:,1] Vim, imaginary part of complex voltage
+        * [:,2] Vre**2 + Vim**2
+    gen_factor_symbols: casadi.SX, shape(m,1)
         symbols of generic decision variables or generic parameters,
         generic variables/parameters are present in each optimization step,
         they are identical in each step, whereas the collection of
@@ -423,34 +466,23 @@ def create_v_symbols_gb_expressions(model, gen_factor_symbols):
                 * gb_mn_tot[:,3] b_tot, self susceptance + mutual susceptance
         * 'Y_by_V', casadi.SX, expression for Y @ V"""
     Vnode_syms = create_V_symbols(model.shape_of_Y[0])
-    terms = model.branchterminals
-    # create gb_mn_mm
-    #   g_mn, b_mn, g_mm, b_mm
-    gb_mn_tot = casadi.SX(
-        terms[['g_lo', 'b_lo', 'g_tr_half', 'b_tr_half']].to_numpy())
-    # create gb_mn_tot
-    #   g_mm + g_mn
-    gb_mn_tot[:,2] += gb_mn_tot[:,0]
-    #   b_mm + b_mn
-    gb_mn_tot[:,3] += gb_mn_tot[:,1]
-    factors = model.factors
-    if not factors.terminalfactors.empty:
-        fmn, ftot = make_fmn_ftot(len(terms), factors, gen_factor_symbols)
-        gb_mn_tot[:, :2] *= fmn
-        gb_mn_tot[:, 2:] *= ftot
+    count_of_slacks = model.count_of_slacks
+    Vslack_syms=casadi.horzcat(
+        casadi.SX.sym('Vre_slack', count_of_slacks),
+        casadi.SX.sym('Vim_slack', count_of_slacks))
+    terminals = model.branchterminals
+    gb_mn_tot = _create_gb_mn_tot_terms(
+        terminals, model.factors.terminalfactors, gen_factor_symbols)
     G_, B_ = _create_gb_matrix(
-        terms.index_of_node,
-        terms.index_of_other_node,
+        terminals.index_of_node,
+        terminals.index_of_other_node,
         model.shape_of_Y,
         gb_mn_tot)
-    count_of_slacks = model.count_of_slacks
     G = _reset_slack_1(G_, count_of_slacks)
     B = _reset_slack_0(B_, count_of_slacks)
     return dict(
         Vnode_syms=Vnode_syms,
-        Vslack_syms=casadi.horzcat(
-            casadi.SX.sym('Vre_slack', count_of_slacks),
-            casadi.SX.sym('Vim_slack', count_of_slacks)),
+        Vslack_syms=Vslack_syms,
         gb_mn_tot=gb_mn_tot,
         Y_by_V=multiply_Y_by_V(Vnode_syms, G, B))
 
@@ -662,12 +694,12 @@ def calculate_power_flow(model, Vinit=None, vminsqr=_VMINSQR):
     v_syms_gb_ex = create_v_symbols_gb_expressions(model, gen_factor_symbols)
     get_factor_and_injection_data = make_get_factor_and_injection_data(
         model, gen_factor_symbols, v_syms_gb_ex['Vnode_syms'], vminsqr)
-    factordata, Iinj_data = get_factor_and_injection_data(step=0)
+    factordata, injectiondata = get_factor_and_injection_data(step=0)
     Vslack_syms = v_syms_gb_ex['Vslack_syms']
     Inode_inj = _reset_slack_current(
         model.slacks.index_of_node,
         Vslack_syms[:,0], Vslack_syms[:,1],
-        casadi.SX(model.mnodeinj) @ Iinj_data[:,:2])
+        casadi.SX(model.mnodeinj) @ injectiondata[:,:2])
     return calculate_power_flow2(
         model, v_syms_gb_ex, factordata, Inode_inj, Vinit)
 
