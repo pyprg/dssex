@@ -97,7 +97,7 @@ class Batch(unittest.TestCase):
             # given voltage at node n_3
             grid.Vvalue('n_2'),
             grid.Vvalue('n_3')]
-        pq_factors = np.ones((3,2), dtype=float)
+        kpq = np.ones((3,2), dtype=float)
         model = make_model(grid1, ipq_batches)
         #factordefs = ft.make_factordefs(model)
         # calculate power flow
@@ -109,17 +109,17 @@ class Batch(unittest.TestCase):
         vnode_cx = estim.ri_to_complex(vnode_ri)
         get_injected_power = get_injected_power_fn(
             model.injections,
-            pq_factors=pq_factors,
+            kpq=kpq,
             loadcurve='interpolated')
         Inode = pfc.eval_residual_current(
             model, get_injected_power, Vnode=vnode_cx)
         # without slack node, slack is at index 0
         max_dev = norm(Inode[model.count_of_slacks:], np.inf)
         self.assertLess(max_dev, 6e-8, 'residual node current is 0')
-        ed = pfc.calculate_electric_data(model, vnode_cx, pq_factors)
+        ed = pfc.calculate_electric_data(model, vnode_cx, kpq)
         # act
         batch_values = batch.get_batch_values(
-            model, vnode_ri2, pq_factors, None, 'IPQV')
+            model, vnode_ri2, kpq, None, 'IPQV')
         # test
         df_batch = (
             pd.DataFrame(

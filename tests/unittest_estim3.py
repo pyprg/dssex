@@ -70,7 +70,7 @@ order_of_nodes = pd.Series(
 class Calculate_power_flow(unittest.TestCase):
 
     def test_taps_factor(self):
-        pq_factors = np.ones((3,2), dtype=float)
+        kpq = np.ones((3,2), dtype=float)
         # first: tapsposition == 0 -> no impact to voltage
         model0 = make_model(
             grid1,
@@ -87,14 +87,14 @@ class Calculate_power_flow(unittest.TestCase):
         vnode_cx0 = estim.ri_to_complex(vnode_ri0)
         get_injected_power0 = get_injected_power_fn(
             model0.injections,
-            pq_factors=pq_factors,
+            kpq=kpq,
             loadcurve='interpolated')
         Inode0 = pfc.eval_residual_current(
             model0, get_injected_power0, Vnode=vnode_cx0)
         # without slack node, slack is at index 0
         max_dev0 = norm(Inode0[model0.count_of_slacks:], np.inf)
         self.assertLess(max_dev0, 3e-8, 'residual node current is 0')
-        ed = pfc.calculate_electric_data(model0, vnode_cx0, pq_factors)
+        ed = pfc.calculate_electric_data(model0, vnode_cx0, kpq)
         idx_v = model0.nodes.reindex(order_of_nodes.index).index_of_node
         # df_Vcx0 = pd.DataFrame(
         #     {'id_of_node': order_of_nodes.index,
@@ -117,14 +117,14 @@ class Calculate_power_flow(unittest.TestCase):
         vnode_cx1 = estim.ri_to_complex(vnode_ri1)
         get_injected_power1 = get_injected_power_fn(
             model1.injections,
-            pq_factors=pq_factors,
+            kpq=kpq,
             loadcurve='interpolated')
         Inode1 = pfc.eval_residual_current(
             model1, get_injected_power1, Vnode=vnode_cx1)
         # without slack node, slack is at index 0
         max_dev1 = norm(Inode1[model1.count_of_slacks:], np.inf)
         self.assertLess(max_dev1, 3e-8, 'residual node current is 0')
-        ed = pfc.calculate_electric_data(model1, vnode_cx1, pq_factors)
+        ed = pfc.calculate_electric_data(model1, vnode_cx1, kpq)
         idx_v = model1.nodes.reindex(order_of_nodes.index).index_of_node
         # df_Vcx1 = pd.DataFrame(
         #     {'id_of_node': order_of_nodes.index,
