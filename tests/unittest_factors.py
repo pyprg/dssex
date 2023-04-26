@@ -39,7 +39,7 @@ class Make_get_factor_data(unittest.TestCase):
             grid.Injection('consumer1', 'n_0'))
         self.assertIsNotNone(model, "make_model makes models")
         gen_factor_symbols = ft._create_symbols_with_ids(
-            model.factors.gen_factor_data.index)
+            model.factors.gen_factordata.index)
         factor_data = ft.make_factor_data(model, gen_factor_symbols, 0)
         self.assertEqual(
             factor_data.kpq.shape,
@@ -108,7 +108,7 @@ class Make_get_factor_data(unittest.TestCase):
                 id_of_factor='taps'))
         self.assertIsNotNone(model, "make_model makes models")
         gen_factor_symbols = ft._create_symbols_with_ids(
-            model.factors.gen_factor_data.index)
+            model.factors.gen_factordata.index)
         factor_data = ft.make_factor_data(model, gen_factor_symbols, 0)
         self.assertEqual(
             factor_data.kpq.shape,
@@ -160,7 +160,7 @@ class Make_get_factor_data(unittest.TestCase):
                 step=0))
         self.assertIsNotNone(model, "make_model makes models")
         gen_factor_symbols = ft._create_symbols_with_ids(
-            model.factors.gen_factor_data.index)
+            model.factors.gen_factordata.index)
         factor_data = ft.make_factor_data(model, gen_factor_symbols, 0)
         self.assertEqual(
             factor_data.kpq.shape,
@@ -227,7 +227,7 @@ class Make_get_factor_data(unittest.TestCase):
                 step=1))
         self.assertIsNotNone(model, "make_model makes models")
         gen_factor_symbols = ft._create_symbols_with_ids(
-            model.factors.gen_factor_data.index)
+            model.factors.gen_factordata.index)
         factor_data = ft.make_factor_data(model, gen_factor_symbols, 1)
         self.assertEqual(
             factor_data.kpq.shape,

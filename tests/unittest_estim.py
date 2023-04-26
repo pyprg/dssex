@@ -407,7 +407,7 @@ class Power_flow_calculation_basic2(unittest.TestCase):
         results like function 'dssex.pfcnum.calculate_power_flow'."""
         model = make_model(grid_pfc3)
         gen_factor_symbols = ft._create_symbols_with_ids(
-            model.factors.gen_factor_data.index)
+            model.factors.gen_factordata.index)
         expressions = estim.get_expressions(model, gen_factor_symbols)
         step_data = estim.get_step_data(model, expressions)
         succ_estim, Vnode_ri_estim, _ = estim.optimize_step(*step_data)
@@ -455,7 +455,7 @@ class Optimize_step(unittest.TestCase):
                 id_of_factor='kp',
                 step=0))
         gen_factor_symbols = ft._create_symbols_with_ids(
-            model.factors.gen_factor_data.index)
+            model.factors.gen_factordata.index)
         expressions = estim.get_expressions(model, gen_factor_symbols)
         step_data = estim.get_step_data(
             model, expressions, objectives='P')
@@ -493,7 +493,7 @@ class Optimize_step(unittest.TestCase):
                 id_of_factor='kp',
                 step=0))
         gen_factor_symbols = ft._create_symbols_with_ids(
-            model.factors.gen_factor_data.index)
+            model.factors.gen_factordata.index)
         expressions = estim.get_expressions(model, gen_factor_symbols)
         step_data = estim.get_step_data(
             model, expressions, objectives='P')
@@ -531,7 +531,7 @@ class Optimize_step(unittest.TestCase):
                 id_of_factor='kq',
                 step=0))
         gen_factor_symbols = ft._create_symbols_with_ids(
-            model.factors.gen_factor_data.index)
+            model.factors.gen_factordata.index)
         expressions = estim.get_expressions(model, gen_factor_symbols)
         step_data = estim.get_step_data(
             model, expressions, objectives='Q')
@@ -569,7 +569,7 @@ class Optimize_step(unittest.TestCase):
                 id_of_factor='kq',
                 step=0))
         gen_factor_symbols = ft._create_symbols_with_ids(
-            model.factors.gen_factor_data.index)
+            model.factors.gen_factordata.index)
         expressions = estim.get_expressions(model, gen_factor_symbols)
         step_data = estim.get_step_data(
             model, expressions, objectives='Q')
@@ -607,7 +607,7 @@ class Optimize_step(unittest.TestCase):
                 id_of_factor='kpq',
                 step=0))
         gen_factor_symbols = ft._create_symbols_with_ids(
-            model.factors.gen_factor_data.index)
+            model.factors.gen_factordata.index)
         expressions = estim.get_expressions(model, gen_factor_symbols)
         step_data = estim.get_step_data(
             model, expressions, objectives='I')
@@ -645,7 +645,7 @@ class Optimize_step(unittest.TestCase):
                 id_of_factor=('kpq', 'kpq'),
                 step=0))
         gen_factor_symbols = ft._create_symbols_with_ids(
-            model.factors.gen_factor_data.index)
+            model.factors.gen_factordata.index)
         expressions = estim.get_expressions(model, gen_factor_symbols)
         step_data = estim.get_step_data(
             model, expressions, objectives='I')
@@ -682,7 +682,7 @@ class Optimize_step(unittest.TestCase):
                 id_of_factor='kq',
                 step=0))
         gen_factor_symbols = ft._create_symbols_with_ids(
-            model.factors.gen_factor_data.index)
+            model.factors.gen_factordata.index)
         expressions = estim.get_expressions(model, gen_factor_symbols)
         step_data = estim.get_step_data(
             model, expressions, objectives='V')

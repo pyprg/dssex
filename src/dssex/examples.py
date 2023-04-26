@@ -59,8 +59,9 @@ import numpy as np
 import pfcnum as pfc
 from egrid import make_model
 
-model = model = make_model(schema)
+model = make_model(schema)
 kpq = np.ones((len(model.injections), 2), dtype=float)
+kpq[:,:] = .5
 success, vcx = pfc.calculate_power_flow(model, kpq=kpq)
 ed = pfc.calculate_electric_data(model, vcx, kpq=kpq)
 vals_nodes = ed.node()

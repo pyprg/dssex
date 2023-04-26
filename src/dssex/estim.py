@@ -570,7 +570,7 @@ def get_expressions(model, gen_factor_symbols, vminsqr=_VMINSQR):
     model : egrid.model.Model
         data of electric grid
     factordefs: Factordefs
-        * .gen_factor_data, pandas.DataFrame
+        * .gen_factordata, pandas.DataFrame
         * .gen_injfactor, pandas.DataFrame
         * .terminalfactors, pandas.DataFrame
         * .factorgroups: function
@@ -690,7 +690,7 @@ def calculate_power_flow(model, Vinit=None, vminsqr=_VMINSQR):
         * bool, success?
         * casadi.DM, float, voltage vector [real parts, imaginary parts]"""
     gen_factor_symbols = ft._create_symbols_with_ids(
-        model.factors.gen_factor_data.index)
+        model.factors.gen_factordata.index)
     v_syms_gb_ex = create_v_symbols_gb_expressions(model, gen_factor_symbols)
     get_factor_and_injection_data = make_get_factor_and_injection_data(
         model, gen_factor_symbols, v_syms_gb_ex['Vnode_syms'], vminsqr)
@@ -2098,7 +2098,7 @@ def estimate(model, step_params=(), vminsqr=_VMINSQR):
             scaling factors for injections
         * tappositions"""
     gen_factor_symbols = ft._create_symbols_with_ids(
-        model.factors.gen_factor_data.index)
+        model.factors.gen_factordata.index)
     return (
         (step, succ, *get_Vcx_factors(factordata, v_ri, factorvalues))
         for step, succ, v_ri, factorvalues, factordata in optimize_steps(
