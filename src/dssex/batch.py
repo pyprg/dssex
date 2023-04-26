@@ -32,7 +32,7 @@ import numpy as np
 from functools import partial
 from collections import defaultdict
 from pandas import concat
-from dssex.pfcnum import create_gb_of_terminals_n, calculate_term_to_factor_n
+from dssex.pfcnum import create_gb_of_terminals_n, get_f_mn_tot_n
 from dssex.injections import calculate_cubic_coefficients
 # square of voltage magnitude, minimum value for load curve,
 #   if value is below _VMINSQR the load curves for P and Q converge
@@ -490,14 +490,14 @@ def _calculate_factors_of_positions_n(branchtaps, positions):
         .to_numpy()
         .reshape(-1,1))
 
-def _get_branch_flow_values(term_to_factor, vnode_ri2, branchterminals):
+def _get_branch_flow_values(f_mn_tot, vnode_ri2, branchterminals):
     """Calculates current, active and reactive power flow into branches.
 
     'branchterminals' is a subset, all other arguments are complete.
 
     Parameters
     ----------
-    term_to_factor: pandas.DataFrame (index_of_terminal) ->
+    f_mn_tot: numpy.array (shape 2,n)
         * .ftaps, float, factor for admittances applied at terminals
     vnode_ri2: numpy.array<float>, (shape 2n,1)
         voltages at nodes, real part than imaginary part
@@ -513,7 +513,9 @@ def _get_branch_flow_values(term_to_factor, vnode_ri2, branchterminals):
         * [:,1] Iim, imaginary part of current
         * [:,2] P, active power
         * [:,3] Q, reactive power"""
-    gb_mn_tot = create_gb_of_terminals_n(branchterminals, term_to_factor)
+    gb_mn_tot = create_gb_of_terminals_n(
+        # branchternminals.index needs to be the index of the terminals
+        branchterminals, f_mn_tot[branchterminals.index, :])
     # reverts columns to y_tot, y_mn
     y_tot_mn = gb_mn_tot.view(dtype=np.complex128)[:,np.newaxis,::-1]
     # complex voltage
@@ -531,7 +533,7 @@ def _get_branch_flow_values(term_to_factor, vnode_ri2, branchterminals):
 _branch_flow_slicer = dict(I=np.s_[:,:2], P=np.s_[:,2], Q=np.s_[:,3])
 
 def _get_batch_values_br(
-        model, term_to_factor, vnode_ri2, selector, vminsqr=.8**2):
+        model, f_mn_tot, vnode_ri2, selector, vminsqr=.8**2):
     """Calculates a vector of absolute current, active power or reactive power.
 
     The expressions are based on the batch definitions.
@@ -540,7 +542,7 @@ def _get_batch_values_br(
     ----------
     model: egrid.model.Model
         model of electric network for calculation
-    term_to_factor: pandas.DataFrame (index_of_terminal) ->
+    f_mn_tot: numpy.array (shape n,2)
         * .ftaps, float, factor for admittances applied at terminals
     vnode_ri2: numpy.array<float> (shape n,2)
         [:,0] Vnode_re, real part of node voltage
@@ -558,7 +560,7 @@ def _get_batch_values_br(
         id_of_batch => values for I/P/Q-calculation"""
     slicer = _branch_flow_slicer[selector]
     get_branch_vals = lambda terminals: (
-        _get_branch_flow_values(term_to_factor, vnode_ri2, terminals)[slicer])
+        _get_branch_flow_values(f_mn_tot, vnode_ri2, terminals)[slicer])
     branchterminals = model.branchterminals
     return {
         id_of_batch:get_branch_vals(branchterminals.loc[df.index_of_terminal])
@@ -568,7 +570,7 @@ def _get_batch_values_br(
             'index_of_terminal')}
 
 def _get_batch_flow_values(
-        model, term_to_factor, Vnode_ri2, Vabs_sqr, kpq, selector, vminsqr):
+        model, f_mn_tot, Vnode_ri2, Vabs_sqr, kpq, selector, vminsqr):
     """Calculates a float value for each batch id.
 
     The returned values are a subset of calculated values of a network model.
@@ -577,7 +579,7 @@ def _get_batch_flow_values(
     ----------
     model: egrid.model.Model
         model of electric network for calculation
-    term_to_factor: pandas.DataFrame (index_of_terminal) ->
+    f_mn_tot: numpy.array (shape n,2)
         * .ftaps, float, factor for admittances applied at terminals
     Vnode_ri2: numpy.array<float> (shape n,3)
         [:,0] Vnode_re, real part of node voltage
@@ -601,7 +603,7 @@ def _get_batch_flow_values(
     dd = defaultdict(lambda:np.empty(shape, dtype=float))
     dd.update(
         _get_batch_values_br(
-            model, term_to_factor, Vnode_ri2, selector, vminsqr))
+            model, f_mn_tot, Vnode_ri2, selector, vminsqr))
     inj_vals = _get_batch_values_inj(
         model, Vnode_ri2, Vabs_sqr, kpq, selector, vminsqr)
     for id_of_batch, val in inj_vals.items():
@@ -658,11 +660,11 @@ def get_batch_values(
     _vals = []
     quantities_upper = quantities.upper()
     if re.match(r'I|P|Q', quantities_upper):
-        term_to_factor = calculate_term_to_factor_n(model.factors, positions)
+        f_mn_tot = get_f_mn_tot_n(model, positions)
     for sel in quantities_upper:
         if sel in 'IPQ':
             id_val = _get_batch_flow_values(
-                model, term_to_factor, Vnode_ri2, Vabs_sqr, kpq, sel, vminsqr)
+                model, f_mn_tot, Vnode_ri2, Vabs_sqr, kpq, sel, vminsqr)
             _quantities.extend([sel]*len(id_val))
             _ids.extend(id_val.keys())
             _vals.extend(id_val.values())

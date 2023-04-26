@@ -32,7 +32,7 @@ class Separate_factors(unittest.TestCase):
         """"""
         model = make_model()
         gen_factor_symbols = ft._create_symbols_with_ids(
-            model.factors.gen_factor_data.index)
+            model.factors.gen_factordata.index)
         factor_data = ft.make_factor_data(model, gen_factor_symbols, 0)
         fk, ftaps, factors = ft.separate_factors(
             factor_data, np.zeros((0,1), dtype=float))
@@ -53,7 +53,7 @@ class Separate_factors(unittest.TestCase):
             grid.Injection('consumer', 'n_1'),
             grid.Injection('consumer2', 'n_1'))
         gen_factor_symbols = ft._create_symbols_with_ids(
-            model.factors.gen_factor_data.index)
+            model.factors.gen_factordata.index)
         factor_data = ft.make_factor_data(model, gen_factor_symbols, 0)
         fk, ftaps, factors = ft.separate_factors(
             factor_data, np.zeros((0,1), dtype=float))
@@ -87,7 +87,7 @@ class Separate_factors(unittest.TestCase):
                 id_of_factor='kq',
                 part='q'))
         gen_factor_symbols = ft._create_symbols_with_ids(
-            model.factors.gen_factor_data.index)
+            model.factors.gen_factordata.index)
         factor_data = ft.make_factor_data(model, gen_factor_symbols, 0)
         solution_vector = np.array([27., 42.]).reshape(-1,1)
         fk, ftaps, factors = ft.separate_factors(
@@ -121,7 +121,7 @@ class Separate_factors(unittest.TestCase):
                 id_of_branch='branch', id_of_factor='taps',
                 id_of_node='n_0'))
         gen_factor_symbols = ft._create_symbols_with_ids(
-            model.factors.gen_factor_data.index)
+            model.factors.gen_factordata.index)
         factor_data = ft.make_factor_data(model, gen_factor_symbols, 0)
         solution_vector = np.array([-3.]).reshape(-1,1)
         fk, ftaps, factors = ft.separate_factors(
