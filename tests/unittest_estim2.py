@@ -515,6 +515,53 @@ class Estimate_branch_injection(unittest.TestCase):
             'estimate returns two column scaling factor vectors (kp, kq) '
             'of [[1., 1.]] equivalent to initialization step')
 
+    def test_qvalue_objQ(self):
+        """one slacknode, one scalabel injection, optimize reactive power
+        with Qvalue"""
+        vcx_slack = 0.95+0.02j
+        s = 30.+10.j
+        model = make_model(
+            grid.Slacknode('n_0', V=vcx_slack),
+            grid.Branch('line', 'n_0', 'n_1', y_lo=1e3-1e3j, y_tr=1e-6+1e-6j),
+            grid.Injection('consumer', 'n_1', P10=s.real, Q10=s.imag),
+            # scaling
+            grid.Defk(id='kq'),
+            grid.Klink(
+                id_of_injection='consumer', part='q', id_of_factor='kq'),
+            # measurement
+            grid.QValue(id_of_batch='q_at_line', Q=4, direction=1.),
+            grid.Output(
+                id_of_batch='q_at_line',
+                id_of_device='line',
+                id_of_node='n_0'))
+        init, res = estim.estimate(model, step_params=[dict(objectives='Q')])
+        self.assertIsInstance(res, tuple, 'estimate returns tuple')
+        self.assertEqual(
+            len(res),
+            5,
+            'estimate returns 4 values for the initialization step')
+        self.assertEqual(
+            res[0],
+            0,
+            'index of estimation step is 0 for first '
+            'optimization')
+        self.assertTrue(res[1], 'estimate succeeds')
+        self.assertEqual(
+            res[2].shape,
+            (2,1),
+            'estimate returns a two voltages')
+        self.assertEqual(
+            res[2][0],
+            [vcx_slack],
+            'first voltage is slack voltage')
+        assert_array_almost_equal(
+            res[3],
+            [[1., 0.38290188]],
+            decimal=8,
+            err_msg=
+            'estimate returns two column scaling factor vectors (kp, kq) '
+            'of [[1., 1.]] equivalent to initialization step')
+
     def test_pvalue_objP(self):
         """two nodes (one slacknode), one branch, one scalabel injection,
         optimize active power with Pvalue and scalable active power P"""
@@ -762,13 +809,10 @@ class Estimate_branch_injection(unittest.TestCase):
             grid.Branch('line_1', 'n_1', 'n_2', y_lo=1e3-1e3j),
             grid.Injection('consumer', 'n_2', P10=30.0, Q10=10.0),
             # scaling, define scaling factors
-            grid.Defk(id='kq', step=0),
+            grid.Defk(id='kq'),
             # link scaling factors to active and reactive power of consumer
             grid.Klink(
-                id_of_injection='consumer',
-                part='q',
-                id_of_factor='kq',
-                step=0),
+                id_of_injection='consumer', part='q', id_of_factor='kq'),
             # measurement/setpoint
             grid.Vvalue(id_of_node='n_2', V=Vval))
         init, res = estim.estimate(
@@ -787,6 +831,90 @@ class Estimate_branch_injection(unittest.TestCase):
             Vval,
             places=10,
             msg='estimated voltage equals given voltage')
+
+    def test_qvalue_objV_discrete(self):
+        """scale reactive power Q in order to match given V,
+        discrete scaling factor for injection"""
+        vcx_slack = 1.+0.j
+        # apparent power, |s| == 30
+        Vval = 1.02
+        model = make_model(
+            grid.Slacknode('n_0', V=vcx_slack),
+            grid.Branch('line_0', 'n_0', 'n_1', y_lo=1e3-1e3j),
+            grid.Branch('line_1', 'n_1', 'n_2', y_lo=1e3-1e3j),
+            grid.Injection('consumer', 'n_2', P10=30.0, Q10=20.0),
+            # scaling, define scaling factors
+            grid.Defk(id='kq', is_discrete=True),
+            # link scaling factors to active and reactive power of consumer
+            grid.Klink(
+                id_of_injection='consumer', part='q', id_of_factor='kq'),
+            # measurement/setpoint
+            grid.Vvalue(id_of_node='n_2', V=Vval))
+        init, res = estim.estimate(
+            model, step_params=[dict(objectives='V')])
+        # check
+        self.assertTrue(res[1], 'estimate succeeds')
+        ed = pfc.calculate_electric_data(model, res[2], res[3])
+        # maximum of residual node currents without slacknode
+        max_dev = norm(
+            ed.residual_node_current()[model.count_of_slacks:], np.inf)
+        self.assertLess(max_dev, 1e-8, 'residual node current is 0')
+        # check voltage
+        given_V_at_node = model.vvalues.set_index('id_of_node').loc['n_2']
+        self.assertAlmostEqual(
+            np.abs(res[2][given_V_at_node.index_of_node])[0],
+            Vval,
+            places=2,
+            msg='estimated voltage equals given voltage')
+        self.assertAlmostEqual(
+            res[3][0,1] % 1,
+            0.,
+            places=14,
+            msg='kq shall be discrete')
+
+    def test_qvalue_objV_discrete_term_factor(self):
+        """select tap position (discrete terminal factor) in order to match
+        given V"""
+        vcx_slack = 1.+0.j
+        # apparent power, |s| == 30
+        Vval = 1.02
+        model = make_model(
+            grid.Slacknode('n_0', V=vcx_slack),
+            grid.Branch('branch_0', 'n_0', 'n_1', y_lo=1e3-1e3j),
+            grid.Branch('branch_1', 'n_1', 'n_2', y_lo=1e3-1e3j),
+            grid.Injection('consumer', 'n_2', P10=30.0, Q10=5.0),
+            #  taps
+            grid.Deft(
+                'tap_branch_1', type='var', min=-16, max=16,
+                value=0, m=-.1/16, n=1., is_discrete=True),
+            grid.Tlink(
+                id_of_node='n_1',
+                id_of_branch='branch_1',
+                id_of_factor='tap_branch_1'),
+            # measurement/setpoint
+            grid.Vvalue(id_of_node='n_2', V=Vval))
+        init, res = estim.estimate(
+            model, step_params=[dict(objectives='V')])
+        # check
+        self.assertTrue(res[1], 'estimate succeeds')
+        ed = pfc.calculate_electric_data(
+            model, voltages_cx=res[2], kpq=res[3], positions=res[4])
+        # maximum of residual node currents without slacknode
+        max_dev = norm(
+            ed.residual_node_current()[model.count_of_slacks:], np.inf)
+        self.assertLess(max_dev, 1e-8, 'residual node current is 0')
+        # check voltage
+        self.assertAlmostEqual(
+            # get absolute of calculated voltage at node 'n_2'
+            ed.node().V_pu.n_2,
+            Vval,
+            places=2,
+            msg='estimated voltage equals given voltage')
+        self.assertAlmostEqual(
+            res[4][0,0] % 1,
+            0.,
+            places=14,
+            msg='tap_branch_1 shall be discrete')
 
 if __name__ == '__main__':
     unittest.main()

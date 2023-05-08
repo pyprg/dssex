@@ -56,14 +56,58 @@ V=1.00      y_tr=1e-6+1e-6j        y_tr=1µ+1µj            y_tr=1.3µ+1.5µj   
 """
 
 import numpy as np
+import pandas as pd
 import pfcnum as pfc
 from egrid import make_model
 
 model = make_model(schema)
 kpq = np.ones((len(model.injections), 2), dtype=float)
 kpq[:,:] = .5
-success, vcx = pfc.calculate_power_flow(model, kpq=kpq)
-ed = pfc.calculate_electric_data(model, vcx, kpq=kpq)
+
+# manual input
+pos = [('taps2', -16)]
+
+
+def update_positions(factors, pos):
+    """Extracts 'value' from factors and overwrites them with matching pos.
+
+    Parameters
+    ----------
+    factors: factors.Factors
+
+    pos: iterable
+        tuple (id_of_factor, value)
+
+    Returns
+    -------
+    pandas.Series id_of_factor -> value_of_factor (float)"""
+    factorvalues = (
+        factors.gen_factordata[
+            factors.gen_factordata.index.isin(factors.terminalfactors.id)]
+        .value)
+    positions = (
+        pd.DataFrame.from_records(pos, columns=['id', 'value'])
+        .set_index('id')
+        .value)
+    common = factorvalues.index.intersection(positions.index)
+    factorvalues[common] = positions[common]
+    return factorvalues
+
+factors = model.factors
+positions = (
+    # positions for defined factors
+    update_positions(factors, pos)
+    # order value of positions according to factors.terminalfactors
+    .reindex(factors.terminalfactors.id)
+    .to_numpy()
+    .reshape(-1))
+
+success, vcx = pfc.calculate_power_flow(model, kpq=kpq, positions=positions)
+
+
+print(np.abs(vcx))
+
+ed = pfc.calculate_electric_data(model, vcx, kpq=kpq, positions=positions)
 vals_nodes = ed.node()
 vals_branches = ed.branch()
 vals_injections = ed.injection()

@@ -1451,7 +1451,16 @@ def get_optimize_vk(model, expressions):
         constraints_ = casadi.vertcat(
             expressions['Y_by_V'] + vstack(Inode_inj), constraints)
         nlp = {'x': syms, 'f': objective, 'g': constraints_, 'p': params}
-        solver = casadi.nlpsol('solver', 'ipopt', nlp, _IPOPT_opts)
+        is_discrete = factor_data.is_discrete
+        if any(is_discrete):
+            discrete = np.concatenate(
+                # voltage variables are not discrete
+                [np.full((Vnode_ri_syms.size1(),), False, dtype=np.bool_),
+                 is_discrete])
+            solver = casadi.nlpsol(
+                'solver', 'bonmin', nlp, {'discrete':discrete})
+        else:
+            solver = casadi.nlpsol('solver', 'ipopt', nlp, _IPOPT_opts)
         # initial values of decision variables
         ini = casadi.vertcat(Vnode_ri_ini, factor_data.values_of_vars)
         # limits of decision variables

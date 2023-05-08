@@ -638,8 +638,10 @@ def get_batch_values(
     kpq: numpy.array (shape n,2)
         vector of injection scaling factors for active and reactive power,
         factors for all injections of model
-    positions: array_like<int>
-        tap positions, accepts None
+    positions : array_like
+        optional
+        float, tap positions, one value for each row in terminalfactors,
+        ordered according to model.factors.terminalfactors
     quantities: str
         string of characters 'I'|'P'|'Q'|'V'
         addresses current magnitude, active power, reactive power or magnitude
@@ -660,7 +662,10 @@ def get_batch_values(
     _vals = []
     quantities_upper = quantities.upper()
     if re.match(r'I|P|Q', quantities_upper):
-        f_mn_tot = get_f_mn_tot_n(model, positions)
+        count_of_terminals = (
+            len(model.branchterminals) - sum(model.branchterminals.is_bridge))
+        f_mn_tot = get_f_mn_tot_n(
+            model.factors.terminalfactors, count_of_terminals, positions)
     for sel in quantities_upper:
         if sel in 'IPQ':
             id_val = _get_batch_flow_values(

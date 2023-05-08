@@ -84,6 +84,40 @@ consts: casadi.SX
 def make_factor_symbols(
         gen_factor_symbols, id_of_step_symbol, index_of_kpq_symbol,
         index_of_var_symbol, index_of_const_symbol):
+    """Creates symbols for factors of one step. Arranges symbols in vectors.
+
+    The result provides access to scaling factors for injections in two
+    column vectors for active and reactive power which is required by
+    expression building for injected current and power.
+
+    The result provides access to decision variables and parameter symbols
+    which is required for passing the symbols to a solver.
+
+    Parameters
+    ----------
+    gen_factor_symbols : casadi.SX
+        symbols available for each optimization step
+    id_of_step_symbol : iterable
+        str, identifiers of symbols
+    index_of_kpq_symbol : array_like (shape n,2)
+        int, indices of symbols,
+        one index of an active power scaling factor and one index of a
+        reactive power scaling factor per injection
+    index_of_var_symbol : array_like
+        int, indices of symbols for decision variables
+    index_of_const_symbol : array_like
+        int, indices of symbols for parameters
+
+    Returns
+    -------
+    Factorsymbols
+        * .kpq, casadi.SX
+            shape nx2, scaling factors for active and reactive power
+            (for each injection)
+        * .vars, casadi.SX
+            decision variables
+        * .consts, casadi.SX
+            parameters"""
     symbols = casadi.vertcat(
         gen_factor_symbols,
         _create_symbols_with_ids(id_of_step_symbol))
