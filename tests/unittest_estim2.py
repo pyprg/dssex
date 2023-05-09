@@ -589,7 +589,7 @@ class Estimate_branch_injection(unittest.TestCase):
         init, res = estim.estimate(model, step_params=[dict(objectives='P')])
         # check
         self.assertTrue(res[1], 'estimate succeeds')
-        ed = pfc.calculate_electric_data(model, res[2], res[3])
+        ed = pfc.calculate_electric_data(model, res[2], kpq=res[3])
         # maximum of residual node currents without slacknode
         max_dev = norm(
             ed.residual_node_current()[model.count_of_slacks:], np.inf)
@@ -633,7 +633,7 @@ class Estimate_branch_injection(unittest.TestCase):
         init, res = estim.estimate(model, step_params=[dict(objectives='P')])
         # check
         self.assertTrue(res[1], 'estimate succeeds')
-        ed = pfc.calculate_electric_data(model, res[2], res[3])
+        ed = pfc.calculate_electric_data(model, res[2], kpq=res[3])
         # maximum of residual node currents without slacknode
         max_dev = norm(
             ed.residual_node_current()[model.count_of_slacks:], np.inf)
@@ -685,7 +685,7 @@ class Estimate_branch_injection(unittest.TestCase):
         # check
         self.assertTrue(
             res[1], 'estimate succeeds')
-        ed = pfc.calculate_electric_data(model, res[2], res[3])
+        ed = pfc.calculate_electric_data(model, res[2], kpq=res[3])
         # maximum of residual node currents without slacknode
         max_dev = norm(
             ed.residual_node_current()[model.count_of_slacks:], np.inf)
@@ -738,7 +738,7 @@ class Estimate_branch_injection(unittest.TestCase):
                 dict(objectives='Q', constraints='P')])
         # check
         self.assertTrue(res[1], 'estimate succeeds')
-        ed = pfc.calculate_electric_data(model, res[2], res[3])
+        ed = pfc.calculate_electric_data(model, res[2], kpq=res[3])
         # maximum of residual node currents without slacknode
         max_dev = norm(
             ed.residual_node_current()[model.count_of_slacks:], np.inf)
@@ -785,7 +785,7 @@ class Estimate_branch_injection(unittest.TestCase):
             step_params=[dict(objectives='I')])
         # check
         self.assertTrue(res[1], 'estimate succeeds')
-        ed = pfc.calculate_electric_data(model, res[2], res[3])
+        ed = pfc.calculate_electric_data(model, res[2], kpq=res[3])
         # maximum of residual node currents without slacknode
         max_dev = norm(
             ed.residual_node_current()[model.count_of_slacks:], np.inf)
@@ -819,7 +819,7 @@ class Estimate_branch_injection(unittest.TestCase):
             model, step_params=[dict(objectives='V')])
         # check
         self.assertTrue(res[1], 'estimate succeeds')
-        ed = pfc.calculate_electric_data(model, res[2], res[3])
+        ed = pfc.calculate_electric_data(model, res[2], kpq=res[3])
         # maximum of residual node currents without slacknode
         max_dev = norm(
             ed.residual_node_current()[model.count_of_slacks:], np.inf)
@@ -854,7 +854,7 @@ class Estimate_branch_injection(unittest.TestCase):
             model, step_params=[dict(objectives='V')])
         # check
         self.assertTrue(res[1], 'estimate succeeds')
-        ed = pfc.calculate_electric_data(model, res[2], res[3])
+        ed = pfc.calculate_electric_data(model, res[2], kpq=res[3])
         # maximum of residual node currents without slacknode
         max_dev = norm(
             ed.residual_node_current()[model.count_of_slacks:], np.inf)

@@ -1239,7 +1239,7 @@ residual_node_current: function
     ()->(numpy.array<complex>)"""
 
 def calculate_electric_data(
-        model, voltages_cx, kpq=None, positions=None,
+        model, voltages_cx, *, kpq=None, positions=None,
         vminsqr=_VMINSQR, loadcurve='interpolated'):
     """Calculates and arranges electric data of injections and branches.
 
@@ -1334,3 +1334,61 @@ def calculate_electric_data(
             columns=['V_pu', 'Vcx_pu']),
         residual_node_current=lambda:eval_residual_current(
             model, get_injected_power, voltages_cx, positions))
+
+def _update_positions(factors, pos):
+    """Extracts 'value' from factors and overwrites them with matching pos.
+
+    Parameters
+    ----------
+    factors: egrid.factors.Factors
+
+    pos: iterable
+        tuple (id_of_factor, value)
+
+    Returns
+    -------
+    pandas.Series id_of_factor -> value_of_factor (float)"""
+    factorvalues = (
+        factors.gen_factordata[
+            factors.gen_factordata.index.isin(factors.terminalfactors.id)]
+        .value)
+    positions = (
+        pd.DataFrame.from_records(pos, columns=['id', 'value'])
+        .set_index('id')
+        .value)
+    common = factorvalues.index.intersection(positions.index)
+    factorvalues[common] = positions[common]
+    return factorvalues
+
+def get_positions(factors, pos=()):
+    """Returns factors.terminalfactors.value after update with pos.
+    
+    The function is intended for manual updates of tap-positions.
+    The result can be passed to functions pfcnum.calculate_power_flow
+    and pfcnum.calculate_electric_data as argument 'positions'. The return
+    value is identical to factors.terminalfactors.value.to_numpy().reshape(-1)
+    if pos is not given.
+
+    Parameters
+    ----------
+    factors : egrid.factors.Factors
+        * .gen_factordata
+        * .terminalfactors
+        factors is retrieved from egrid.model.Model.factors
+    pos : iterable, optional
+        tuple(str - id_of_terminalfactor, float - position)
+        positions for selected terminalfactors,
+        example: pos=[('taps', -16), ('taps2', 3)],
+        the default is ().
+
+    Returns
+    -------
+    numpy.ndarray
+        values of terminalfactors"""
+    return (
+        # positions for defined factors
+        _update_positions(factors, pos)
+        # order value of positions according to factors.terminalfactors
+        .reindex(factors.terminalfactors.id)
+        .to_numpy()
+        .reshape(-1))

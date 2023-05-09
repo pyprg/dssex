@@ -94,7 +94,7 @@ class Calculate_power_flow(unittest.TestCase):
         # without slack node, slack is at index 0
         max_dev0 = norm(Inode0[model0.count_of_slacks:], np.inf)
         self.assertLess(max_dev0, 3e-8, 'residual node current is 0')
-        ed = pfc.calculate_electric_data(model0, vnode_cx0, kpq)
+        ed = pfc.calculate_electric_data(model0, vnode_cx0, kpq=kpq)
         idx_v = model0.nodes.reindex(order_of_nodes.index).index_of_node
         # df_Vcx0 = pd.DataFrame(
         #     {'id_of_node': order_of_nodes.index,
@@ -124,7 +124,7 @@ class Calculate_power_flow(unittest.TestCase):
         # without slack node, slack is at index 0
         max_dev1 = norm(Inode1[model1.count_of_slacks:], np.inf)
         self.assertLess(max_dev1, 3e-8, 'residual node current is 0')
-        ed = pfc.calculate_electric_data(model1, vnode_cx1, kpq)
+        ed = pfc.calculate_electric_data(model1, vnode_cx1, kpq=kpq)
         idx_v = model1.nodes.reindex(order_of_nodes.index).index_of_node
         # df_Vcx1 = pd.DataFrame(
         #     {'id_of_node': order_of_nodes.index,

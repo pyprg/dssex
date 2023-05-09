@@ -116,7 +116,7 @@ class Batch(unittest.TestCase):
         # without slack node, slack is at index 0
         max_dev = norm(Inode[model.count_of_slacks:], np.inf)
         self.assertLess(max_dev, 6e-8, 'residual node current is 0')
-        ed = pfc.calculate_electric_data(model, vnode_cx, kpq)
+        ed = pfc.calculate_electric_data(model, vnode_cx, kpq=kpq)
         # act
         batch_values = batch.get_batch_values(
             model, vnode_ri2, kpq, None, 'IPQV')

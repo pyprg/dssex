@@ -43,7 +43,7 @@ V=1.00      y_tr=1e-6+1e-6j        y_tr=1µ+1µj            y_tr=1.3µ+1.5µj   
                        |           y_lo=1e3-1e3j          y_lo=1e3-1e3j                       y_lo=1e3-1e3j        |
                        |   I=10    y_tr=1e-6+1e-6j        y_tr=1e-6+1e-6j           V=.974    y_tr=1e-6+1e-6j      |
                        n1(--------line_6-----)n6(--------line_7--------------------)n7(------line_8---------------)n5
-                           Tlink=taps         |                                     |
+                                              |                                     |
                                               |                                     |
                                               |                                     |
                                               n6--> load_6_          _load_7 <------n7---((~)) Gen_7_
@@ -51,66 +51,30 @@ V=1.00      y_tr=1e-6+1e-6j        y_tr=1µ+1µj            y_tr=1.3µ+1.5µj   
                                                      Q10=8             Q10=4                    Q10=-10
 
 
-#. Deft(id=taps)
+#. Deft(id=taps value=3)
 
 """
 
 import numpy as np
-import pandas as pd
 import pfcnum as pfc
 from egrid import make_model
 
 model = make_model(schema)
-kpq = np.ones((len(model.injections), 2), dtype=float)
-kpq[:,:] = .5
+
+
 
 # manual input
-pos = [('taps2', -16)]
-
-
-def update_positions(factors, pos):
-    """Extracts 'value' from factors and overwrites them with matching pos.
-
-    Parameters
-    ----------
-    factors: factors.Factors
-
-    pos: iterable
-        tuple (id_of_factor, value)
-
-    Returns
-    -------
-    pandas.Series id_of_factor -> value_of_factor (float)"""
-    factorvalues = (
-        factors.gen_factordata[
-            factors.gen_factordata.index.isin(factors.terminalfactors.id)]
-        .value)
-    positions = (
-        pd.DataFrame.from_records(pos, columns=['id', 'value'])
-        .set_index('id')
-        .value)
-    common = factorvalues.index.intersection(positions.index)
-    factorvalues[common] = positions[common]
-    return factorvalues
-
-factors = model.factors
-positions = (
-    # positions for defined factors
-    update_positions(factors, pos)
-    # order value of positions according to factors.terminalfactors
-    .reindex(factors.terminalfactors.id)
-    .to_numpy()
-    .reshape(-1))
+kpq = np.ones((len(model.injections), 2), dtype=float)
+kpq[:,:] = 1
+pos = [('taps', -16)]
+positions = pfc.get_positions(model.factors, pos)
 
 success, vcx = pfc.calculate_power_flow(model, kpq=kpq, positions=positions)
-
-
-print(np.abs(vcx))
-
 ed = pfc.calculate_electric_data(model, vcx, kpq=kpq, positions=positions)
 vals_nodes = ed.node()
 vals_branches = ed.branch()
 vals_injections = ed.injection()
 
+print(np.abs(vcx))
 
 
