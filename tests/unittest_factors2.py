@@ -113,7 +113,8 @@ class Separate_factors(unittest.TestCase):
             grid.Branch(
                 id='branch',
                 id_of_node_A='n_0',
-                id_of_node_B='n_1'),
+                id_of_node_B='n_1',
+                y_lo=1e4),
             grid.Injection('consumer', 'n_1'),
             grid.Injection('consumer2', 'n_1'),
             grid.Deft(id='taps'),

@@ -97,7 +97,8 @@ class Make_get_factor_data(unittest.TestCase):
             grid.Branch(
                 id='branch',
                 id_of_node_A='n_0',
-                id_of_node_B='n_1'),
+                id_of_node_B='n_1',
+                y_lo=1e4),
             #grid.Injection('injection', 'n_1'),
             grid.Deft(
                 'taps', type='var', value=0, min=-16, max=16, m=-10/16,

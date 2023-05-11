@@ -34,7 +34,7 @@ DEFAULT_NETWORK = """
 # names of connectivity nodes start with 'n'
 # adjacent entities are connected unless the name has a leading or
 #   trailing underscore '_'
-# lines with first character '#' are not evaluated
+# lines with first character '#' are not part of the schema
 """
 
 def calculate_pf(model, step_params=()):
@@ -140,4 +140,7 @@ def print_power_flow(*args):
     model = make_model_checked(args)
     for title, df in calculate_pf(model).items():
         print(f'\n>{title.upper()}>')
-        print(df.to_markdown())
+        print(df.fillna('-').to_markdown())
+
+if __name__ == '__main__':
+    print_power_flow()

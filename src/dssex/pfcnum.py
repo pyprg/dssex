@@ -967,8 +967,7 @@ def calculate_branch_results(model, Vnode, positions):
     pandas.DataFrame
         id, I0_pu, I1_pu, P0_pu, Q0_pu, P1_pu, Q1_pu, Ploss_pu, Qloss_pu,
         I0cx_pu, I1cx_pu, V0cx_pu, V1cx_pu, V0_pu, V1_pu, Tap0, Tap1"""
-    branchterminals_ = model.branchterminals
-    branchterminals = branchterminals_[~branchterminals_.is_bridge]
+    branchterminals = model.branchterminals.reset_index(drop=True)
     term_is_at_A = branchterminals.side == 'A'
     count_of_terminals = len(branchterminals)
     terminalfactors = model.factors.terminalfactors
@@ -1113,7 +1112,7 @@ def get_residual_current_fn(model, get_injected_power):
         (numpy.array<complex>) -> (numpy.ndarray<complex>)
         (voltage_of_nodes) -> (residual_node_current)"""
     terminalfactors = model.factors.terminalfactors
-    branchterminals = model.branchterminals[~model.branchterminals.is_bridge]
+    branchterminals = model.branchterminals.reset_index(drop=True)
     count_of_terminals = len(branchterminals)
     count_of_nodes = model.shape_of_Y[0]
     count_of_slacks = model.count_of_slacks
@@ -1164,8 +1163,7 @@ def get_residual_current_fn2(model, get_injected_power, Vslack=None):
     function
         (numpy.array<complex>) -> (numpy.array<complex>)
         (voltage_at_nodes) -> (residual_node_current)"""
-    branchterminals_ = model.branchterminals
-    branchterminals = branchterminals_[~branchterminals_.is_bridge]
+    branchterminals = model.branchterminals.reset_index(drop=True)
     count_of_terminals = len(branchterminals)
     count_of_nodes = model.shape_of_Y[0]
     count_of_slacks = model.count_of_slacks
@@ -1324,14 +1322,22 @@ def calculate_electric_data(
                  'Exp_v_p', 'Exp_v_q')
                 if columns is None else columns),
             copy=False)
+    def node_data(columns=None):
+        # expand to each connectivity node
+        Vcx_pu = voltages_cx.reshape(-1)[model.nodes.index_of_node]
+        V_pu = np.abs(Vcx_pu)
+        V_re = np.real(Vcx_pu)
+        V_im = np.imag(Vcx_pu)
+        df = pd.DataFrame(
+            {'Vcx_pu': Vcx_pu, 'V_pu': V_pu, 'V_re': V_re, 'V_im': V_im},
+            index=model.nodes.index)
+        df.index.name = 'id'
+        df.sort_index(inplace=True)
+        return df[['V_pu', 'V_re', 'V_im'] if columns is None else columns]
     return Electric_data(
         branch=br_data,
         injection=inj_data,
-        node=lambda:DF(
-            {'V_pu':np.abs(voltages_cx.reshape(-1)),
-             'Vcx_pu':voltages_cx.reshape(-1)},
-            index=model.nodes.index,
-            columns=['V_pu', 'Vcx_pu']),
+        node=node_data,
         residual_node_current=lambda:eval_residual_current(
             model, get_injected_power, voltages_cx, positions))
 

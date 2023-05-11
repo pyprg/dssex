@@ -189,7 +189,7 @@ class Calculate_electric_data(unittest.TestCase):
             pd.DataFrame,
             'ed.node() returns a pandas.DataFrame')
         assert_array_equal(
-            ed.node().Vcx_pu.to_numpy().reshape(-1,1),
+            ed.node(['Vcx_pu']).Vcx_pu.to_numpy().reshape(-1,1),
             np.array([[vslack]]),
             err_msg='calculate_electric_data shall return the slack voltage')
 
@@ -219,7 +219,7 @@ class Calculate_electric_data(unittest.TestCase):
             ed.node(),
             pd.DataFrame,
             'ed.node() returns a pandas.DataFrame')
-        vnode = ed.node().Vcx_pu.to_numpy().reshape(-1,1)
+        vnode = ed.node(['Vcx_pu']).Vcx_pu.to_numpy().reshape(-1,1)
         assert_array_equal(
             vnode,
             np.array([[vslack]]),
