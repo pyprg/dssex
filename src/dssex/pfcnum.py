@@ -49,8 +49,7 @@ _power_props = itemgetter('P10', 'Q10', 'Exp_v_p', 'Exp_v_q')
 def get_term_to_factor_n(terminalfactors, positions):
     """Calculates one tap factor for each row in DataFrame terminalfactors.
 
-    If position is not None it must provide a value for each row in
-    terminalfactors.
+    Positions must provide a value for each row in terminalfactors if not None.
 
     The applied formula for the factor is
     ::
@@ -886,7 +885,7 @@ def get_crossrefs(terms, count_of_nodes):
         dtype=np.int8).tocsc()
     return mtermnode, mtermothernode
 
-def get_branch_admittance_matrices(y_lo, y_tot, term_is_at_A):
+def get_branch_admittance_matrices(y_lo, y_tot, terminal_to_branch):
     """Creates a 2x2 branch-admittance matrix for each branch.
 
     Parameters
@@ -895,40 +894,45 @@ def get_branch_admittance_matrices(y_lo, y_tot, term_is_at_A):
         y_mn admittance, per branch
     y_tot: numpy.array, complex
         (y_mn + y_mm) admittance, per branch
-    term_is_at_A: numpy.array, bool, index of terminal
-        True if terminal is at side A of a branch
+    terminal_to_branch: numpy.array, (shape 2,n)
+        int indices of terminal per branch, br is index of branch
+        * [0, br] index of terminal A
+        * [1, br] index of terminal B
 
     Returns
     -------
     numpy.darray, complex, shape=(n, 2, 2)"""
-    y_tot_A = y_tot[term_is_at_A].reshape(-1, 1)
-    y_tot_B = y_tot[~term_is_at_A].reshape(-1, 1)
-    y_lo_AB = y_lo[term_is_at_A].reshape(-1, 1)
+    y_tot_A = y_tot[terminal_to_branch[0]].reshape(-1, 1)
+    y_tot_B = y_tot[terminal_to_branch[1]].reshape(-1, 1)
+    y_lo_AB = y_lo[terminal_to_branch[0]].reshape(-1, 1)
     y_11 = y_tot_A
     y_12 = -y_lo_AB
     y_21 = -y_lo_AB
     y_22 = y_tot_B
     return np.hstack([y_11, y_12, y_21, y_22]).reshape(-1, 2, 2)
 
-def get_y_branches(model, terms, term_is_at_A, f_mn_tot):
+def get_y_branches(terms, terminal_to_branch, f_mn_tot):
     """Creates one admittance matrix per branch.
 
     Parameters
     ----------
-    model: egrid.model.Model
-        model of grid for calculation
     terms: pandas.DataFrame
 
-    term_is_at_A: numpy.array, bool, index of terminal
-       True if terminal is at side A of a branch
+    terminal_to_branch: numpy.array, (shape 2,n)
+        int indices of terminal per branch, br is index of branch
+        * [0, br] index of terminal A
+        * [1, br] index of terminal B
     f_mn_tot: numpy.array (shape n,2)
+        for each terminal
         float, f_mn - [:, 0], f_tot - [:, 1]
 
     Returns
     -------
     numpy.array, complex, shape=(n, 2, 2)"""
     y_lo, y_tot = get_y_terms(terms, f_mn_tot)
-    return get_branch_admittance_matrices(y_lo, y_tot, term_is_at_A)
+    return get_branch_admittance_matrices(y_lo, y_tot, terminal_to_branch)
+
+
 
 def get_v_branches(terms, voltages):
     """Creates a voltage vector 2x1 per branch.
@@ -985,7 +989,7 @@ def calculate_branch_results(model, Vnode, positions):
     f_mn_tot = calculate_f_mn_tot_n(
         count_of_terminals, terminalfactors, term_to_factor)
     factors = f_mn_tot[branchterminals.index]
-    Ybr = get_y_branches(model, branchterminals, term_is_at_A, factors)
+    Ybr = get_y_branches(branchterminals, model.terminal_to_branch, factors)
     Vbr = get_v_branches(branchterminals[term_is_at_A], Vnode)
     Ibr = Ybr @ Vbr
     # converts from single phase calculation to 3-phase system
@@ -1368,7 +1372,7 @@ def _update_positions(factors, pos):
 
 def get_positions(factors, pos=()):
     """Returns factors.terminalfactors.value after update with pos.
-    
+
     The function is intended for manual updates of tap-positions.
     The result can be passed to functions pfcnum.calculate_power_flow
     and pfcnum.calculate_electric_data as argument 'positions'. The return
