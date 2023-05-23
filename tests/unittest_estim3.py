@@ -27,7 +27,6 @@ import pandas as pd
 import egrid.builder as grid
 import dssex.pfcnum as pfc
 import dssex.estim as estim
-import dssex.factors as ft
 from functools import partial
 from numpy.linalg import norm
 from egrid import make_model
