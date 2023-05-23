@@ -76,9 +76,9 @@ def get_term_to_factor_n(terminalfactors, positions):
         positions.reshape(-1))
     return ((terminalfactors.m * pos) + terminalfactors.n).to_numpy()
 
-def values_per_branch(arr, terminalfactors, positions):
+def values_per_terminal(arr, terminalfactors, positions):
     """Distributes values of terminals associated to terminalfactors
-    over branches.
+    over terminals.
 
     Parameters
     ----------
@@ -103,7 +103,7 @@ def values_per_branch(arr, terminalfactors, positions):
 def calculate_f_mn_tot_n(count_of_terminals, terminalfactors, term_to_factor):
     """Calculates off-diagonal and diagonal factors for all branches.
 
-    Off-diagonal factors (mn) are the product of both termnal factors of one
+    Off-diagonal factors (mn) are the product of both terminal factors of one
     branch, diagonal factors (tot) are the square of the terminal factors.
     The function calculates two factors for each terminal.
 
@@ -121,7 +121,7 @@ def calculate_f_mn_tot_n(count_of_terminals, terminalfactors, term_to_factor):
     -------
     numpy.array (shape n,2)
         float, f_mn - [:, 0], f_tot - [:, 1]"""
-    ft = values_per_branch(
+    ft = values_per_terminal(
         np.ones((count_of_terminals, 2), dtype=float),
         terminalfactors,
         term_to_factor)
@@ -265,16 +265,11 @@ def _get_squared_injected_power_fn(injections, kpq=None):
 
     Parameters
     ----------
-    injections: pandas.DataFrame
-        * .kp
+    injections: pandas.DataFrame (index_of_terminal)
         * .P10
-        * .kq
         * .Q10
         * .Exp_v_p
         * .Exp_v_q
-        * .V_abs_sqr
-        * .c3p, .c2p, .c1p, polynomial coefficients for active power P
-        * .c3q, .c2q, .c1q, polynomial coefficients for reactive power Q
     kpq: numpy.array, float, (nx2)
         optional
         scaling factors for active and reactive power
@@ -324,14 +319,11 @@ def _get_original_injected_power_fn(injections, kpq=None):
 
     Parameters
     ----------
-    injections: pandas.DataFrame
-        * .kp
+    injections: pandas.DataFrame (index_of_terminal)
         * .P10
-        * .kq
         * .Q10
         * .Exp_v_p
         * .Exp_v_q
-        * .V_abs_sqr
     kpq: numpy.array, float, (nx2)
         optional
         scaling factors for active and reactive power
@@ -378,16 +370,11 @@ def _get_interpolated_injected_power_fn(vminsqr, injections, kpq=None):
     ----------
     vminsqr: float
         upper limit of interpolation, interpolates if |V|² < vminsqr
-    injections: pandas.DataFrame
-        * .kp
+    injections: pandas.DataFrame (index_of_terminal)
         * .P10
-        * .kq
         * .Q10
         * .Exp_v_p
         * .Exp_v_q
-        * .V_abs_sqr
-        * .c3p, .c2p, .c1p, polynomial coefficients for active power P
-        * .c3q, .c2q, .c1q, polynomial coefficients for reactive power Q
     pq_factors: numpy.array, float, (nx2)
         optional
         factors for active and reactive power
@@ -450,16 +437,11 @@ def get_calc_injected_power_fn(
     ----------
     vminsqr: float
         upper limit of interpolation, interpolates if |V|² < vminsqr
-    injections: pandas.DataFrame
-        * .kp
+    injections: pandas.DataFrame (index_of_terminal)
         * .P10
-        * .kq
         * .Q10
         * .Exp_v_p
         * .Exp_v_q
-        * .V_abs_sqr
-        * .c3p, .c2p, .c1p, polynomial coefficients for active power P
-        * .c3q, .c2q, .c1q, polynomial coefficients for reactive power Q
     kpq: numpy.array, float, (nx2)
         optional
         scaling factors for active and reactive power
@@ -680,6 +662,11 @@ def get_y_terms(branchterminals, f_mn_tot):
     y_tot = y_tr + y_mn
     return y_mn * f_mn_tot[:,[0]], y_tot * f_mn_tot[:,[1]]
 
+    # y_mn_tot = branchterminals[['y_lo', 'y_tr_half']].to_numpy()
+    # y_mn_tot[:,1] += y_mn_tot[:,0]
+    # return y_mn_tot * f_mn_tot
+
+
 def create_y(branchterminals, count_of_nodes, f_mn_tot):
     """Generates the branch-admittance matrix.
 
@@ -705,11 +692,10 @@ def create_y(branchterminals, count_of_nodes, f_mn_tot):
     index_of_other_node = branchterminals.index_of_other_node
     row = np.concatenate([index_of_node, index_of_node])
     col = np.concatenate([index_of_node, index_of_other_node])
-    rowcol = row, col
     y_mn, y_tot = get_y_terms(branchterminals, f_mn_tot)
     yvals = np.concatenate([y_tot.reshape(-1), -y_mn.reshape(-1)])
     shape = count_of_nodes, count_of_nodes
-    return coo_matrix((yvals, rowcol), shape=shape, dtype=np.complex128)
+    return coo_matrix((yvals, (row, col)), shape=shape, dtype=np.complex128)
 
 def create_y_matrix(
         branchterminals, count_of_nodes, count_of_slacks, f_mn_tot):
@@ -765,6 +751,8 @@ def create_y_matrix2(
 
 def get_injected_power_per_injection(calculate_injected_power, Vinj):
     """Calculates active and reactive power for each injection.
+
+    Powers are calculated for one phase of a balanced three phase system.
 
     Parameters
     ----------
@@ -850,41 +838,6 @@ def calculate_injection_results(calculate_injected_power, model, Vnode):
     df['Icx_pu'] = Icx_pu
     return df
 
-def get_crossrefs(terms, count_of_nodes):
-    """Creates connectivity matrices.
-
-    In particular:
-    ::
-        index_of_terminal, index_of_node -> 1
-        index_of_terminal, index_of_other_node -> 1
-
-    Parameters
-    ----------
-    terms: pandas.DataFrame, index of terminals
-        * .index_of_node
-        * .index_of_other_node
-    count_of_nodes: int
-        number of power flow calculation nodes
-
-    Returns
-    -------
-    tuple
-        * scipy.sparse.matrix, index_of_terminal, index_of_node
-        * scipy.sparse.matrix, index_of_terminal, index_of_other_node"""
-    count_of_terms = len(terms)
-    mtermnode = coo_matrix(
-        ([1] * count_of_terms,
-         (terms.index, terms.index_of_node)),
-        shape=(count_of_terms, count_of_nodes),
-        dtype=np.int8).tocsc()
-    #other
-    mtermothernode = coo_matrix(
-        ([1] * count_of_terms,
-         (terms.index, terms.index_of_other_node)),
-        shape=(count_of_terms, count_of_nodes),
-        dtype=np.int8).tocsc()
-    return mtermnode, mtermothernode
-
 def get_branch_admittance_matrices(y_lo, y_tot, terminal_to_branch):
     """Creates a 2x2 branch-admittance matrix for each branch.
 
@@ -902,7 +855,9 @@ def get_branch_admittance_matrices(y_lo, y_tot, terminal_to_branch):
     Returns
     -------
     numpy.darray, complex, shape=(n, 2, 2)"""
+    # for terminals A: terminal_to_branch[0]
     y_tot_A = y_tot[terminal_to_branch[0]].reshape(-1, 1)
+    # for terminals B: terminal_to_branch[1]
     y_tot_B = y_tot[terminal_to_branch[1]].reshape(-1, 1)
     y_lo_AB = y_lo[terminal_to_branch[0]].reshape(-1, 1)
     y_11 = y_tot_A
@@ -932,8 +887,6 @@ def get_y_branches(terms, terminal_to_branch, f_mn_tot):
     y_lo, y_tot = get_y_terms(terms, f_mn_tot)
     return get_branch_admittance_matrices(y_lo, y_tot, terminal_to_branch)
 
-
-
 def get_v_branches(terms, voltages):
     """Creates a voltage vector 2x1 per branch.
 
@@ -948,9 +901,8 @@ def get_v_branches(terms, voltages):
     Returns
     -------
     numpy.array, complex, shape=(n, 2, 1)"""
-    mtermnode, mtermothernode = get_crossrefs(terms, len(voltages))
-    Vterm = np.asarray(mtermnode @ voltages)
-    Votherterm = np.asarray(mtermothernode @ voltages)
+    Vterm = voltages[terms.index_of_node]
+    Votherterm = voltages[terms.index_of_other_node]
     return np.hstack([Vterm, Votherterm]).reshape(-1, 2, 1)
 
 def calculate_branch_results(model, Vnode, positions):
@@ -971,33 +923,34 @@ def calculate_branch_results(model, Vnode, positions):
     pandas.DataFrame
         id, I0_pu, I1_pu, P0_pu, Q0_pu, P1_pu, Q1_pu, Ploss_pu, Qloss_pu,
         I0cx_pu, I1cx_pu, V0cx_pu, V1cx_pu, V0_pu, V1_pu, Tap0, Tap1"""
-    branchterminals = model.branchterminals.reset_index(drop=True)
-    term_is_at_A = branchterminals.side == 'A'
+    branchterminals = model.branchterminals
+    side_a = branchterminals.side_a
+    branchterminals_a = branchterminals[side_a]
     count_of_terminals = len(branchterminals)
     terminalfactors = model.factors.terminalfactors
     if positions is None:
         posbr = np.full((count_of_terminals//2, 2), np.nan, dtype=float)
     else:
         posbr = (
-            values_per_branch(
+            values_per_terminal(
                 np.full((count_of_terminals, 2), np.nan, dtype=float),
                 terminalfactors,
                 positions)
-            [term_is_at_A,::-1])
+            [side_a,::-1])
     dposbr = pd.DataFrame(posbr, columns=['Tap0', 'Tap1'])
     term_to_factor = get_term_to_factor_n(terminalfactors, positions)
     f_mn_tot = calculate_f_mn_tot_n(
         count_of_terminals, terminalfactors, term_to_factor)
     factors = f_mn_tot[branchterminals.index]
     Ybr = get_y_branches(branchterminals, model.terminal_to_branch, factors)
-    Vbr = get_v_branches(branchterminals[term_is_at_A], Vnode)
+    Vbr = get_v_branches(branchterminals_a, Vnode)
     Ibr = Ybr @ Vbr
     # converts from single phase calculation to 3-phase system
     Sbr = 3 * Vbr * Ibr.conjugate()            # S0, S1
     PQbr= Sbr.view(dtype=float).reshape(-1, 4) # P0, P1, Q0, Q1
     Sbr_loss = Sbr.sum(axis=1)
     dfbr = (
-        branchterminals.loc[term_is_at_A, ['id_of_branch']]
+        branchterminals_a[['id_of_branch']]
         .rename(columns={'id_of_branch': 'id'}))
     dfv = pd.DataFrame(
         Vbr.reshape(-1, 2),
@@ -1273,7 +1226,6 @@ def calculate_electric_data(
         * .injection, function (array_like<str>)->(pandas.DataFrame)
         * .node, function ()->(pandas.DataFrame)
         * .residual_node_current, function ()->(numpy.ndarray<complex>)"""
-    from pandas import DataFrame as DF
     result_data = calculate_results(
         model, voltages_cx, kpq, positions, loadcurve)
     get_injected_power = get_injected_power_fn(
