@@ -19,13 +19,14 @@ Created on Fri Dec 16 00:00:58 2022
 
 @author: pyprg
 
-Batches are structures to model the relation between measurements/setpoints and
-terminals. A batch is specific for one flow quantity I, P, Q and
-a power-flow-calculation/connectivity node. Instances of 'Output' associate
-flow (I, P, Q) through a terminal with a batch. Flow measurements
-are associated with a batch using instances of IValue / PValue / QValue. The
-estimation algorithm applies the equation sum_of_I/P/QValue + sum_of_Output = 0
-for including measurements/setpoints into the estimation process.
+Batches are structures for modeling the relation between
+measurements/setpoints and terminals. A batch is specific for one flow
+quantity (I, P, Q) and a power-flow-calculation/connectivity node. Instances
+of 'Output' are used in order to associate flow (I, P, Q) through a terminal
+with a batch. Flow measurements are associated with a batch using instances
+of IValue / PValue / QValue. The estimation algorithm applies the equation
+sum_of_I/P/QValue + sum_of_Output = 0 for including measurements/setpoints
+into the estimation process.
 """
 import re
 import numpy as np
@@ -470,25 +471,6 @@ def _get_gb_of_terminals_n(branchterminals):
         branchterminals
         .loc[:,['g_lo', 'b_lo', 'g_tr_half', 'b_tr_half']]
         .to_numpy())
-
-def _calculate_factors_of_positions_n(branchtaps, positions):
-    """Calculates longitudinal factors of branches.
-
-    Parameters
-    ----------
-    branchtaps: pandas.DataFrame (index of taps)
-        * .Vstep, float voltage diff per tap
-        * .positionneutral, int
-    position: array_like
-        int, vector of positions for branch-terminals with taps
-
-    Returns
-    -------
-    numpy.array (shape n,1)"""
-    return (
-        (1 - branchtaps.Vstep * (positions - branchtaps.positionneutral))
-        .to_numpy()
-        .reshape(-1,1))
 
 def _get_branch_flow_values(f_mn_tot, vnode_ri2, branchterminals):
     """Calculates current, active and reactive power flow into branches.
