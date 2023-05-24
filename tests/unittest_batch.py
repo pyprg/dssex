@@ -24,6 +24,7 @@ import numpy as np
 import pandas as pd
 import egrid.builder as grid
 import dssex.pfcnum as pfc
+import dssex.result as rt
 import dssex.estim as estim
 import dssex.batch as batch
 from functools import partial
@@ -115,7 +116,9 @@ class Batch(unittest.TestCase):
         # without slack node, slack is at index 0
         max_dev = norm(Inode[model.count_of_slacks:], np.inf)
         self.assertLess(max_dev, 6e-8, 'residual node current is 0')
-        ed = pfc.calculate_electric_data(model, vnode_cx, kpq=kpq)
+        res = rt.calculate_electric_data(model, vnode_cx, kpq=kpq)
+        branch_res = res['branches']
+        injection_res = res['injections']
         # act
         batch_values = batch.get_batch_values(
             model, vnode_ri2, kpq, None, 'IPQV')
@@ -134,7 +137,7 @@ class Batch(unittest.TestCase):
                 * df_batch.loc[batch_key[0], qu].value)
             self.assertAlmostEqual(
                 val,
-                ed.branch().loc[result_key[0], result_key[1]],
+                branch_res.loc[result_key[0], result_key[1]],
                 delta=1e-12,
                 msg=f'{batch_key[1]} of batch {batch_key[0]} equals '
                     f'{result_key[1]} of device {result_key[0]}')
@@ -148,7 +151,7 @@ class Batch(unittest.TestCase):
                 * df_batch.loc[batch_key[0], qu].value)
             self.assertAlmostEqual(
                 val,
-                ed.branch().loc[result_key[0], result_key[1]],
+                branch_res.loc[result_key[0], result_key[1]],
                 delta=1e-11,
                 msg=f'{batch_key[1]} of batch {batch_key[0]} equals '
                     f'{result_key[1]} of device {result_key[0]}')
@@ -162,7 +165,7 @@ class Batch(unittest.TestCase):
                 * df_batch.loc[batch_key[0], qu].value)
             self.assertAlmostEqual(
                 val,
-                ed.injection().loc[result_key[0], result_key[1]],
+                injection_res.loc[result_key[0], result_key[1]],
                 delta=1e-12,
                 msg=f'{batch_key[1]} of batch {batch_key[0]} equals '
                     f'{result_key[1]} of device {result_key[0]}')
@@ -176,18 +179,19 @@ class Batch(unittest.TestCase):
                 * df_batch.loc[batch_key[0], qu].value)
             self.assertAlmostEqual(
                 val,
-                ed.branch().loc[result_key[0], result_key[1]],
+                branch_res.loc[result_key[0], result_key[1]],
                 delta=2e-7,
                 msg=f'{batch_key[1]} of batch {batch_key[0]} equals '
                     f'{result_key[1]} of device {result_key[0]}')
+        node_res = res['nodes']
         self.assertAlmostEqual(
             df_batch.loc['n_2', 'V'].value,
-            ed.node().loc['n_2', 'V_pu'],
+            node_res.loc['n_2', 'V_pu'],
             delta=1e-12,
             msg='voltage at n_2 is result of power flow calculation')
         self.assertAlmostEqual(
             df_batch.loc['n_3', 'V'].value,
-            ed.node().loc['n_3', 'V_pu'],
+            node_res.loc['n_3', 'V_pu'],
             delta=1e-12,
             msg='voltage at n_3 is result of power flow calculation')
 

@@ -20,7 +20,6 @@ Created on Fri Dec 16 00:14:07 2022
 """
 import numpy as np
 import pandas as pd
-#import pfcnum as pfc
 from scipy.sparse import coo_matrix, csr_matrix, vstack
 from scipy.sparse.linalg import spsolve
 from dssex.pfcnum import (
@@ -366,10 +365,14 @@ def calculate_branch_results(model, /, Vnode, *, positions=None):
     branchterminals = model.branchterminals
     terminalfactors = model.factors.terminalfactors
     Vcx_term_ab = _vterm_from_vnode(branchterminals, Vnode)
-    positions_ = terminalfactors.value if positions is None else positions
+    positions_ = (
+            (positions
+             if positions else
+             terminalfactors.value.to_numpy())
+            .reshape(-1))
     Iterm = _calculate_terminal_current(model, Vcx_term_ab, positions_)
     return _calculate_branch_results(
-        branchterminals, branchterminals, Iterm, Vcx_term_ab, positions_)
+        branchterminals, terminalfactors, Iterm, Vcx_term_ab, positions_)
 
 #
 # switch flow
@@ -734,7 +737,7 @@ def calculate_electric_data(
     nodes = model.nodes
     Vcx_cn_node = Vnode[nodes.index_of_node].reshape(-1)
     nodes_res = pd.DataFrame(
-        {'Vcx': Vcx_cn_node,
+        {'Vcx_pu': Vcx_cn_node,
          'V_pu': np.abs(Vcx_cn_node),
          'Vre': np.real(Vcx_cn_node),
          'Vim': np.imag(Vcx_cn_node)},
@@ -745,10 +748,14 @@ def calculate_electric_data(
     branchterminals = model.branchterminals
     terminalfactors = model.factors.terminalfactors
     Vcx_term_ab = _vterm_from_vnode(branchterminals, Vnode)
-    positions_ = positions if positions else terminalfactors.value
+    positions_ = (
+        (positions
+         if positions else
+         terminalfactors.value.to_numpy())
+        .reshape(-1))
     Iterm = _calculate_terminal_current(model, Vcx_term_ab, positions_)
     branch_res = _calculate_branch_results(
-        branchterminals, branchterminals, Iterm, Vcx_term_ab, positions_)
+        branchterminals, terminalfactors, Iterm, Vcx_term_ab, positions_)
     # injections
     injections = model.injections
     Vinj = model.mnodeinj.T @ Vnode
@@ -932,5 +939,5 @@ def make_printable(dict_of_frames):
     dict
         pandas.DataFrame"""
     return {
-        k:filter_columns(df).fillna('-').round(3)
+        k:filter_columns(df).sort_index(axis=1).fillna('-').round(3)
         for k,df in dict_of_frames.items()}

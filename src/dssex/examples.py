@@ -55,48 +55,19 @@ V=1.00      y_tr=1e-6+1e-6j        y_tr=1µ+1µj            y_tr=1.3µ+1.5µj   
 """
 
 import numpy as np
-import pandas as pd
-import pfcnum as pfc
+import dssex.pfcnum as pfc
+import dssex.result as rt
 from egrid import make_model
 
 model = make_model(schema)
 
 # manual input
-kpq = np.ones((len(model.injections), 2), dtype=float)
-kpq[:,:] = 1
-pos = []#('taps', -16)]
+kpq = np.full((len(model.injections), 2), 1., dtype=float)
+pos = [('taps', -16)]
 positions = pfc.get_positions(model.factors, pos)
-
 success, vcx = pfc.calculate_power_flow(model, kpq=kpq, positions=positions)
-ed = pfc.calculate_electric_data(model, vcx, kpq=kpq, positions=positions)
-vals_nodes = ed.node()
-vals_branches = ed.branch()
-vals_injections = ed.injection()
-residual_current = ed.residual_node_current()
-vals_nodees = ed.node()
-
-print(np.abs(vcx))
-
-#%%
-import dssex.result as rt
-
-res = rt.make_printable(rt.calculate_electric_data(model, vcx))
-
-branch_res = res['branches']
-injection_res = res['injections']
-node_res = res['nodes']
-
-
-
-
-#%%
-import dssex.result as rt
-switch_flow = list(
-    rt.get_switch_flow2(model, Vnode=vcx, kpq=kpq, positions=positions))
-Icx = pd.concat(switch_flow) if switch_flow else pd.Series([], name='Iterm')
-
-bridgeterminals = model.bridgeterminals
-
-bridgeterminals['Icx'] = Icx
-bridgeterminals['S'] = 3 * vcx[bridgeterminals.index_of_node].reshape(-1) * np.conjugate(Icx)
+res = rt.make_printable(
+    rt.calculate_electric_data(model, vcx, kpq=kpq, positions=positions))
+residual_current = pfc.calculate_residual_current(
+    model, vcx, positions=positions, kpq=kpq)
 

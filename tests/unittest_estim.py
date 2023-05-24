@@ -23,6 +23,7 @@ import unittest
 import context # adds parent folder of dssex to search path
 import numpy as np
 import egrid.builder as grid
+import dssex.result as rt
 import dssex.pfcnum as pfc
 import dssex.estim as estim
 from functools import partial
@@ -113,13 +114,8 @@ class Power_flow_calculation_basic(unittest.TestCase):
         self.assertTrue(success, "calculate_power_flow shall succeed")
         # check residual current
         vnode_cx = estim.ri_to_complex(vnode_ri)
-        get_injected_power = get_injected_power_fn(
-            model.injections,
-            loadcurve='interpolated')
-        Inode = pfc.eval_residual_current(
-            model, get_injected_power, Vnode=vnode_cx)
-        # without slack node, slack is at index 0
-        max_dev = norm(Inode[model.count_of_slacks:], np.inf)
+        max_dev = pfc.max_residual_current(
+            model, vnode_cx, loadcurve='interpolated')
         self.assertLess(max_dev, 1e-8, 'residual node current is 0')
         vnode_abs = np.abs(vnode_cx)
         # check voltage at consumer
@@ -140,13 +136,8 @@ class Power_flow_calculation_basic(unittest.TestCase):
         self.assertTrue(success, "calculate_power_flow shall succeed")
         # check residual current
         vnode_cx = estim.ri_to_complex(vnode_ri)
-        get_injected_power = get_injected_power_fn(
-            model.injections,
-            loadcurve='interpolated')
-        Inode = pfc.eval_residual_current(
-            model, get_injected_power, Vnode=vnode_cx)
-        # without slack node, slack is at index 0
-        max_dev = norm(Inode[1:], np.inf)
+        max_dev = pfc.max_residual_current(
+            model, vnode_cx, loadcurve='interpolated')
         self.assertLess(max_dev, 1e-8, 'residual node current is 0')
         vnode_abs = np.abs(vnode_cx)
         # check voltage at consumer
@@ -166,13 +157,10 @@ class Power_flow_calculation_basic(unittest.TestCase):
         self.assertTrue(success, "calculate_power_flow shall succeed")
         # check residual current
         vnode_cx = estim.ri_to_complex(vnode_ri)
-        get_injected_power = get_injected_power_fn(
-            model.injections,
-            loadcurve='interpolated')
-        Inode = pfc.eval_residual_current(
-            model, get_injected_power, Vnode=vnode_cx)
+        max_dev = pfc.max_residual_current(
+            model, Vnode=vnode_cx, loadcurve='interpolated',
+            vminsqr=_VMINSQR)
         # without slack node, slack is at index 0
-        max_dev = norm(Inode[1:], np.inf)
         self.assertLess(max_dev, 1e-8, 'residual node current is 0')
         vnode_abs = np.abs(vnode_cx)
         # check voltage at consumer
@@ -193,13 +181,9 @@ class Power_flow_calculation_basic(unittest.TestCase):
         self.assertTrue(success, "calculate_power_flow shall succeed")
         # check residual current
         vnode_cx = estim.ri_to_complex(vnode_ri)
-        get_injected_power = get_injected_power_fn(
-            model.injections,
-            loadcurve='interpolated')
-        Inode = pfc.eval_residual_current(
-            model, get_injected_power, Vnode=vnode_cx)
-        # without slack node, slack is at index 0
-        max_dev = norm(Inode[1:], np.inf)
+        max_dev = pfc.max_residual_current(
+            model, Vnode=vnode_cx, loadcurve='interpolated',
+            vminsqr=_VMINSQR)
         self.assertLess(max_dev, 1e-8, 'residual node current is 0')
         vnode_abs = np.abs(vnode_cx)
         # check voltage at consumer
@@ -248,13 +232,9 @@ class Power_flow_calculation_taps(unittest.TestCase):
         self.assertTrue(success1, "calculate_power_flow shall succeed")
         # check residual current
         vnode_cx0 = estim.ri_to_complex(vnode_ri0)
-        get_injected_power0 = get_injected_power_fn(
-            model0.injections,
-            loadcurve='interpolated')
-        Inode0 = pfc.eval_residual_current(
-            model0, get_injected_power0, Vnode=vnode_cx0)
-        # without slack node, slack is at index 0
-        max_dev0 = norm(Inode0[1:], np.inf)
+        max_dev0 = pfc.max_residual_current(
+            model0, Vnode=vnode_cx0, loadcurve='interpolated',
+            vminsqr=_VMINSQR)
         self.assertLess(max_dev0, 1e-8, 'residual node current is 0')
         # node voltages are equal
         v_diff = vnode_ri0 - vnode_ri1
@@ -287,13 +267,9 @@ class Power_flow_calculation_taps(unittest.TestCase):
         # check residual current
         vnode_cx0 = estim.ri_to_complex(vnode_ri0)
         vnode_cx1 = estim.ri_to_complex(vnode_ri1)
-        get_injected_power0 = get_injected_power_fn(
-            model0.injections,
-            loadcurve='interpolated')
-        Inode0 = pfc.eval_residual_current(
-            model0, get_injected_power0, Vnode=vnode_cx0)
-        # without slack node, slack is at index 0
-        max_dev0 = norm(Inode0[1:], np.inf)
+        max_dev0 = pfc.max_residual_current(
+            model0, Vnode=vnode_cx0, loadcurve='interpolated',
+            vminsqr=_VMINSQR)
         self.assertLess(max_dev0, 1e-8, 'residual node current is 0')
         # voltage at node 2 is increased by 10 percent == 0.1
         idx_node_2 = model0.nodes.loc['n_2'].index_of_node
@@ -335,13 +311,9 @@ class Power_flow_calculation_taps(unittest.TestCase):
         # check residual current
         vnode_cx0 = estim.ri_to_complex(vnode_ri0)
         vnode_cx1 = estim.ri_to_complex(vnode_ri1)
-        get_injected_power0 = get_injected_power_fn(
-            model0.injections,
-            loadcurve='interpolated')
-        Inode0 = pfc.eval_residual_current(
-            model0, get_injected_power0, Vnode=vnode_cx0)
-        # without slack node, slack is at index 0
-        max_dev0 = norm(Inode0[1:], np.inf)
+        max_dev0 = pfc.max_residual_current(
+            model0, Vnode=vnode_cx0, loadcurve='interpolated',
+            vminsqr=_VMINSQR)
         self.assertLess(max_dev0, 1e-8, 'residual node current is 0')
         # voltage at node 2 is increased by 10 percent == 0.1
         idx_node_2 = model0.nodes.loc['n_2'].index_of_node
@@ -462,16 +434,16 @@ class Optimize_step(unittest.TestCase):
         succ, x_V, x_scaling = estim.optimize_step(*step_data)
         self.assertTrue(succ, 'estimation succeeds')
         V, k, pos = estim.get_Vcx_factors(step_data.factordata, x_V, x_scaling)
-        ed = pfc.calculate_electric_data(model, V, kpq=k, positions=pos)
         self.assertAlmostEqual(
             # exclude slacks
-            np.max(np.abs(ed.residual_node_current()[model.count_of_slacks:])),
+            pfc.max_residual_current(model, V, positions=pos, kpq=k),
             0,
             delta=1e-12,
             msg='Inode is almost 0')
         given_values = model.pvalues.set_index('id_of_batch')
+        res = rt.calculate_electric_data(model, V, kpq=k)
         self.assertAlmostEqual(
-            ed.branch().loc['line_0'].P0_pu,
+            res['branches'].loc['line_0'].P0_pu,
             given_values.loc['PQ_line_0'].P,
             places=7,
             msg='estimated active power equals given active power')
@@ -500,16 +472,16 @@ class Optimize_step(unittest.TestCase):
         succ, x_V, x_scaling = estim.optimize_step(*step_data)
         self.assertTrue(succ, 'estimation succeeds')
         V, k, pos = estim.get_Vcx_factors(step_data.factordata, x_V, x_scaling)
-        ed = pfc.calculate_electric_data(model, V, kpq=k, positions=pos)
         self.assertAlmostEqual(
             # exclude slacks
-            np.max(np.abs(ed.residual_node_current()[model.count_of_slacks:])),
+            pfc.max_residual_current(model, V, positions=pos, kpq=k),
             0,
             delta=1e-8,
             msg='Inode is almost 0')
+        inj_res = rt.calculate_injection_results(model, V, kpq=k)
         given_values = model.pvalues.set_index('id_of_batch')
         self.assertAlmostEqual(
-            ed.injection().loc['consumer'].P_pu,
+            inj_res.loc['consumer'].P_pu,
             given_values.loc['PQ_consumer'].P,
             delta=1e-8,
             msg='estimated active power equals given active power')
@@ -538,16 +510,16 @@ class Optimize_step(unittest.TestCase):
         succ, x_V, x_scaling = estim.optimize_step(*step_data)
         self.assertTrue(succ, 'estimation succeeds')
         V, k, pos = estim.get_Vcx_factors(step_data.factordata, x_V, x_scaling)
-        ed = pfc.calculate_electric_data(model, V, kpq=k, positions=pos)
         self.assertAlmostEqual(
             # exclude slacks
-            np.max(np.abs(ed.residual_node_current()[model.count_of_slacks:])),
+            pfc.max_residual_current(model, V, positions=pos, kpq=k),
             0,
             delta=1e-10,
             msg='Inode is almost 0')
+        branch_res = rt.calculate_branch_results(model, V, positions=pos)
         given_values = model.qvalues.set_index('id_of_batch')
         self.assertAlmostEqual(
-            ed.branch().loc['line_0'].Q0_pu,
+            branch_res.loc['line_0'].Q0_pu,
             given_values.loc['PQ_line_0'].Q,
             places=6,
             msg='estimated reactive power equals given reactive power')
@@ -576,16 +548,16 @@ class Optimize_step(unittest.TestCase):
         succ, x_V, x_scaling = estim.optimize_step(*step_data)
         self.assertTrue(succ, 'estimation succeeds')
         V, k, pos = estim.get_Vcx_factors(step_data.factordata, x_V, x_scaling)
-        ed = pfc.calculate_electric_data(model, V, kpq=k, positions=pos)
         self.assertAlmostEqual(
             # exclude slacks
-            np.max(np.abs(ed.residual_node_current()[model.count_of_slacks:])),
+            pfc.max_residual_current(model, V, positions=pos, kpq=k),
             0,
             delta=1e-8,
             msg='Inode is almost 0')
+        inj_res = rt.calculate_injection_results(model, V, kpq=k)
         given_values = model.qvalues.set_index('id_of_batch')
         self.assertAlmostEqual(
-            ed.injection().loc['consumer'].Q_pu,
+            inj_res.loc['consumer'].Q_pu,
             given_values.loc['PQ_consumer'].Q,
             delta=1e-8,
             msg='estimated reactive power equals given reactive power')
@@ -614,16 +586,16 @@ class Optimize_step(unittest.TestCase):
         succ, x_V, x_scaling = estim.optimize_step(*step_data)
         self.assertTrue(succ, 'estimation succeeds')
         V, k, pos = estim.get_Vcx_factors(step_data.factordata, x_V, x_scaling)
-        ed = pfc.calculate_electric_data(model, V, kpq=k, positions=pos)
         self.assertAlmostEqual(
             # exclude slacks
-            np.max(np.abs(ed.residual_node_current()[model.count_of_slacks:])),
+            pfc.max_residual_current(model, V, positions=pos, kpq=k),
             0,
             delta=1e-12,
             msg='Inode is almost 0')
+        branch_res = rt.calculate_branch_results(model, V, positions=pos)
         given_values = model.ivalues.set_index('id_of_batch')
         self.assertAlmostEqual(
-            ed.branch().loc['line_0'].I0_pu,
+            branch_res.loc['line_0'].I0_pu,
             given_values.loc['I_line_0'].I,
             places=7,
             msg='estimated electric current equals given electric current')
@@ -652,16 +624,16 @@ class Optimize_step(unittest.TestCase):
         succ, x_V, x_scaling = estim.optimize_step(*step_data)
         self.assertTrue(succ, 'estimation succeeds')
         V, k, pos = estim.get_Vcx_factors(step_data.factordata, x_V, x_scaling)
-        ed = pfc.calculate_electric_data(model, V, kpq=k, positions=pos)
+        inj_res = rt.calculate_injection_results(model, V, kpq=k)
         self.assertAlmostEqual(
             # exclude slacks
-            np.max(np.abs(ed.residual_node_current()[model.count_of_slacks:])),
+            pfc.max_residual_current(model, V, positions=pos, kpq=k),
             0,
             delta=1e-8,
             msg='Inode is almost 0')
         given_values = model.ivalues.set_index('id_of_batch')
         self.assertAlmostEqual(
-            ed.injection().loc['consumer'].I_pu,
+            inj_res.loc['consumer'].I_pu,
             given_values.loc['I_consumer'].I,
             delta=1e-8,
             msg='estimated electric current equals given electric current')
@@ -690,10 +662,9 @@ class Optimize_step(unittest.TestCase):
         self.assertTrue(succ, 'estimation succeeds')
         V, k, pos = estim.get_Vcx_factors(
             step_data.factordata, x_V, x_scaling)
-        ed = pfc.calculate_electric_data(model, V, kpq=k, positions=pos)
         self.assertAlmostEqual(
             # exclude slacks
-            np.max(np.abs(ed.residual_node_current()[model.count_of_slacks:])),
+            pfc.max_residual_current(model, V, positions=pos, kpq=k),
             0,
             delta=1e-8,
             msg='Inode is almost 0')

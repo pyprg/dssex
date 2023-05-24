@@ -23,6 +23,7 @@ import unittest
 import numpy as np
 import context # adds parent folder of dssex to search path
 import egrid.builder as grid
+import dssex.result as rt
 import dssex.estim as estim
 import dssex.pfcnum as pfc
 from numpy.testing import assert_array_almost_equal
@@ -589,12 +590,14 @@ class Estimate_branch_injection(unittest.TestCase):
         init, res = estim.estimate(model, step_params=[dict(objectives='P')])
         # check
         self.assertTrue(res[1], 'estimate succeeds')
-        ed = pfc.calculate_electric_data(model, res[2], kpq=res[3])
         # maximum of residual node currents without slacknode
-        max_dev = norm(
-            ed.residual_node_current()[model.count_of_slacks:], np.inf)
+        max_dev = pfc.max_residual_current(
+            model, res[2], positions=res[4], kpq=res[3],
+            loadcurve='interpolated')
         self.assertLess(max_dev, 1e-8, 'residual node current is 0')
-        P_n0_line_pu = ed.branch().loc['line','P0_pu']
+        branch_res = rt.calculate_branch_results(
+            model, res[2], positions=res[4])
+        P_n0_line_pu = branch_res.loc['line','P0_pu']
         self.assertAlmostEqual(
             P_n0_line_pu,
             Pval,
@@ -633,12 +636,13 @@ class Estimate_branch_injection(unittest.TestCase):
         init, res = estim.estimate(model, step_params=[dict(objectives='P')])
         # check
         self.assertTrue(res[1], 'estimate succeeds')
-        ed = pfc.calculate_electric_data(model, res[2], kpq=res[3])
-        # maximum of residual node currents without slacknode
-        max_dev = norm(
-            ed.residual_node_current()[model.count_of_slacks:], np.inf)
+        max_dev = pfc.max_residual_current(
+            model, res[2], positions=res[4], kpq=res[3],
+            loadcurve='interpolated')
         self.assertLess(max_dev, 1e-8, 'residual node current is 0')
-        P_n0_line_pu = ed.branch().loc['line','P0_pu']
+        branch_res = rt.calculate_branch_results(
+            model, res[2], positions=res[4])
+        P_n0_line_pu = branch_res.loc['line','P0_pu']
         self.assertAlmostEqual(
             P_n0_line_pu,
             Pval,
@@ -685,12 +689,13 @@ class Estimate_branch_injection(unittest.TestCase):
         # check
         self.assertTrue(
             res[1], 'estimate succeeds')
-        ed = pfc.calculate_electric_data(model, res[2], kpq=res[3])
-        # maximum of residual node currents without slacknode
-        max_dev = norm(
-            ed.residual_node_current()[model.count_of_slacks:], np.inf)
+        max_dev = pfc.max_residual_current(
+            model, res[2], positions=res[4], kpq=res[3],
+            loadcurve='interpolated')
         self.assertLess(max_dev, 1e-8, 'residual node current is 0')
-        P_n0_line_pu, Q_n0_line_pu = ed.branch().loc['line',['P0_pu', 'Q0_pu']]
+        branch_res = rt.calculate_branch_results(
+            model, res[2], positions=res[4])
+        P_n0_line_pu, Q_n0_line_pu = branch_res.loc['line',['P0_pu', 'Q0_pu']]
         self.assertAlmostEqual(
             P_n0_line_pu,
             Pval,
@@ -738,12 +743,13 @@ class Estimate_branch_injection(unittest.TestCase):
                 dict(objectives='Q', constraints='P')])
         # check
         self.assertTrue(res[1], 'estimate succeeds')
-        ed = pfc.calculate_electric_data(model, res[2], kpq=res[3])
-        # maximum of residual node currents without slacknode
-        max_dev = norm(
-            ed.residual_node_current()[model.count_of_slacks:], np.inf)
+        max_dev = pfc.max_residual_current(
+            model, res[2], positions=res[4], kpq=res[3],
+            loadcurve='interpolated')
         self.assertLess(max_dev, 1e-8, 'residual node current is 0')
-        P_n0_line_pu, Q_n0_line_pu = ed.branch().loc['line',['P0_pu', 'Q0_pu']]
+        branch_res = rt.calculate_branch_results(
+            model, res[2], positions=res[4])
+        P_n0_line_pu, Q_n0_line_pu = branch_res.loc['line',['P0_pu', 'Q0_pu']]
         self.assertAlmostEqual(
             P_n0_line_pu,
             Pval,
@@ -785,12 +791,13 @@ class Estimate_branch_injection(unittest.TestCase):
             step_params=[dict(objectives='I')])
         # check
         self.assertTrue(res[1], 'estimate succeeds')
-        ed = pfc.calculate_electric_data(model, res[2], kpq=res[3])
-        # maximum of residual node currents without slacknode
-        max_dev = norm(
-            ed.residual_node_current()[model.count_of_slacks:], np.inf)
+        max_dev = pfc.max_residual_current(
+            model, res[2], positions=res[4], kpq=res[3],
+            loadcurve='interpolated')
         self.assertLess(max_dev, 1e-8, 'residual node current is 0')
-        I_n0_line_pu = ed.branch().loc['line', 'I0_pu']
+        branch_res = rt.calculate_branch_results(
+            model, res[2], positions=res[4])
+        I_n0_line_pu = branch_res.loc['line', 'I0_pu']
         self.assertAlmostEqual(
             I_n0_line_pu,
             Ival,
@@ -819,10 +826,9 @@ class Estimate_branch_injection(unittest.TestCase):
             model, step_params=[dict(objectives='V')])
         # check
         self.assertTrue(res[1], 'estimate succeeds')
-        ed = pfc.calculate_electric_data(model, res[2], kpq=res[3])
-        # maximum of residual node currents without slacknode
-        max_dev = norm(
-            ed.residual_node_current()[model.count_of_slacks:], np.inf)
+        max_dev = pfc.max_residual_current(
+            model, res[2], positions=res[4], kpq=res[3],
+            loadcurve='interpolated')
         self.assertLess(max_dev, 1e-8, 'residual node current is 0')
         # check voltage
         given_V_at_node = model.vvalues.set_index('id_of_node').loc['n_2']
@@ -854,10 +860,9 @@ class Estimate_branch_injection(unittest.TestCase):
             model, step_params=[dict(objectives='V')])
         # check
         self.assertTrue(res[1], 'estimate succeeds')
-        ed = pfc.calculate_electric_data(model, res[2], kpq=res[3])
-        # maximum of residual node currents without slacknode
-        max_dev = norm(
-            ed.residual_node_current()[model.count_of_slacks:], np.inf)
+        max_dev = pfc.max_residual_current(
+            model, res[2], positions=res[4], kpq=res[3],
+            loadcurve='interpolated')
         self.assertLess(max_dev, 1e-8, 'residual node current is 0')
         # check voltage
         given_V_at_node = model.vvalues.set_index('id_of_node').loc['n_2']
@@ -897,16 +902,16 @@ class Estimate_branch_injection(unittest.TestCase):
             model, step_params=[dict(objectives='V')])
         # check
         self.assertTrue(res[1], 'estimate succeeds')
-        ed = pfc.calculate_electric_data(
-            model, voltages_cx=res[2], kpq=res[3], positions=res[4])
+        num_res = rt.calculate_electric_data(
+            model, res[2], kpq=res[3], positions=res[4])
         # maximum of residual node currents without slacknode
-        max_dev = norm(
-            ed.residual_node_current()[model.count_of_slacks:], np.inf)
+        max_dev = pfc.max_residual_current(
+            model, res[2], kpq=res[3], positions=res[4])
         self.assertLess(max_dev, 1e-8, 'residual node current is 0')
         # check voltage
         self.assertAlmostEqual(
             # get absolute of calculated voltage at node 'n_2'
-            ed.node().V_pu.n_2,
+            num_res['nodes'].V_pu.n_2,
             Vval,
             places=2,
             msg='estimated voltage equals given voltage')

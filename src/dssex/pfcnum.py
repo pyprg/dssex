@@ -30,10 +30,9 @@ import numpy as np
 import pandas as pd
 from numpy.linalg import norm
 from functools import partial
-from collections import namedtuple
 from operator import itemgetter
 from scipy.sparse import \
-    csc_array, coo_matrix, bmat, diags, csc_matrix, vstack#, hstack
+    csc_array, coo_matrix, bmat, diags, csc_matrix, vstack
 from scipy.sparse.linalg import splu
 from dssex.injections import get_polynomial_coefficients
 
@@ -44,7 +43,6 @@ _VMINSQR = 0.8**2
 
 _zeros = np.zeros((0, 1), dtype=np.longdouble)
 _power_props = itemgetter('P10', 'Q10', 'Exp_v_p', 'Exp_v_q')
-
 
 def get_term_to_factor_n(terminalfactors, positions):
     """Calculates one tap factor for each row in DataFrame terminalfactors.
@@ -430,7 +428,7 @@ def _get_interpolated_injected_power_fn(vminsqr, injections, kpq=None):
     return calc_injected_power
 
 def get_calc_injected_power_fn(
-        vminsqr, injections, kpq=None, loadcurve='original'):
+        vminsqr, injections, kpq=None, loadcurve='interpolated'):
     """Returns a function calculating power flowing through injections.
 
     Parameters
@@ -446,6 +444,7 @@ def get_calc_injected_power_fn(
         optional
         scaling factors for active and reactive power
     loadcurve: 'original' | 'interpolated' | 'square'
+        optional, default 'interpolated'
 
     Returns
     -------
@@ -1150,8 +1149,7 @@ def get_residual_current_fn2(model, get_injected_power, Vslack=None):
             model, get_injected_power, Vslack_, Y, Vnode)
     return fn
 
-def eval_residual_current(
-        model, get_injected_power, Vnode, positions=None):
+def eval_residual_current(model, get_injected_power, Vnode, positions=None):
     """Convenience function for evaluation of a power flow calculation result.
 
     Calls function get_residual_current_fn and get_residual_current
@@ -1176,126 +1174,72 @@ def eval_residual_current(
         get_residual_current_fn(model, get_injected_power)(Vnode, positions)
         .reshape(-1, 1))
 
-Electric_data = namedtuple(
-    'Electric_data',
-    'branch injection node residual_node_current')
-Electric_data.__doc__ = """Functions for calculating electric data for
-branches, injections and nodes from power flow or estimation results.
-
-Parameters
-----------
-branch: function
-    (array_like<str>)->(pandas.DataFrame)
-injection: function
-    (array_like<str>)->(pandas.DataFrame)
-node: function
-    ()->(pandas.DataFrame)
-residual_node_current: function
-    ()->(numpy.array<complex>)"""
-
-def calculate_electric_data(
-        model, voltages_cx, *, kpq=None, positions=None,
-        vminsqr=_VMINSQR, loadcurve='interpolated'):
-    """Calculates and arranges electric data of injections and branches.
-
-    Uses a given voltage vector, e.g. the result of a power flow calculation.
+def calculate_residual_current(
+        model, /, Vnode, *, positions=None, kpq=None,
+        loadcurve='interpolated', vminsqr=_VMINSQR):
+    """Calculates residual current per power-flow-calculation node.
 
     Parameters
     ----------
     model: egrid.model.Model
         model of grid for calculation
-    voltages_cx : array_like, complex
-        node voltage vector
+    Vnode : TYPE
+        DESCRIPTION.
+    positions: numpy.array
+        optional, default None
+        float, tap-position
     kpq: numpy.array, float, (nx2)
-        optional
+        optional, default None
         scaling factors for active and reactive power
-    positions: numpy.array, float, (nx1)
-        optional
-        tap positions for terminals
-        ordered according to model.factors.terminalfactors
-    vminsqr : float, optional
-        Upper limit of interpolation, interpolates if |V|² < vminsqr.
-        The default is _VMINSQR.
-    loadcurve : str, optional
-        'original'|'interpolated'|'square'. The default is 'interpolated'.
+    loadcurve: 'original' | 'interpolated' | 'square'
+        optional, default 'interpolated'
+    vminsqr: float
+        optional, default _VMINSQR
+        upper limit of interpolation, interpolates if |V|² < vminsqr
 
     Returns
     -------
-    Electric_data
-        * .branch, function (array_like<str>)->(pandas.DataFrame)
-        * .injection, function (array_like<str>)->(pandas.DataFrame)
-        * .node, function ()->(pandas.DataFrame)
-        * .residual_node_current, function ()->(numpy.ndarray<complex>)"""
-    result_data = calculate_results(
-        model, voltages_cx, kpq, positions, loadcurve)
-    get_injected_power = get_injected_power_fn(
+    numpy.ndarray
+        complex, residual node current"""
+    get_injected_power = get_calc_injected_power_fn(vminsqr,
         model.injections, kpq=kpq, loadcurve=loadcurve)
-    def br_data(columns=None):
-        """Returns calculated electric data of branches.
+    return eval_residual_current(
+            model, get_injected_power, Vnode, positions)
 
-        Parameters
-        ----------
-        columns: array_like, optional
-            default is ('P0_pu', 'P1_pu', 'Q0_pu', 'Q1_pu',
-             'V0_pu', 'V1_pu', 'I0_pu', 'I1_pu', 'Ploss_pu', 'Qloss_pu',
-             'Tap0', 'Tap1')
-            column names, for the list all possible names see function
-            calculate_branch_results
+def max_residual_current(
+        model, /, Vnode, *,positions=None, kpq=None,
+        loadcurve='interpolated', vminsqr=_VMINSQR):
+    """Calculates the maximum of residual current per node.
 
-        Returns
-        -------
-        pandas.DataFrame"""
-        res = result_data['branches'].set_index('id')
-        return res.reindex(
-            columns=(
-                ('P0_pu', 'P1_pu', 'Q0_pu', 'Q1_pu',
-                 'V0_pu', 'V1_pu', 'I0_pu', 'I1_pu', 'Ploss_pu', 'Qloss_pu',
-                 'Tap0', 'Tap1')
-                if columns is None else columns),
-            copy=False)
-    def inj_data(columns=None):
-        """Returns calculated electric data of injections.
+    Excludes slack nodes. Helper function for testing.
 
-        Parameters
-        ----------
-        columns: array_like, optional
-            default is ('P_pu', 'Q_pu', 'V_pu', 'I_pu', 'kp', 'kq',
-            'P10', 'Q10', 'Exp_v_p', 'Exp_v_q')
-            column names, for the list all possible names see function
-            calculate_injection_results
+    Parameters
+    ----------
+    model: egrid.model.Model
+        model of grid for calculation
+    Vnode : TYPE
+        DESCRIPTION.
+    positions: numpy.array
+        optional, default None
+        float, tap-position
+    kpq: numpy.array, float, (nx2)
+        optional, default None
+        scaling factors for active and reactive power
+    loadcurve: 'original' | 'interpolated' | 'square'
+        optional, default 'interpolated'
+    vminsqr: float
+        optional, default _VMINSQR
+        upper limit of interpolation, interpolates if |V|² < vminsqr
 
-        Returns
-        -------
-        pandas.DataFrame"""
-        res = result_data['injections'].set_index('id')
-        res['kp'], res['kq'] =  np.hsplit(
-            (np.ones(shape=(len(model.injections),2), dtype=float)
-             if kpq is None else kpq),
-            2)
-        return res.reindex(
-            columns=(
-                ('P_pu', 'Q_pu', 'V_pu', 'I_pu', 'kp', 'kq', 'P10', 'Q10',
-                 'Exp_v_p', 'Exp_v_q')
-                if columns is None else columns),
-            copy=False)
-    def node_data(columns=None):
-        # expand to each connectivity node
-        Vcx_pu = voltages_cx.reshape(-1)[model.nodes.index_of_node]
-        V_pu = np.abs(Vcx_pu)
-        V_re = np.real(Vcx_pu)
-        V_im = np.imag(Vcx_pu)
-        df = pd.DataFrame(
-            {'Vcx_pu': Vcx_pu, 'V_pu': V_pu, 'V_re': V_re, 'V_im': V_im},
-            index=model.nodes.index)
-        df.index.name = 'id'
-        df.sort_index(inplace=True)
-        return df[['V_pu', 'V_re', 'V_im'] if columns is None else columns]
-    return Electric_data(
-        branch=br_data,
-        injection=inj_data,
-        node=node_data,
-        residual_node_current=lambda:eval_residual_current(
-            model, get_injected_power, voltages_cx, positions))
+    Returns
+    -------
+    numpy.ndarray
+        complex, residual node current"""
+    return norm(
+            calculate_residual_current(
+                model, Vnode, positions=positions, kpq=kpq)
+            [model.count_of_slacks:],
+            np.inf)
 
 def _update_positions(factors, pos):
     """Extracts 'value' from factors and overwrites them with matching pos.

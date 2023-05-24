@@ -148,88 +148,7 @@ class Calculate_power_flow(unittest.TestCase):
             'calculate_power_flow shall return the slack voltage and '
             'voltages increased/decreased by tap factors')
 
-class Calculate_electric_data(unittest.TestCase):
-
-    def test_empty(self):
-        model = make_model()
-        vcx = np.zeros((0,1), dtype=complex)
-        ed = pfc.calculate_electric_data(model, vcx)
-        self.assertIsInstance(
-            ed.branch(),
-            pd.DataFrame,
-            'ed.branch() returns a pandas.DataFrame')
-        self.assertIsInstance(
-            ed.injection(),
-            pd.DataFrame,
-            'ed.injection() returns a pandas.DataFrame')
-        self.assertIsInstance(
-            ed.node(),
-            pd.DataFrame,
-            'ed.node() returns a pandas.DataFrame')
-        self.assertIsInstance(
-            ed.residual_node_current(),
-            np.ndarray,
-            'ed.residual_node_current() returns a numpy.array')
-
-    def test_slacknode(self):
-        vslack = .994+.023j
-        model = make_model(grid.Slacknode('n_0', vslack))
-        vcx = np.array([[vslack]])
-        ed = pfc.calculate_electric_data(model, vcx)
-        self.assertIsInstance(
-            ed.branch(),
-            pd.DataFrame,
-            'ed.branch() returns a pandas.DataFrame')
-        self.assertIsInstance(
-            ed.injection(),
-            pd.DataFrame,
-            'ed.injection() returns a pandas.DataFrame')
-        self.assertIsInstance(
-            ed.node(),
-            pd.DataFrame,
-            'ed.node() returns a pandas.DataFrame')
-        assert_array_equal(
-            ed.node(['Vcx_pu']).Vcx_pu.to_numpy().reshape(-1,1),
-            np.array([[vslack]]),
-            err_msg='calculate_electric_data shall return the slack voltage')
-
-    def test_slacknode_injection(self):
-        """
-        n_0----------->> consumer
-          slack=True       P10=30
-          V=.994+.023j     Q10=10
-        """
-        vslack = .994+.023j
-        Sconsumer = 30.0+10.j
-        model = make_model(
-            grid.Slacknode('n_0', vslack),
-            grid.Injection(
-                'consumer', 'n_0', P10=Sconsumer.real, Q10=Sconsumer.imag))
-        vcx = np.array([[vslack]])
-        ed = pfc.calculate_electric_data(model, vcx)
-        self.assertIsInstance(
-            ed.branch(),
-            pd.DataFrame,
-            'ed.branch() returns a pandas.DataFrame')
-        self.assertIsInstance(
-            ed.injection(columns=['Icx_pu']),
-            pd.DataFrame,
-            'ed.injection() returns a pandas.DataFrame')
-        self.assertIsInstance(
-            ed.node(),
-            pd.DataFrame,
-            'ed.node() returns a pandas.DataFrame')
-        vnode = ed.node(['Vcx_pu']).Vcx_pu.to_numpy().reshape(-1,1)
-        assert_array_equal(
-            vnode,
-            np.array([[vslack]]),
-            err_msg='calculate_electric_data shall return the slack voltage')
-        Icx_pu = ed.injection(columns=['Icx_pu']).to_numpy()
-        S_pu = 3 * vnode * Icx_pu.conj()
-        assert_array_almost_equal(
-            S_pu,
-            np.array([[Sconsumer]], dtype=np.complex128),
-            err_msg='calculate_electric_data shall return the complex current')
+class Calculate_residual_current(unittest.TestCase):
 
     def test_positions_parameter(self):
         """positions parameter overrides position value of model"""
@@ -254,12 +173,12 @@ class Calculate_electric_data(unittest.TestCase):
             success,
             'calculate_power_flow succeeds with slack node,'
             ' branch with tapchanger and injection')
-        ed_pos0 = pfc.calculate_electric_data(
+        Iresidual_0 = pfc.calculate_residual_current(
             model_pos0, vcx, positions=np.array([-16], dtype=float))
-        ed = pfc.calculate_electric_data(model, vcx)
+        Iresidual = pfc.calculate_residual_current(model, vcx)
         assert_array_almost_equal(
-            ed_pos0.residual_node_current(),
-            ed.residual_node_current(),
+            Iresidual_0,
+            Iresidual,
             err_msg="residual current shall be equal")
 
 if __name__ == '__main__':
