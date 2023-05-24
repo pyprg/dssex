@@ -60,7 +60,7 @@ def _calculate_injected_si(injections, Vinj, kpq, loadcurve, vminsqr):
     Icx = (Ssinglephase / Vinj.reshape(-1)).conjugate()
     return np.vstack([Ssinglephase, Icx])
 
-def _calculate_injection_results(injections, Vinj, SI):
+def _calculate_injection_results(injections, Vinj, SI, kpq):
     """Calculates electric data of injections.
 
     Returns active and reactive power, current and voltage in pu.
@@ -95,6 +95,12 @@ def _calculate_injection_results(injections, Vinj, SI):
     df['Vcx_pu'] = Vinj
     df['Scx_pu'] = SI[0]
     df['Icx_pu'] = SI[1]
+    if kpq is None:
+        df['kp'] = 1.
+        df['kq'] = 1.
+    else:
+        df['kp'] = kpq[:,0]
+        df['kq'] = kpq[:,1]
     df.set_index('id', inplace=True)
     df.sort_index(inplace=True)
     return df
@@ -128,7 +134,7 @@ def calculate_injection_results(
     Vinj = model.mnodeinj.T @ Vnode
     injections = model.injections
     SI = _calculate_injected_si(injections, Vinj, kpq, loadcurve, vminsqr)
-    return _calculate_injection_results(injections, Vinj, SI)
+    return _calculate_injection_results(injections, Vinj, SI, kpq)
 
 #
 # branches
@@ -760,7 +766,7 @@ def calculate_electric_data(
     injections = model.injections
     Vinj = model.mnodeinj.T @ Vnode
     SI = _calculate_injected_si(injections, Vinj, kpq, loadcurve, vminsqr)
-    injection_res = _calculate_injection_results(injections, Vinj, SI)
+    injection_res = _calculate_injection_results(injections, Vinj, SI, kpq)
     # switch flow
     Icx_branchterm = (
         branchterminals.loc[:, ['index_of_node', 'switch_flow_index']])
