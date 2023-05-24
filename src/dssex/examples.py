@@ -52,7 +52,6 @@ V=1.00      y_tr=1e-6+1e-6j        y_tr=1µ+1µj            y_tr=1.3µ+1.5µj   
 
 
 #. Deft(id=taps value=0)
-
 """
 
 import numpy as np
@@ -61,8 +60,6 @@ import pfcnum as pfc
 from egrid import make_model
 
 model = make_model(schema)
-
-
 
 # manual input
 kpq = np.ones((len(model.injections), 2), dtype=float)
@@ -83,10 +80,14 @@ print(np.abs(vcx))
 #%%
 import dssex.result as rt
 
-branch_res = rt.calculate_branch_results(model, vcx)
-injection_res = rt.calculate_injection_results(model, vcx)
+res = rt.make_printable(rt.calculate_electric_data(model, vcx))
 
-res = rt.calculate_electric_data(model, vcx)
+branch_res = res['branches']
+injection_res = res['injections']
+node_res = res['nodes']
+
+
+
 
 #%%
 import dssex.result as rt

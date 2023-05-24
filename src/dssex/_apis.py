@@ -77,7 +77,7 @@ def calculate_pf(model, step_params=()):
         * injections
         * nodes"""
     from dssex.estim import estimate
-    from dssex.pfcnum import calculate_electric_data
+    from dssex.result import calculate_electric_data
     from egrid import make_model
     from pandas import DataFrame, concat
     from numpy import zeros
@@ -89,20 +89,19 @@ def calculate_pf(model, step_params=()):
         if succ:
             txt = 'calculation successful'
             m = concat([messages, DataFrame([dict(message=txt, level=0)])])
-            ed = calculate_electric_data(model, v_cx, kpq=kpq, positions=pos)
-            return dict(
-                messages=m, branches=ed.branch(), injections=ed.injection(),
-                nodes=ed.node())
+            res = calculate_electric_data(model, v_cx, kpq=kpq, positions=pos)
+            res['messages'] = m
+            return res
         else:
             txt = 'calculation failed'
             m = concat([messages, DataFrame([dict(message=txt, level=2)])])
     else:
         txt = 'not calculated, error(s) in model'
         m = concat([messages, DataFrame([dict(message=txt, level=2)])])
-    ed = calculate_electric_data(
+    res = calculate_electric_data(
         make_model(), zeros((0,1), dtype=complex))
-    return dict(messages=m, branches=ed.branch(), injections=ed.injection(),
-                nodes=ed.node())
+    res['messages'] = m
+    return res
 
 def print_power_flow(*args):
     """Calculates the power flow of a given network model. Prints the result.
@@ -134,11 +133,12 @@ def print_power_flow(*args):
             PValue | QValue | IValue | Vvalue | Branchtaps |
             Deff | Link | Message) | str"""
     from egrid import make_model_checked
+    from dssex.result import make_printable
     if not args:
         args = DEFAULT_NETWORK
         print(args)
     model = make_model_checked(args)
-    for title, df in calculate_pf(model).items():
+    for title, df in make_printable(calculate_pf(model)).items():
         print(f'\n>{title.upper()}>')
         print(df.fillna('-').to_markdown())
 

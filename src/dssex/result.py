@@ -258,7 +258,7 @@ def _calculate_branch_results(
         * .S1cx_pu, complex
         * .I1cx_pu, complex
         * .V1cx_pu, complex
-        * .Sloss_pu, complex
+        * .Slosscx_pu, complex
         * .S0_pu, float
         * .P0_pu, float
         * .Q0_pu, float
@@ -274,7 +274,7 @@ def _calculate_branch_results(
         * .Tap0, float
         * .Tap1, float"""
     Vcx_a = Vcx_term_ab[:, 0].reshape(-1,1)
-    Sterm = 3 * Vcx_a * np.conjugate(Iterm)
+    Sterm = 3 * Vcx_a * np.conjugate(Iterm) # factor 3 for 3-phase system
     terms_a = branchterminals[branchterminals.side_a]
     siv = np.concatenate([Sterm, Iterm, Vcx_a], axis=1)
     siv_ab = (
@@ -289,7 +289,7 @@ def _calculate_branch_results(
         index=terms_a.index)
     df_siv['id_of_branch'] = terms_a.id_of_branch
     df_siv['index_of_other_terminal'] = terms_a.index_of_other_terminal
-    df_siv['Sloss_pu'] = df_siv.S0cx_pu + df_siv.S1cx_pu
+    df_siv['Slosscx_pu'] = df_siv.S0cx_pu + df_siv.S1cx_pu
     PQ_pu = Sterm.view(dtype=np.float64)
     I_pu = np.abs(Iterm)
     V_pu = np.abs(Vcx_term_ab[:,0].reshape(-1, 1))
@@ -308,8 +308,8 @@ def _calculate_branch_results(
         index=terms_a.index)
     df_pqiv['S0_pu'] = np.abs(df_siv.S0cx_pu)
     df_pqiv['S1_pu'] = np.abs(df_siv.S1cx_pu)
-    df_pqiv['Ploss_pu'] = np.real(df_siv.Sloss_pu)
-    df_pqiv['Qloss_pu'] = np.imag(df_siv.Sloss_pu)
+    df_pqiv['Ploss_pu'] = np.real(df_siv.Slosscx_pu)
+    df_pqiv['Qloss_pu'] = np.imag(df_siv.Slosscx_pu)
     tappos = pd.Series(positions, index=terminalfactors.index, name="Tap")
     df_siv_ = (
         df_siv
@@ -348,7 +348,7 @@ def calculate_branch_results(model, /, Vnode, *, positions=None):
         * .S1cx_pu, complex
         * .I1cx_pu, complex
         * .V1cx_pu, complex
-        * .Sloss_pu, complex
+        * .Slosscx_pu, complex
         * .S0_pu, float
         * .P0_pu, float
         * .Q0_pu, float
@@ -655,7 +655,7 @@ def _calculate_bridge_results(
         * .S1cx_pu, complex
         * .I1cx_pu, complex
         * .V1cx_pu, complex
-        * .Sloss_pu, complex
+        * .Slosscx_pu, complex
         * .S0_pu, float
         * .P0_pu, float
         * .Q0_pu, float
@@ -694,7 +694,7 @@ def _calculate_bridge_results(
     bridgeterminal_res['S1_pu'] = np.abs(bridgeterminal_res.S1cx_pu)
     bridgeterminal_res['P1_pu'] = np.real(bridgeterminal_res.S1cx_pu)
     bridgeterminal_res['Q1_pu'] = np.imag(bridgeterminal_res.S1cx_pu)
-    bridgeterminal_res['Sloss_pu'] = 0+0j
+    bridgeterminal_res['Slosscx_pu'] = 0+0j
     bridgeterminal_res['Ploss_pu'] = 0
     bridgeterminal_res['Qloss_pu'] = 0
     bridgeterminal_res.set_index('id_of_branch', inplace=True)
@@ -739,12 +739,13 @@ def calculate_electric_data(
          'Vre': np.real(Vcx_cn_node),
          'Vim': np.imag(Vcx_cn_node)},
         index=nodes.index)
-    nodes.sort_index(inplace=True)
+    nodes_res.sort_index(inplace=True)
+    nodes_res.index.name = 'id'
     # branches
     branchterminals = model.branchterminals
     terminalfactors = model.factors.terminalfactors
     Vcx_term_ab = _vterm_from_vnode(branchterminals, Vnode)
-    positions_ = terminalfactors.value if positions is None else positions
+    positions_ = positions if positions else terminalfactors.value
     Iterm = _calculate_terminal_current(model, Vcx_term_ab, positions_)
     branch_res = _calculate_branch_results(
         branchterminals, branchterminals, Iterm, Vcx_term_ab, positions_)
@@ -895,3 +896,41 @@ def get_switch_flow2(model, /, Vnode, *, kpq, positions, vminsqr=.64):
          'switch_flow_index': injections.switch_flow_index,
          'Icx': Iinj.reshape(-1)})
     return _calculate_switch_flows(Iterm_df, Iinj_df, groups_of_terminals)
+
+def filter_columns(df, *, regex=r'cx', positive=False):
+    """Filters columns of df.
+
+    Parameters
+    ----------
+    df : pandas.DataFrame
+
+    regex: string|re
+        optional, default 'cx'
+        expression for filter
+    positive: bool
+        optional, default False
+
+    Returns
+    -------
+    pandas.DataFrame"""
+    import re
+    return (
+        df[[name for name in df.columns if re.search(regex, name)]]
+        if positive else
+        df[[name for name in df.columns if re.search(regex, name) is None]])
+
+def make_printable(dict_of_frames):
+    """Removes columns containing complex values, fills nan with '-'.
+
+    Parameters
+    ----------
+    dict_of_frames : dictionary
+        pandas.DataFrame
+
+    Returns
+    -------
+    dict
+        pandas.DataFrame"""
+    return {
+        k:filter_columns(df).fillna('-').round(3)
+        for k,df in dict_of_frames.items()}
