@@ -1255,9 +1255,10 @@ def _update_positions(factors, pos):
     -------
     pandas.Series id_of_factor -> value_of_factor (float)"""
     factorvalues = (
-        factors.gen_factordata[
+        factors.gen_factordata.loc[
             factors.gen_factordata.index.isin(factors.terminalfactors.id)]
-        .value)
+        .value
+        .copy())
     positions = (
         pd.DataFrame.from_records(pos, columns=['id', 'value'])
         .set_index('id')
