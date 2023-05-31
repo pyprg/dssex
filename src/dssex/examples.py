@@ -31,7 +31,7 @@ schema = """
                        |                      |                      |                      |                      |
                        |                      |                      |                      |                      |
     Tlink=taps         |                      |                      |                      |                      |
-    I=31               |                      |                      |                      |                      |
+    I=11               |                      |                      |                      |                      |
     P=35 Q=10          |                      |                      |                      |                      |
 n0(--------line_1-----)n1(--------line_2-----)n2(--------line_3-----)n3(--------line_4-----)n4(------line_5-------)n5-------> load_52_
 slack=True  y_lo=1e3-1e3j          y_lo=1k-1kj            y_lo=0.9k-0.95kj       y_lo=1k-1kj           y_lo=1k-1kj |           P10=2 Q10=1
@@ -41,7 +41,7 @@ V=1.00      y_tr=1e-6+1e-6j        y_tr=1µ+1µj            y_tr=1.3µ+1.5µj   
                        |                                                                                           |
                        |                                                                                           |
                        |           y_lo=1e3-1e3j          y_lo=1e3-1e3j                       y_lo=1e3-1e3j        |
-                       |   I=10    y_tr=1e-6+1e-6j        y_tr=1e-6+1e-6j           V=.974    y_tr=1e-6+1e-6j      |
+                       |   I=10    y_tr=1e-6+1e-6j        y_tr=1e-6+1e-6j           V=1.0     y_tr=1e-6+1e-6j      |
                        n1(--------line_6-----)n6(--------line_7--------------------)n7(------line_8---------------)n5
                                               |                                     |
                                               |                                     |
@@ -51,10 +51,11 @@ V=1.00      y_tr=1e-6+1e-6j        y_tr=1µ+1µj            y_tr=1.3µ+1.5µj   
                                                      Q10=8             Q10=4                    Q10=-10
 
 
-#. Defk(id=kp)
-#. Klink(id_of_injection=(load_2 load_3) part=p id_of_factor=kp)
-#. Defk(id=kq)
-#. Klink(id_of_injection=(load_2 load_6) part=q id_of_factor=kq)
+#. Defk(id=(kp kq))
+#. Klink(id_of_injection=(load_2 load_3) part=(p q) id_of_factor=(kp kq))
+#. Klink(id_of_injection=(load_51 load_6) part=q id_of_factor=kq)
+#. Defk(id=kq_Gen7 max=7)
+#. Klink(id_of_injection=Gen_7 part=q id_of_factor=kq_Gen7)
 # Deft(id=taps value=0)
 """
 
@@ -64,7 +65,7 @@ import dssex.result as rt
 from egrid import make_model
 
 model = make_model(schema)
-
+#%%
 # manual input
 kpq = np.full((len(model.injections), 2), 1., dtype=float)
 pos = []#[('taps', -16)]
@@ -77,7 +78,7 @@ success, vcx = pfc.calculate_power_flow(model, kpq=kpq, positions=positions)
 
 #%%
 import dssex.estim as estim
-init, res = estim.estimate(model, step_params=[dict(objectives='PQ')])
+init, res = estim.estimate(model, step_params=[dict(objectives='IPQV')])
 calc_init = rt.make_printable(
     rt.calculate_electric_data(model, init[2], kpq=init[3], positions=init[4]))
 calc_estim = rt.make_printable(
