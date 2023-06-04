@@ -20,7 +20,7 @@ Created on Sun Aug  8 08:36:10 2021
 @author: pyprg
 """
 schema = """
-                                                                                                    Q10=-2 Exp_v_q=2
+                                                                                                   Q10=-2 Exp_v_q=2
                                                                                             n4-|| cap_4_
                                                                                             |
                                                                                             |
@@ -78,8 +78,14 @@ success, vcx = pfc.calculate_power_flow(model, kpq=kpq, positions=positions)
 
 #%%
 import dssex.estim as estim
-init, res = estim.estimate(model, step_params=[dict(objectives='IPQV')])
+init, res, res2 = estim.estimate(
+    model,
+    step_params=[
+        dict(objectives='PQ'),
+        dict(objectives='V', constraints='PQ')])
 calc_init = rt.make_printable(
     rt.calculate_electric_data(model, init[2], kpq=init[3], positions=init[4]))
 calc_estim = rt.make_printable(
     rt.calculate_electric_data(model, res[2], kpq=res[3], positions=res[4]))
+calc_estim2 = rt.make_printable(
+    rt.calculate_electric_data(model, res2[2], kpq=res2[3], positions=res2[4]))

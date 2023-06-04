@@ -27,7 +27,6 @@ import dssex.result as rt
 import dssex.estim as estim
 import dssex.pfcnum as pfc
 from numpy.testing import assert_array_almost_equal
-from numpy.linalg import norm
 from egrid import make_model
 
 class Estimate_minimal(unittest.TestCase):
