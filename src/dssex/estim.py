@@ -1867,18 +1867,13 @@ def get_step_data_fns(model, gen_factor_symbols):
                   string of characters 'I'|'P'|'Q'|'V' or empty string ''"""
     expressions = get_expressions(model, gen_factor_symbols)
     make_step_data = partial(get_step_data, model, expressions)
-    def next_step_data(
-            step, step_data, voltages_ri, k, objectives='', constraints=''):
+    def next_step_data(step, voltages_ri, k, objectives='', constraints=''):
         """Creates data for function 'optimize_step'.
-
-        A previous step must have created step_data.
 
         Parameters
         ----------
         step: int
-            index of optimizatin step
-        step_data: Stepdata
-            made in previous calculation step
+            index of optimization step
         voltages_ri: casadi.DM
             node voltages calculated by previous calculation step
         k: casadi.DM
@@ -1888,15 +1883,22 @@ def get_step_data_fns(model, gen_factor_symbols):
             string of characters 'I'|'P'|'Q'|'V' or empty string ''
         constraints: str (optional)
             optional, default ''
-            string of characters 'I'|'P'|'Q'|'V' or empty string ''"""
+            string of characters 'I'|'P'|'Q'|'V' or empty string ''
+
+        Returns
+        -------
+        tuple
+            * Stepdata
+            * numpy.array, values of val_factors"""
+        # calculate values of previous step
         voltages_ri2 = ri_to_ri2(voltages_ri)
         factor_data = ft.make_factor_data(model, gen_factor_symbols, step, k)
-        kpq, ftaps, f_var_const = ft.separate_factors(factor_data, k)
+        kpq, ftaps, values_of_factors = ft.separate_factors(factor_data, k)
         batch_values = get_batch_values(
             model, voltages_ri2, kpq, ftaps, constraints)
-        return make_step_data(
+        return  make_step_data(
             step=step,
-            f_prev=f_var_const,
+            f_prev=values_of_factors,
             objectives=objectives,
             constraints=constraints,
             values_of_constraints=batch_values)
@@ -2009,7 +2011,7 @@ def optimize_steps(model, gen_factorsymbols, step_params=(), vminsqr=_VMINSQR):
           calculated node voltages, real voltages then imaginary voltages
         * k, casadi.DM (shape m,1)
           factors for injections
-        * factor_data, Factordata
+        * factor_data, Factordata,
           factor data of step"""
     make_step_data, next_step_data = get_step_data_fns(
         model, gen_factorsymbols)
@@ -2019,15 +2021,16 @@ def optimize_steps(model, gen_factorsymbols, step_params=(), vminsqr=_VMINSQR):
     succ, voltages_ri = calculate_power_flow2(
         model, step_data.expressions, factordata, step_data.Inode_inj)
     values_of_vars = factordata.values_of_vars
-    yield -1, succ, voltages_ri, factordata.values_of_vars, factordata
+    yield -1, succ, voltages_ri, values_of_vars, factordata
     for step, kv in enumerate(step_params):
         objectives = kv.get('objectives', '')
         constraints = kv.get('constraints', '')
+        factor_values = ft.get_factor_values(factordata, values_of_vars)
         step_data = next_step_data(
-            step, step_data, voltages_ri, values_of_vars,
-            objectives, constraints)
+            step, voltages_ri, factor_values, objectives, constraints)
+        factordata = step_data.factordata
         succ, voltages_ri, values_of_vars = optimize_step(
-            *step_data, voltages_ri)
+            *step_data, Vnode_ri_ini=voltages_ri)
         yield step, succ, voltages_ri, values_of_vars, factordata
 
 def get_Vcx_factors(factordata, voltages_ri, factorvalues):

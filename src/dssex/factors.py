@@ -214,8 +214,9 @@ def make_factor_data(model, gen_factor_symbols, step=0, f_prev=_NPARRAY_0r1c):
         var_const_to_ftaps=fm.var_const_to_ftaps)
 
 def separate_factors(factordata, factors):
-    """Function for extracting factors of injections and terminals
-    (taps factors) from the result provided by the solver.
+    """Function for extracting factors of injections and terminals.
+
+    Extracts  from the result provided by the solver.
     Enhances factors calculated by optimization with values of parameters and
     reorders the factors according to order of injections and terminals.
     Returns kp and kq for each injection. Returns a factor ftaps for terminals
@@ -243,7 +244,7 @@ def separate_factors(factordata, factors):
             array_like int, converts var_const to ftaps, factor assigned to
             (selected) terminals (var_const[var_const_to_ftaps])
     factors: numpy.array|casadi.DM, shape(k,1)
-        float, result of optimization (subset)
+        float, result of optimization (subset) without voltages
 
     Result
     ------
@@ -260,3 +261,22 @@ def separate_factors(factordata, factors):
         var_const[factordata.var_const_to_ftaps],
         var_const[factordata.var_const_to_factor])
 
+def get_factor_values(factordata, values_of_vars):
+    """Reorders factors of injections and terminals.
+
+    Parameters
+    ----------
+    factordata: Factordata
+        * .values_of_consts,
+            array_like, float, column vector, values for consts
+        * .var_const_to_factor,
+            array_like int, index_of_factor=>index_of_var_const
+            converts var_const to factor (var_const[var_const_to_factor])
+    values_of_vars: array_like
+        float, calculated values of decision variables without voltages
+
+    Returns
+    -------
+    numpy.array (n,1) var/const"""
+    var_const = np.vstack([values_of_vars, factordata.values_of_consts])
+    return var_const[factordata.var_const_to_factor]
