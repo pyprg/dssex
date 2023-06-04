@@ -257,7 +257,7 @@ def  _calculate_injected_current(Vri, Vabs_sqr, Exp_v, PQscaled):
     return casadi.horzcat(Ire, Iim)
 
 def _get_injectiondata(
-        injections, node_to_inj, Vnode, factor_data, vminsqr=_VMINSQR):
+        injections, node_to_inj, Vnode, factordata, vminsqr=_VMINSQR):
     """Creates expressions for injection processing.
 
     Also returns intermediate expressions used for calculation of
@@ -278,7 +278,7 @@ def _get_injectiondata(
         * Vnode[:,0], float, Vre vector of real node voltages
         * Vnode[:,1], float, Vim vector of imaginary node voltages
         * Vnode[:,2], float, Vre**2 + Vim**2
-    factor_data: Factordata
+    factordata: Factordata
         * .kpq, casadi.SX expression, vector of injection scaling factors for
           active and reactive power
     vminsqr: float
@@ -300,7 +300,7 @@ def _get_injectiondata(
     Vinj_abs_sqr = Vinj[:, 2]
     Vinj_abs = casadi.sqrt(Vinj_abs_sqr)
     # assumes P10 and Q10 are sums of 3 per-phase-values
-    PQscaled = factor_data.kpq * (injections[['P10', 'Q10']].to_numpy() / 3)
+    PQscaled = factordata.kpq * (injections[['P10', 'Q10']].to_numpy() / 3)
     # voltage exponents
     Exp_v = injections[['Exp_v_p', 'Exp_v_q']].to_numpy()
     # interpolated P and Q
@@ -551,7 +551,7 @@ def make_get_factor_and_injection_data(
             [:,5] Qip, reactive power interpolated
             [:,6] Vabs_sqr, square of voltage magnitude at injection
             [:,7] interpolate?"""
-    get_factordata = partial(ft.make_factor_data, model, gen_factor_symbols)
+    get_factordata = partial(ft.make_factordata, model, gen_factor_symbols)
     injections = model.injections
     node_to_inj = casadi.SX(model.mnodeinj).T
     def get_factor_and_injection_data(step=0, f_prev=_EMPTY_0r1c):
@@ -1409,7 +1409,7 @@ def get_optimize_vk(model, expressions):
     Vmin = [-np.inf] * count_of_vri
     Vmax = [np.inf] * count_of_vri
     def optimize_vk(
-        Vnode_ri_ini, factor_data, Inode_inj, diff_data, constraints=_SX_0r1c):
+        Vnode_ri_ini, factordata, Inode_inj, diff_data, constraints=_SX_0r1c):
         """Solves an optimization task.
 
         Parameters
@@ -1417,7 +1417,7 @@ def get_optimize_vk(model, expressions):
         Vnode_ri_ini: casadi.DM (shape 2n,1)
             float, initial node voltages with separated real and imaginary
             parts, first real then imaginary
-        factor_data: Factordata
+        factordata: Factordata
             * .vars, casadi.SX, column vector, symbols for variables
               of scaling factors
             * .consts, casadi.SX, column vector, symbols for constants
@@ -1443,15 +1443,15 @@ def get_optimize_vk(model, expressions):
             success?
         casadi.DM
             result vector of optimization"""
-        syms = casadi.vertcat(Vnode_ri_syms, factor_data.vars)
+        syms = casadi.vertcat(Vnode_ri_syms, factordata.vars)
         objective = casadi.sumsqr(diff_data[2] - diff_data[3])
-        params = casadi.vertcat(params_, factor_data.consts)
+        params = casadi.vertcat(params_, factordata.consts)
         values_of_parameters = casadi.vertcat(
-            values_of_parameters_, factor_data.values_of_consts)
+            values_of_parameters_, factordata.values_of_consts)
         constraints_ = casadi.vertcat(
             expressions['Y_by_V'] + vstack(Inode_inj), constraints)
         nlp = {'x': syms, 'f': objective, 'g': constraints_, 'p': params}
-        is_discrete = factor_data.is_discrete
+        is_discrete = factordata.is_discrete
         if any(is_discrete):
             discrete = np.concatenate(
                 # voltage variables are not discrete
@@ -1462,10 +1462,10 @@ def get_optimize_vk(model, expressions):
         else:
             solver = casadi.nlpsol('solver', 'ipopt', nlp, _IPOPT_opts)
         # initial values of decision variables
-        ini = casadi.vertcat(Vnode_ri_ini, factor_data.values_of_vars)
+        ini = casadi.vertcat(Vnode_ri_ini, factordata.values_of_vars)
         # limits of decision variables
-        lbx = casadi.vertcat(Vmin, factor_data.var_min)
-        ubx = casadi.vertcat(Vmax, factor_data.var_max)
+        lbx = casadi.vertcat(Vmin, factordata.var_min)
+        ubx = casadi.vertcat(Vmax, factordata.var_max)
         # calculate
         r = solver(
             x0=ini, p=values_of_parameters, lbg=0, ubg=0, lbx=lbx, ubx=ubx)
@@ -1719,7 +1719,7 @@ expressions: dict
         -> (tuple - Factordata, injection_data)
     * 'inj_to_node', casadi.SX, matrix, maps from
       injections to power flow calculation nodes
-factor_data: Factordata
+factordata: Factordata
     * .vars, casadi.SX, column vector, symbols for variables
       of factors
     * .consts, casadi.SX, column vector, symbols for constants
@@ -1797,7 +1797,7 @@ def get_step_data(
     Returns
     -------
     Stepdata"""
-    factor_data, Iinj_data = (
+    factordata, Iinj_data = (
         expressions['get_factor_and_injection_data'](step, f_prev))
     Vslack_syms = expressions['Vslack_syms']
     Inode_inj = _reset_slack_current(
@@ -1813,7 +1813,7 @@ def get_step_data(
         if values_of_constraints is None or len(expr_of_batches[0])==0 else
         get_batch_constraints(values_of_constraints, expr_of_batches))
     return Stepdata(
-        model, expressions, factor_data, Inode_inj,
+        model, expressions, factordata, Inode_inj,
         diff_data, batch_constraints)
 
 def get_step_data_fns(model, gen_factor_symbols):
@@ -1892,8 +1892,8 @@ def get_step_data_fns(model, gen_factor_symbols):
             * numpy.array, values of val_factors"""
         # calculate values of previous step
         voltages_ri2 = ri_to_ri2(voltages_ri)
-        factor_data = ft.make_factor_data(model, gen_factor_symbols, step, k)
-        kpq, ftaps, values_of_factors = ft.separate_factors(factor_data, k)
+        factordata = ft.make_factordata(model, gen_factor_symbols, step, k)
+        kpq, ftaps, values_of_factors = ft.separate_factors(factordata, k)
         batch_values = get_batch_values(
             model, voltages_ri2, kpq, ftaps, constraints)
         return  make_step_data(
@@ -2011,7 +2011,7 @@ def optimize_steps(model, gen_factorsymbols, step_params=(), vminsqr=_VMINSQR):
           calculated node voltages, real voltages then imaginary voltages
         * k, casadi.DM (shape m,1)
           factors for injections
-        * factor_data, Factordata,
+        * factordata, Factordata,
           factor data of step"""
     make_step_data, next_step_data = get_step_data_fns(
         model, gen_factorsymbols)

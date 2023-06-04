@@ -28,7 +28,7 @@ import egrid.builder as grid
 from egrid import make_model
 from numpy.testing import assert_array_equal
 
-class Make_get_factor_data(unittest.TestCase):
+class Make_get_factordata(unittest.TestCase):
 
     def test_default_factors(self):
         """assign (default) scaling factors for active and reactive power to
@@ -40,52 +40,52 @@ class Make_get_factor_data(unittest.TestCase):
         self.assertIsNotNone(model, "make_model makes models")
         gen_factor_symbols = ft._create_symbols_with_ids(
             model.factors.gen_factordata.index)
-        factor_data = ft.make_factor_data(model, gen_factor_symbols, 0)
+        factordata = ft.make_factordata(model, gen_factor_symbols, 0)
         self.assertEqual(
-            factor_data.kpq.shape,
+            factordata.kpq.shape,
             (2,2),
             "P and Q factors for two injections")
         self.assertEqual(
-            factor_data.vars.shape,
+            factordata.vars.shape,
             (0,1),
             "no decision variables")
         self.assertEqual(
-            factor_data.values_of_vars.shape,
+            factordata.values_of_vars.shape,
             (0,1),
             "no initial values for decision variables")
         self.assertEqual(
-            factor_data.var_min.shape,
+            factordata.var_min.shape,
             (0,1),
             "no minimum values for decision variables")
         self.assertEqual(
-            factor_data.var_max.shape,
+            factordata.var_max.shape,
             (0,1),
             "no maximum values for decision variables")
         self.assertEqual(
-            factor_data.consts.shape,
+            factordata.consts.shape,
             (1,1),
             "one constant (parameter)")
         self.assertEqual(
-            factor_data.consts[0,0].name(),
+            factordata.consts[0,0].name(),
             '_default_',
             "name of constant is '_default_'")
         assert_array_equal(
-            factor_data.values_of_consts,
+            factordata.values_of_consts,
             [[1.]],
             err_msg="values of consts shall be [[1.]] "
             "(default factor shall be 1.)")
         assert_array_equal(
-            factor_data.var_const_to_factor,
+            factordata.var_const_to_factor,
             [0],
             err_msg="const indices shall be [0] "
             "(default factor shall have index 0)")
         assert_array_equal(
-            factor_data.var_const_to_kp,
+            factordata.var_const_to_kp,
             [0, 0],
             err_msg="indices of active power scaling factors shall be [0,0] "
             "(active power scaling factors are mapped to [0,0])")
         assert_array_equal(
-            factor_data.var_const_to_kq,
+            factordata.var_const_to_kq,
             [0, 0],
             err_msg="indices of reactive power scaling factors shall be [0,0] "
             "(reactive power scaling factors are mapped to [0,0])")
@@ -110,37 +110,37 @@ class Make_get_factor_data(unittest.TestCase):
         self.assertIsNotNone(model, "make_model makes models")
         gen_factor_symbols = ft._create_symbols_with_ids(
             model.factors.gen_factordata.index)
-        factor_data = ft.make_factor_data(model, gen_factor_symbols, 0)
+        factordata = ft.make_factordata(model, gen_factor_symbols, 0)
         self.assertEqual(
-            factor_data.kpq.shape,
+            factordata.kpq.shape,
             (0,2),
             "no scaling factors")
         assert_array_equal(
-            factor_data.is_discrete,
+            factordata.is_discrete,
             [True],
             err_msg="taps factor shall be discrete")
         assert_array_equal(
-            factor_data.var_min.toarray(),
+            factordata.var_min.toarray(),
             [[-16.]],
             err_msg="var_min shall be [[-16.]]")
         assert_array_equal(
-            factor_data.var_max.toarray(),
+            factordata.var_max.toarray(),
             [[16.]],
             err_msg="var_max shall be [[16.]]")
         assert_array_equal(
-            factor_data.var_const_to_factor,
+            factordata.var_const_to_factor,
             [0],
             err_msg="var_const_to_factor shall be [0]")
         assert_array_equal(
-            factor_data.var_const_to_kp,
+            factordata.var_const_to_kp,
             [],
             err_msg="var_const_to_kp shall be []")
         assert_array_equal(
-            factor_data.var_const_to_kq,
+            factordata.var_const_to_kq,
             [],
             err_msg="var_const_to_kq shall be []")
         assert_array_equal(
-            factor_data.var_const_to_ftaps,
+            factordata.var_const_to_ftaps,
             [0],
             err_msg="var_const_to_ftaps shall be [0]")
 
@@ -162,46 +162,46 @@ class Make_get_factor_data(unittest.TestCase):
         self.assertIsNotNone(model, "make_model makes models")
         gen_factor_symbols = ft._create_symbols_with_ids(
             model.factors.gen_factordata.index)
-        factor_data = ft.make_factor_data(model, gen_factor_symbols, 0)
+        factordata = ft.make_factordata(model, gen_factor_symbols, 0)
         self.assertEqual(
-            factor_data.kpq.shape,
+            factordata.kpq.shape,
             (1,2),
             "P and Q factors for one injection")
         self.assertEqual(
-            factor_data.vars.shape,
+            factordata.vars.shape,
             (2,1),
             "two decision variables")
         assert_array_equal(
-            factor_data.values_of_vars,
+            factordata.values_of_vars,
             [[1.], [1.]],
             "initial values of decision variables are [[1.], [1.]]")
         assert_array_equal(
-            factor_data.var_min,
+            factordata.var_min,
             [[-np.inf], [-np.inf]],
             "minimum values of decision variables is [[-inf], [-inf]]")
         assert_array_equal(
-            factor_data.var_max,
+            factordata.var_max,
             [[np.inf], [np.inf]],
             "minimum values of decision variables is [[inf], [inf]]")
         self.assertEqual(
-            factor_data.consts.shape,
+            factordata.consts.shape,
             (0,1),
             "no constants (no parameters)")
         self.assertEqual(
-            factor_data.values_of_consts.shape,
+            factordata.values_of_consts.shape,
             (0,1),
             "no values for constants (parameters)")
         self.assertEqual(
-            factor_data.var_const_to_factor.shape,
+            factordata.var_const_to_factor.shape,
             (2,),
             "separate indices for active and reactiv power factor")
         assert_array_equal(
-            factor_data.var_const_to_kp,
+            factordata.var_const_to_kp,
             [0],
             err_msg="indices of active power scaling factors shall be [0] "
             "(active power scaling factor is mapped to index 0)")
         assert_array_equal(
-            factor_data.var_const_to_kq,
+            factordata.var_const_to_kq,
             [1],
             err_msg="indices of reactive power scaling factors shall be [1] "
             "(reactive power scaling factors is mapped to index 1)")
@@ -229,46 +229,46 @@ class Make_get_factor_data(unittest.TestCase):
         self.assertIsNotNone(model, "make_model makes models")
         gen_factor_symbols = ft._create_symbols_with_ids(
             model.factors.gen_factordata.index)
-        factor_data = ft.make_factor_data(model, gen_factor_symbols, 1)
+        factordata = ft.make_factordata(model, gen_factor_symbols, 1)
         self.assertEqual(
-            factor_data.kpq.shape,
+            factordata.kpq.shape,
             (1,2),
             "P and Q factors for one injection")
         self.assertEqual(
-            factor_data.vars.shape,
+            factordata.vars.shape,
             (2,1),
             "two decision variables")
         assert_array_equal(
-            factor_data.values_of_vars,
+            factordata.values_of_vars,
             [[.42], [.42]],
             "initial values of decision variables are [[.42], [.42]]")
         assert_array_equal(
-            factor_data.var_min,
+            factordata.var_min,
             [[-1.5], [-1.5]],
             "minimum values of decision variables is [[-1.5], [-1.5]]")
         assert_array_equal(
-            factor_data.var_max,
+            factordata.var_max,
             [[10.3], [10.3]],
             "minimum values of decision variables is [[10.3], [10.3]]")
         self.assertEqual(
-            factor_data.consts.shape,
+            factordata.consts.shape,
             (0,1),
             "no constants (parameters)")
         self.assertEqual(
-            factor_data.values_of_consts.shape,
+            factordata.values_of_consts.shape,
             (0,1),
             "no values for const parameters")
         self.assertEqual(
-            factor_data.var_const_to_factor.shape,
+            factordata.var_const_to_factor.shape,
             (2,),
             "separate indices for active and reactiv power factor")
         assert_array_equal(
-            factor_data.var_const_to_kp,
+            factordata.var_const_to_kp,
             [0],
             err_msg="indices of active power scaling factors shall be [0] "
             "(active power scaling factor is mapped to index 0)")
         assert_array_equal(
-            factor_data.var_const_to_kq,
+            factordata.var_const_to_kq,
             [1],
             err_msg="indices of reactive power scaling factors shall be [1] "
             "(reactive power scaling factors is mapped to index 1)")

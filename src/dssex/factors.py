@@ -20,7 +20,7 @@ Created on Sun Mar 19 12:17:49 2023
 
 @author: pyprg
 
-The function 'make_factor_data' returns data on factors to be applied
+The function 'make_factordata' returns data on factors to be applied
 to nominal active and reactive power of injections and factors to be applied
 to admittances of branches. The factors fall in one of two
 categories 'var' or 'const'. Factors of category 'var' are decision variables.
@@ -169,7 +169,7 @@ var_const_to_ftaps: array_like
     int, converts var_const to ftaps, factor assigned to
     (selected) terminals (var_const[var_const_to_ftaps])"""
 
-def make_factor_data(model, gen_factor_symbols, step=0, f_prev=_NPARRAY_0r1c):
+def make_factordata(model, gen_factor_symbols, step=0, f_prev=_NPARRAY_0r1c):
     """Returns data of decision variables and of parameters for a given step.
 
     Parameters
@@ -221,7 +221,7 @@ def separate_factors(factordata, factors):
     reorders the factors according to order of injections and terminals.
     Returns kp and kq for each injection. Returns a factor ftaps for terminals
     addressed by 'Factordefs.index_of_terminal' which is an argument to the
-    function 'make_factor_data'.
+    function 'make_factordata'.
     The function creates a vector of values for factors which are
     decision variables and those which are constants. This vector is ordered
     for use as initial factor values in next estimation step.

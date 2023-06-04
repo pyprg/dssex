@@ -19,7 +19,7 @@ Created on Sun Aug  19 08:36:10 2021
 
 @author: pyprg
 """
-from dssex.estim import get_factor_data
+from dssex.estim import get_factordata
 from egrid import make_model, make_data_frames
 from functools import singledispatch
 
@@ -32,7 +32,7 @@ def show_factors(model, count_of_steps=3):
     tuple
         pandas.DataFrame of strings for debugging only,
         makes scaling factors visible"""
-    factors, injection_factors = get_factor_data(
+    factors, injection_factors = get_factordata(
         model.injections.id,
         model.factors,
         model.injection_factor_associations,
