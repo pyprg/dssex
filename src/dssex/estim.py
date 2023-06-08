@@ -1409,7 +1409,7 @@ def get_optimize_vk(model, expressions):
     Vmin = [-np.inf] * count_of_vri
     Vmax = [np.inf] * count_of_vri
     def optimize_vk(
-        Vnode_ri_ini, factordata, Inode_inj, diff_data, constraints=_SX_0r1c):
+        Vnode_ri_ini, factordata, Inode_inj, diff_data, constraints, lbg, ubg):
         """Solves an optimization task.
 
         Parameters
@@ -1433,9 +1433,13 @@ def get_optimize_vk(model, expressions):
             * ids of batches, list of str
             * values, list of floats
             * casadi.SX, expressions of differences (shape n,1)
-        constraints: casadi.SX
-            expressions for additional constraints, values to be kept zero
+        constraints: casadi.SX (shape m,1)
+            expressions for additional constraints
             (default constraints are Inode==0)
+        lbg: casadi.DM (shape m,1)
+            lower bound of additional constraints
+        ubg: casadi.DM (shape m,1)
+            upper bound of additional constraints
 
         Returns
         -------
@@ -1443,13 +1447,17 @@ def get_optimize_vk(model, expressions):
             success?
         casadi.DM
             result vector of optimization"""
+        # symbols of decision variables: voltages and factors variables
         syms = casadi.vertcat(Vnode_ri_syms, factordata.vars)
+        # expression to minimize
         objective = casadi.sumsqr(diff_data[2] - diff_data[3])
+        # symbols of parameters
         params = casadi.vertcat(params_, factordata.consts)
         values_of_parameters = casadi.vertcat(
             values_of_parameters_, factordata.values_of_consts)
-        constraints_ = casadi.vertcat(
-            expressions['Y_by_V'] + vstack(Inode_inj), constraints)
+        # residual node current + additional constraints
+        Y_by_V = expressions['Y_by_V']
+        constraints_ = casadi.vertcat(Y_by_V + vstack(Inode_inj), constraints)
         nlp = {'x': syms, 'f': objective, 'g': constraints_, 'p': params}
         is_discrete = factordata.is_discrete
         if any(is_discrete):
@@ -1466,9 +1474,14 @@ def get_optimize_vk(model, expressions):
         # limits of decision variables
         lbx = casadi.vertcat(Vmin, factordata.var_min)
         ubx = casadi.vertcat(Vmax, factordata.var_max)
+        # bounds of constraints
+        bg = casadi.DM.zeros(Y_by_V.size1())
+        lbg_ = casadi.vertcat(bg, lbg)
+        ubg_ = casadi.vertcat(bg, ubg)
         # calculate
         r = solver(
-            x0=ini, p=values_of_parameters, lbg=0, ubg=0, lbx=lbx, ubx=ubx)
+            x0=ini, p=values_of_parameters, lbg=lbg_, ubg=ubg_,
+            lbx=lbx, ubx=ubx)
         return solver.stats()['success'], r['x']
     return optimize_vk
 
@@ -1536,7 +1549,7 @@ def get_optimize_vk2(model, expressions, positions=None):
     Y_by_V = _rm_slack_entries(expressions['Y_by_V'], count_of_slacks)
     def optimize_vk(
         Vnode_ri_ini, factordata, Inode_inj, diff_data,
-        constraints=_SX_0r1c):
+        constraints, lbg, ubg):
         syms = casadi.vertcat(Vnode_ri_syms, factordata.vars)
         objective = casadi.sumsqr(diff_data[2] - diff_data[3])
         params = casadi.vertcat(params_, factordata.consts)
@@ -1695,7 +1708,7 @@ def get_calculate_from_result(model, vsyms, factordata, x):
 
 Stepdata = namedtuple(
     'Stepdata',
-    'model expressions factordata Inode_inj diff_data constraints')
+    'model expressions factordata Inode_inj diff_data constraints lbg ubg')
 Stepdata.__doc__ = """Data for calling function 'optimize_step'.
 
 Parameters
@@ -1738,7 +1751,11 @@ diff_data: tuple
     * value, casadi.DM, vector (shape n,1)
     * expression, casadi.SX, vector (shape n,1)
 constraints: casadi.SX (shape m,1)
-    constraints for keeping quantities calculated in previous step constant"""
+    additional constraints (additional to YV+I=0) part of function g(x,p)
+lbg: casadi.DM (shape m,1)
+    lower bound of argument 'constraints' (g)
+ubg: casadi.DM (shape m,1)
+    upper bound of argument 'constraints' (g)"""
 
 def get_step_data(
     model, expressions, step=0, f_prev=_EMPTY_0r1c, objectives='',
@@ -1812,9 +1829,14 @@ def get_step_data(
         _SX_0r1c
         if values_of_constraints is None or len(expr_of_batches[0])==0 else
         get_batch_constraints(values_of_constraints, expr_of_batches))
+    # bounds of batch constraints
+    number_of_constraints = batch_constraints.size1()
+    lbg = casadi.DM.zeros(number_of_constraints)
+    ubg = lbg
     return Stepdata(
-        model, expressions, factordata, Inode_inj,
-        diff_data, batch_constraints)
+        model=model, expressions=expressions, factordata=factordata,
+        Inode_inj=Inode_inj, diff_data=diff_data,
+        constraints=batch_constraints, lbg=lbg, ubg=ubg)
 
 def get_step_data_fns(model, gen_factor_symbols):
     """Creates two functions for generating step specific data.
@@ -1906,7 +1928,7 @@ def get_step_data_fns(model, gen_factor_symbols):
 
 def optimize_step(
     model, expressions, factordata, Inode_inj, diffdata,
-    constraints, Vnode_ri_ini=None):
+    constraints, lbg, ubg, Vnode_ri_ini=None):
     """Runs one optimization step.
 
     Calculates initial voltages if not provided.
@@ -1960,7 +1982,7 @@ def optimize_step(
         assert succ, 'calculation of power flow failed'
     optimize = get_optimize_vk(model, expressions)
     succ, x = optimize(
-        Vnode_ri_ini, factordata, Inode_inj, diffdata, constraints)
+        Vnode_ri_ini, factordata, Inode_inj, diffdata, constraints, lbg, ubg)
     # result processing
     #   node voltages are first values in result, factors follow
     count_of_Vvalues = 2 * model.shape_of_Y[0]
