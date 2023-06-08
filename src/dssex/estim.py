@@ -1262,27 +1262,6 @@ def get_batch_flow_expressions(model, v_syms_gb_ex, ipqv, quantity):
     exprs = casadi.vcat(batchid_expr.values())
     return batchids, vals, exprs if exprs.size1() else _SX_0r1c
 
-def get_node_expressions(index_of_node, Vnode_ri):
-    """Returns expression of absolute voltages for addressed nodes.
-
-    Parameters
-    ----------
-    index_of_node: array_like, int
-        node indices for subset slicing
-    Vnode_ri: casadi.DM
-        * Vnode_ri[index_of_node] - Vre
-        * Vnode_ri[size/2 + index_of_node] - Vim
-
-    Returns
-    -------
-    casadi.SX"""
-    if len(index_of_node):
-        Vnode_ri_ = casadi.hcat(
-            casadi.vertsplit(Vnode_ri, Vnode_ri.size1()//2))[index_of_node,:]
-        Vsqr = casadi.power(Vnode_ri_, 2)
-        return (Vsqr[:, 0] + Vsqr[:, 1]).sqrt()
-    return _DM_0r1c
-
 def get_diff_expressions(model, expressions, ipqv, quantities):
     """Expresses differences between measured and calculated values.
 
@@ -1334,15 +1313,14 @@ def get_diff_expressions(model, expressions, ipqv, quantities):
             _ids.extend(ids)
             _vals.extend(vals)
             _exprs = casadi.vertcat(_exprs, exprs)
-        if quantity=='V':
+        elif quantity=='V':
             vvals = value_of_voltages(model.vvalues)
             count_of_values = len(vvals)
             _quantities.extend([quantity]*count_of_values)
             _ids.extend(vvals.id_of_node)
             _vals.extend(vvals.V)
             _exprs = casadi.vertcat(
-                _exprs,
-                expressions['Vnode_syms'][vvals.index,2].sqrt())
+                _exprs, expressions['Vnode_syms'][vvals.index,2].sqrt())
     return np.array(_quantities), np.array(_ids), casadi.DM(_vals), _exprs
 
 def get_batch_constraints(values_of_constraints, expressions_of_batches):
