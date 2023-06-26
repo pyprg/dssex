@@ -138,3 +138,12 @@ branches and injections as well as losses for branches. The returned
 object additionally provides a method for calculating the residual node current
 which can be used to evaluate the quality of the obtained estimation and
 power flow calculation results.
+
+## Volt-Var-Control (VVC)
+
+Features added for studying of Volt-Var-Control (VVC) problems:
+
+    * discrete decision variables
+    * decision variables for tap positions
+    * minimum and maximum limits for absolute voltages at nodes
+    * expressions for power losses of branches used in objective function

@@ -165,6 +165,18 @@ class VVC(unittest.TestCase):
         expected = model_vvc.factors.gen_factordata.loc['taps', 'min']
         self.assertEquals(tappos, expected)
 
+    def test_min_losses_with_taps_limit(self):
+        """Voltage at secondary is driven to maximum limit.
+        """
+        model_vvc = make_model(schema_vvc_vmax, grid.Vlimit(max=1.05))
+        # optimize according to losses
+        res = estim.estimate(model_vvc, step_params=[dict(objectives='L')])
+        res_vvc = list(rt.make_printables(model_vvc, res))
+        tappos = res_vvc[1]['branches'].loc['Tr','Tap0']
+        min_position = model_vvc.factors.gen_factordata.loc['taps', 'min']
+        self.assertEquals(tappos > min_position, True)
+        self.assertEquals(res_vvc[1]['nodes'].loc['node'].V_pu < 1.05, True)
+
     def test_min_losses_with_taps2(self):
         """Voltage at secondary is driven to minimum possible value.
         """
@@ -175,6 +187,18 @@ class VVC(unittest.TestCase):
         tappos = res_vvc[1]['branches'].loc['Tr','Tap0']
         expected = model_vvc.factors.gen_factordata.loc['taps', 'max']
         self.assertEquals(tappos, expected)
+
+    def test_min_losses_with_taps2_limit(self):
+        """Voltage at secondary is driven to minimum possible value.
+        """
+        model_vvc = make_model(schema_vvc_vmin, grid.Vlimit(min=.95))
+        # optimize according to losses
+        res = estim.estimate(model_vvc, step_params=[dict(objectives='L')])
+        res_vvc = list(rt.make_printables(model_vvc, res))
+        tappos = res_vvc[1]['branches'].loc['Tr','Tap0']
+        max_position = model_vvc.factors.gen_factordata.loc['taps', 'max']
+        self.assertEquals(tappos < max_position, True)
+        self.assertEquals(res_vvc[1]['nodes'].loc['node'].V_pu > .95, True)
 
 if __name__ == '__main__':
     unittest.main()
