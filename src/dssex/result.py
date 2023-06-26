@@ -784,6 +784,32 @@ def calculate_electric_data(
         injections=injection_res,
         nodes=nodes_res)
 
+def calculate_electric_data2(model, result):
+    """Calculates and arranges electric data of injections, nodes and branches.
+
+    Parameters
+    ----------
+    model: egrid.model.Model
+        data of the electric power network
+    result : tuple
+        * int, index of estimation step,
+          (initial power flow calculation result is -1, first estimation is 0)
+        * bool, success?
+        * numpy.array, complex (shape n,1)
+            calculated complex node voltages
+        * numpy.array, float (shape m,2)
+            scaling factors for injections
+        * numpy.array, tappositions
+
+    Returns
+    -------
+    dict
+        * branches
+        * injections
+        * nodes"""
+    return calculate_electric_data(
+        model, result[2], kpq=result[3], positions=result[4])
+
 def _calculate_f_tot_mn(terminalfactors, positions, selected_terminals):
     """Calculates tap factors for a subset of branch terminals.
 
@@ -947,3 +973,33 @@ def make_printable(dict_of_frames):
     return {
         k:filter_columns(df).sort_index(axis=1).fillna('-').round(3)
         for k,df in dict_of_frames.items()}
+
+def make_printables(model, results):
+    """Calculates and arranges electric data for each optimization step.
+
+    Parameters
+    ----------
+    model: egrid.model.Model
+        data of the electric power network
+    result: iterator
+        * tuple
+            * int, index of estimation step,
+              (initial power flow calculation result is -1,
+               first estimation is 0)
+            * bool, success?
+            * numpy.array, complex (shape n,1)
+                calculated complex node voltages
+            * numpy.array, float (shape m,2)
+                scaling factors for injections
+            * numpy.array, tappositions
+
+    Returns
+    -------
+    iterator
+        dict
+            pandas.DataFrame"""
+    return (
+        make_printable(calculate_electric_data2(model, res))
+        for res in results)
+
+

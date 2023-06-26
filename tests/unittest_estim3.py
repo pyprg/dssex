@@ -136,6 +136,46 @@ class Calculate_power_flow(unittest.TestCase):
             np.inf)
         self.assertLess(diff_max, 6e-3, "voltage increase about 10%")
 
+schema_vvc_vmax = """
+  +---------------------( () )-----------+------------->
+slack                     Tr           node          consumer
+ V=1.+.0j   Tlink=taps     y_lo=0.9k-0.95kj           P10=30
+                           y_tr=1.3µ+1.5µj            Exp_v_p=0
+
+#. Deft(id=taps value=0 type=var min=-16 max=16 m=-.00625 n=1)"""
+
+schema_vvc_vmin = """
+  +---------------------( () )-----------+------------->
+slack                     Tr           node          consumer
+ V=1.+.0j   Tlink=taps     y_lo=0.9k-0.95kj           P10=30
+                           y_tr=1.3µ+1.5µj            Exp_v_p=2
+
+#. Deft(id=taps value=0 type=var min=-16 max=16 m=-.00625 n=1)"""
+
+class VVC(unittest.TestCase):
+
+    def test_min_losses_with_taps(self):
+        """Voltage at secondary is driven to maximum possible value.
+        """
+        model_vvc = make_model(schema_vvc_vmax)
+        # optimize according to losses
+        res = estim.estimate(model_vvc, step_params=[dict(objectives='L')])
+        res_vvc = list(rt.make_printables(model_vvc, res))
+        tappos = res_vvc[1]['branches'].loc['Tr','Tap0']
+        expected = model_vvc.factors.gen_factordata.loc['taps', 'min']
+        self.assertEquals(tappos, expected)
+
+    def test_min_losses_with_taps2(self):
+        """Voltage at secondary is driven to minimum possible value.
+        """
+        model_vvc = make_model(schema_vvc_vmin)
+        # optimize according to losses
+        res = estim.estimate(model_vvc, step_params=[dict(objectives='L')])
+        res_vvc = list(rt.make_printables(model_vvc, res))
+        tappos = res_vvc[1]['branches'].loc['Tr','Tap0']
+        expected = model_vvc.factors.gen_factordata.loc['taps', 'max']
+        self.assertEquals(tappos, expected)
+
 if __name__ == '__main__':
     unittest.main()
 

@@ -1225,7 +1225,7 @@ def get_batch_expressions(model, v_syms_gb_ex, ipqv, quantity):
     assert False, \
         f'quantity needs to be one of "I", "P" or "Q" but is "{quantity}"'
 
-def _get_branch_loss_expressions(model, v_syms_gb_ex):
+def _get_branch_loss_expression(model, v_syms_gb_ex):
     """Creates an expression for active power losses of all branches.
 
     Parameters
@@ -1395,16 +1395,13 @@ def get_objective_expressions(model, expressions, ipqv, quantities):
 
     Returns
     -------
-    tuple
-        * quantities, numpy.array<str>
-        * id_of_batch, numpy.array<str>
-        * value, casadi.DM, vector (shape n,1)
-        * expression, casadi.SX, vector (shape n,1)"""
-    diff_expr = get_diff_expressions(model, expressions, ipqv, quantities)
-    if 'L' in quantities.upper():
-        p_loss = _get_branch_loss_expressions(model, expressions)
-        return casadi.vcat(diff_expr, p_loss)
-    return diff_expr
+    casadi.SX"""
+    diff_data = get_diff_expressions(model, expressions, ipqv, quantities)
+    objective = casadi.sumsqr(diff_data[2] - diff_data[3])
+    return (
+        objective + _get_branch_loss_expression(model, expressions)
+        if 'L' in quantities.upper() else
+        objective)
 
 def get_batch_constraints(values_of_constraints, expressions_of_batches):
     """Creates expressions of constraints for keeping batch values constant.
@@ -1474,7 +1471,8 @@ def get_optimize_vk(model, expressions):
     Vmin = [-np.inf] * count_of_vri
     Vmax = [np.inf] * count_of_vri
     def optimize_vk(
-        Vnode_ri_ini, factordata, Inode_inj, diff_data, constraints, lbg, ubg):
+        # Vnode_ri_ini, factordata, Inode_inj, diff_data, constraints, lbg, ubg):
+        Vnode_ri_ini, factordata, Inode_inj, objective, constraints, lbg, ubg):
         """Solves an optimization task.
 
         Parameters
@@ -1492,12 +1490,8 @@ def get_optimize_vk(model, expressions):
             * .values_of_consts, casadi.DM, column vector, values for consts
         Inode_inj: casadi.SX (shape n,2)
             expressions for injected node current
-        diff_data: tuple
-            data for objective function
-            * symbols for quantities, list of values 'P'|'Q'|'I'|'V'
-            * ids of batches, list of str
-            * values, list of floats
-            * casadi.SX, expressions of differences (shape n,1)
+        objective: casadi.SX
+            expression to minimize
         constraints: casadi.SX (shape m,1)
             expressions for additional constraints
             (default constraints are Inode==0)
@@ -1514,8 +1508,6 @@ def get_optimize_vk(model, expressions):
             result vector of optimization"""
         # symbols of decision variables: voltages and factors variables
         syms = casadi.vertcat(Vnode_ri_syms, factordata.vars)
-        # expression to minimize
-        objective = casadi.sumsqr(diff_data[2] - diff_data[3])
         # symbols of parameters
         params = casadi.vertcat(params_, factordata.consts)
         values_of_parameters = casadi.vertcat(
@@ -1606,8 +1598,7 @@ def get_optimize_vk2(model, expressions, positions=None):
     Vslacks = model.slacks.V
     Vre_slack = np.real(Vslacks)
     Vim_slack = np.imag(Vslacks)
-    values_of_parameters_ = casadi.vertcat(
-        Vre_slack, Vim_slack, positions_)
+    values_of_parameters_ = casadi.vertcat(Vre_slack, Vim_slack, positions_)
     # limits
     count_of_vri = Vnode_ri_syms.size1()
     Vmin = [-np.inf] * count_of_vri
@@ -1615,7 +1606,7 @@ def get_optimize_vk2(model, expressions, positions=None):
     # constraints
     Y_by_V = _rm_slack_entries(expressions['Y_by_V'], count_of_slacks)
     def optimize_vk(
-        Vnode_ri_ini, factordata, Inode_inj, diff_data,
+        Vnode_ri_ini, factordata, Inode_inj, objective,
         constraints, lbg, ubg):
         """Solves an optimization task.
 
@@ -1634,12 +1625,8 @@ def get_optimize_vk2(model, expressions, positions=None):
             * .values_of_consts, casadi.DM, column vector, values for consts
         Inode_inj: casadi.SX (shape n,2)
             expressions for injected node current
-        diff_data: tuple
-            data for objective function
-            * symbols for quantities, list of values 'P'|'Q'|'I'|'V'
-            * ids of batches, list of str
-            * values, list of floats
-            * casadi.SX, expressions of differences (shape n,1)
+        objective: casadi.SX
+            expression to minimize
         constraints: casadi.SX (shape m,1)
             expressions for additional constraints
             (default constraints are Inode==0)
@@ -1655,7 +1642,6 @@ def get_optimize_vk2(model, expressions, positions=None):
         casadi.DM
             result vector of optimization"""
         syms = casadi.vertcat(Vnode_ri_syms, factordata.vars)
-        objective = casadi.sumsqr(diff_data[2] - diff_data[3])
         params = casadi.vertcat(params_, factordata.consts)
         values_of_parameters = casadi.vertcat(
             values_of_parameters_, factordata.values_of_consts)
@@ -1663,19 +1649,32 @@ def get_optimize_vk2(model, expressions, positions=None):
             Y_by_V + vstack(Inode_inj[count_of_slacks:, :]),
             constraints)
         nlp = {'x': syms, 'f': objective, 'g': constraints_, 'p': params}
-        # discrete = [0] * syms.size1()
-        # discrete[-1] = 1
-        # solver = casadi.nlpsol('solver', 'bonmin', nlp, {'discrete':discrete})
-        solver = casadi.nlpsol('solver', 'ipopt', nlp, _IPOPT_opts)
+        is_discrete = factordata.is_discrete
+        if any(is_discrete):
+            discrete = np.concatenate(
+                # voltage variables are not discrete
+                [np.full((Vnode_ri_syms.size1(),), False, dtype=np.bool_),
+                 is_discrete])
+            solver = casadi.nlpsol(
+                'solver', 'bonmin', nlp, {'discrete':discrete})
+        else:
+            solver = casadi.nlpsol('solver', 'ipopt', nlp, _IPOPT_opts)
         # initial values of decision variables
         vini = _rm_slack_entries(Vnode_ri_ini, count_of_slacks)
         ini = casadi.vertcat(vini, factordata.values_of_vars)
         # limits of decision variables
         lbx = casadi.vertcat(Vmin, factordata.var_min)
         ubx = casadi.vertcat(Vmax, factordata.var_max)
+        # bounds of constraints, upper and lower bounds for node currents
+        #   is zero, hence, just one vector of zeros is needed for
+        #   node currents
+        bg = casadi.DM.zeros(Y_by_V.size1())
+        lbg_ = casadi.vertcat(bg, lbg)
+        ubg_ = casadi.vertcat(bg, ubg)
         # calculate
         r = solver(
-            x0=ini, p=values_of_parameters, lbg=0, ubg=0, lbx=lbx, ubx=ubx)
+            x0=ini, p=values_of_parameters, lbg=lbg_, ubg=ubg_,
+            lbx=lbx, ubx=ubx)
         # add slack voltages
         parta, partb = casadi.vertsplit(
             r['x'], [0, count_of_vri//2, ini.size1()])
@@ -1812,7 +1811,7 @@ def get_calculate_from_result(model, vsyms, factordata, x):
 
 Stepdata = namedtuple(
     'Stepdata',
-    'model expressions factordata Inode_inj diff_data constraints lbg ubg')
+    'model expressions factordata Inode_inj objective constraints lbg ubg')
 Stepdata.__doc__ = """Data for calling function 'optimize_step'.
 
 Parameters
@@ -1847,13 +1846,8 @@ factordata: Factordata
 Inode_inj: casadi.SX (shape n,2)
     * Inode_inj[:,0] - Ire, real part of current injected into node
     * Inode_inj[:,1] - Iim, imaginary part of current injected into node
-diff_data: tuple
-    data for objective function to be minimized
-    table, four column vectors
-    * quantities, list of string
-    * id_of_batch, list of string
-    * value, casadi.DM, vector (shape n,1)
-    * expression, casadi.SX, vector (shape n,1)
+objective: casadi.SX
+    expression to minimize
 constraints: casadi.SX (shape m,1)
     additional constraints (additional to YV+I=0) part of function g(x,p)
 lbg: casadi.DM (shape m,1)
@@ -1887,13 +1881,13 @@ def _get_vlimits(process_vlimts, model, Vnode_sqr, step):
             Vlimit_sqr = Vnode_sqr[vlimits.index]
             return (
                 Vlimit_sqr[vlimits.index],
-                casadi.DM(vlimits.min * vlimits.min),
-                casadi.DM(vlimits.max * vlimits.max))
+                casadi.DM(vlimits['min'] * vlimits['min']),
+                casadi.DM(vlimits['max'] * vlimits['max']))
     return _SX_0r1c, _DM_0r1c, _DM_0r1c
 
 def get_step_data(
     model, expressions, *, step=0, f_prev=_EMPTY_0r1c, objectives='',
-    constraints='', values_of_constraints=None, process_vlimits=False):
+    constraints='', values_of_constraints=None, process_vlimits=True):
     """Prepares data for call of function optimize_step.
 
     Parameters
@@ -1947,7 +1941,7 @@ def get_step_data(
         * [2] numpy.array<float>, vector (shape n,1), value
         values for constraints (refer to argument 'constraints')
     process_vlimits: bool
-        optional, default False
+        optional, default True
         add given bounds of for voltages, if any in model
 
     Returns
@@ -1960,7 +1954,7 @@ def get_step_data(
         model.slacks.index_of_node,
         Vslack_syms[:,0], Vslack_syms[:,1],
         expressions['inj_to_node'] @ Iinj_data[:,:2])
-    diff_data = get_objective_expressions(
+    objective = get_objective_expressions(
         model, expressions, Iinj_data, objectives)
     expr_of_batches = get_diff_expressions(
         model, expressions, Iinj_data, constraints)
@@ -1979,7 +1973,7 @@ def get_step_data(
     ubg = casadi.vertcat(bg_inode, ubg_v)
     return Stepdata(
         model=model, expressions=expressions, factordata=factordata,
-        Inode_inj=Inode_inj, diff_data=diff_data,
+        Inode_inj=Inode_inj, objective=objective,
         constraints=constraints, lbg=lbg, ubg=ubg)
 
 def get_step_data_fns(model, gen_factor_symbols):
@@ -2033,7 +2027,9 @@ def get_step_data_fns(model, gen_factor_symbols):
                   string of characters 'I'|'P'|'Q'|'V' or empty string ''"""
     expressions = get_expressions(model, gen_factor_symbols)
     make_step_data = partial(get_step_data, model, expressions)
-    def next_step_data(step, voltages_ri, k, objectives='', constraints=''):
+    def next_step_data(
+            step, voltages_ri, k, objectives='', constraints='',
+            process_vlimits=True):
         """Creates data for function 'optimize_step'.
 
         Parameters
@@ -2050,6 +2046,8 @@ def get_step_data_fns(model, gen_factor_symbols):
         constraints: str (optional)
             optional, default ''
             string of characters 'I'|'P'|'Q'|'V' or empty string ''
+        process_vlimits: bool
+            optional, default True
 
         Returns
         -------
@@ -2067,11 +2065,12 @@ def get_step_data_fns(model, gen_factor_symbols):
             f_prev=values_of_factors,
             objectives=objectives,
             constraints=constraints,
-            values_of_constraints=batch_values)
+            values_of_constraints=batch_values,
+            process_vlimits=process_vlimits)
     return make_step_data, next_step_data
 
 def optimize_step(
-    model, expressions, factordata, Inode_inj, diffdata,
+    model, expressions, factordata, Inode_inj, objective,
     constraints, lbg, ubg, Vnode_ri_ini=None):
     """Runs one optimization step.
 
@@ -2096,13 +2095,8 @@ def optimize_step(
     Inode_inj: casadi.SX (shape n,2)
         * Inode_inj[:,0] - Ire, real part of current injected into node
         * Inode_inj[:,1] - Iim, imaginary part of current injected into node
-    diffdata: tuple
-        data for objective function
-        table, four column vectors
-        * quantities, list of strings
-        * id_of_batch, list of strings
-        * value, casadi.DM, vector (shape n,1)
-        * expression, casadi.SX, vector (shape n,1)
+    objective: casadi.SX
+        expression to minimize
     constraints: casadi.SX
         expressions for additional constraints, values to be kept zero
         (default constraints are Inode==0)
@@ -2130,7 +2124,7 @@ def optimize_step(
         assert succ, 'calculation of power flow failed'
     optimize = get_optimize_vk(model, expressions)
     succ, x = optimize(
-        Vnode_ri_ini, factordata, Inode_inj, diffdata, constraints, lbg, ubg)
+        Vnode_ri_ini, factordata, Inode_inj, objective, constraints, lbg, ubg)
     # result processing
     #   node voltages are first values in result, factors follow
     count_of_Vvalues = 2 * model.shape_of_Y[0]
@@ -2195,10 +2189,12 @@ def optimize_steps(model, gen_factorsymbols, step_params=(), vminsqr=_VMINSQR):
     for step, kv in enumerate(step_params):
         objectives = kv.get('objectives', '')
         constraints = kv.get('constraints', '')
+        process_vlimits = kv.get('process_vlimits', True)
         factor_values = ft.get_factor_values(factordata, values_of_vars)
         step_data = next_step_data(
             step=step, voltages_ri=voltages_ri, k=factor_values,
-            objectives=objectives, constraints=constraints)
+            objectives=objectives, constraints=constraints,
+            process_vlimits=process_vlimits)
         factordata = step_data.factordata
         # estimation
         succ, voltages_ri, values_of_vars = optimize_step(
@@ -2249,11 +2245,12 @@ def estimate(model, step_params=(), vminsqr=_VMINSQR):
         dict {'objectives': objectives, 'constraints': constraints}
             if empty the function calculates power flow,
             each dict triggers an estimation step
-        * objectives, ''|'P'|'Q'|'I'|'V' (string or tuple of characters)
+        * objectives, ''|'P'|'Q'|'I'|'V'|'L' (string or tuple of characters)
           'P' - objective function is created with terms for active power
           'Q' - objective function is created with terms for reactive power
           'I' - objective function is created with terms for electric current
           'V' - objective function is created with terms for voltage
+          'L' - objective function is created with terms for losses of branches
         * constraints, ''|'P'|'Q'|'I'|'V' (string or tuple of characters)
           'P' - adds constraints keeping the initial values
                 of active powers at the location of given

@@ -94,3 +94,20 @@ calc_estim = rt.make_printable(
     rt.calculate_electric_data(model, res[2], kpq=res[3], positions=res[4]))
 calc_estim2 = rt.make_printable(
     rt.calculate_electric_data(model, res2[2], kpq=res2[3], positions=res2[4]))
+#%% VVC
+schema_vvc = """
+  +---------------------( () )-----------+------------->
+slack                     Tr           node          consumer
+ V=1.+.0j   Tlink=taps     y_lo=0.9k-0.95kj           P10=30
+                           y_tr=1.3µ+1.5µj            Exp_v_p=0
+
+#. Deft(id=taps value=0 type=var min=-16 max=16 m=-.00625 n=1)
+#. Defvl(max=1.05)
+"""
+model_vvc = make_model(schema_vvc)
+# optimize according to losses
+res = estim.estimate(model_vvc, step_params=[dict(objectives='L')])
+res_vvc = list(rt.make_printables(model_vvc, res))
+
+tappos = res_vvc[1]['branches'].loc['Tr','Tap0']
+expected = model_vvc.factors.gen_factordata.loc['taps', 'min']
