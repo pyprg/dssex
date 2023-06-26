@@ -65,23 +65,28 @@ import dssex.result as rt
 from egrid import make_model
 
 model = make_model(schema)
-#%%
+#%% Power Flow Calculation
 # manual input
 kpq = np.full((len(model.injections), 2), 1., dtype=float)
 pos = []#[('taps', -16)]
 positions = pfc.get_positions(model.factors, pos)
 success, vcx = pfc.calculate_power_flow(model, kpq=kpq, positions=positions)
-# calc_res = rt.make_printable(
-#     rt.calculate_electric_data(model, vcx, kpq=kpq, positions=positions))
-# residual_current = pfc.calculate_residual_current(
-#     model, vcx, positions=positions, kpq=kpq)
+# results power flow calculation
+calc_pf = rt.make_printable(
+    rt.calculate_electric_data(model, vcx, kpq=kpq, positions=positions))
+# accuracy
+residual_current = pfc.calculate_residual_current(
+    model, vcx, positions=positions, kpq=kpq)
 
-#%%
+#%% State Estimation
 import dssex.estim as estim
 init, res, res2 = estim.estimate(
     model,
     step_params=[
+        # first step: optimize measured PQ
         dict(objectives='PQ'),
+        # second step: optimize measured V,
+        #   keep PQ at locations of measurement constant
         dict(objectives='V', constraints='PQ')])
 calc_init = rt.make_printable(
     rt.calculate_electric_data(model, init[2], kpq=init[3], positions=init[4]))

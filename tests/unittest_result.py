@@ -25,7 +25,6 @@ import context # adds parent folder of dssex to search path
 import numpy as np
 import pandas as pd
 import dssex.result as rt
-import dssex.pfcnum as pfc
 import egrid.builder as grid
 from egrid import make_model
 from numpy.testing import assert_array_equal, assert_array_almost_equal
