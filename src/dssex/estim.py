@@ -543,15 +543,16 @@ def make_get_factor_and_injection_data(
             values: casadi.DM
                 float, given values of symbols (variables and constants)
         * casadi.SX (n,8)
-          (data of injections)
-            [:,0] Ire, current, real part
-            [:,1] Iim, current, imaginary part
-            [:,2] Pscaled, active power P10 multiplied by scaling factor kp
-            [:,3] Qscaled, reactive power Q10 multiplied by scaling factor kq
-            [:,4] Pip, active power interpolated
-            [:,5] Qip, reactive power interpolated
-            [:,6] Vabs_sqr, square of voltage magnitude at injection
-            [:,7] interpolate?"""
+            * [:,0] Ire, injected current, real part
+            * [:,1] Iim, injected current, imaginary part
+            * [:,2] Pscaled, injected active power P10
+                    multiplied by scaling factor kp
+            * [:,3] Qscaled, injected reactive power Q10
+                    multiplied by scaling factor kq
+            * [:,4] Pip, injected active power interpolated
+            * [:,5] Qip, injected reactive power interpolated
+            * [:,6] Vabs_sqr, square of voltage magnitude at injection
+            * [:,7] interpolate?"""
     get_factordata = partial(ft.make_factordata, model, gen_factor_symbols)
     injections = model.injections
     node_to_inj = casadi.SX(model.mnodeinj).T
@@ -1361,13 +1362,14 @@ def get_diff_expressions(model, expressions, ipqv, quantities):
                 _exprs, expressions['Vnode_syms'][vvals.index,2].sqrt())
     return np.array(_quantities), np.array(_ids), casadi.DM(_vals), _exprs
 
-def get_objective_expressions(model, expressions, ipqv, quantities):
-    """Expresses differences between measured and calculated values and losses.
+def get_objective_expression(model, expressions, ipqv, floss, quantities):
+    """Creates expression for objective function.
 
     Creates a vector (casadi.SX, shape n,1) expressing the difference
     between measured and calculated values for absolute current, active power
-    or reactive power and voltage. The expressions are based on the batch
-    definitions or referenced node. Intended use is building the objective.
+    or reactive power and voltage includes expressions for active power
+    losses of branches. The expressions are based on the batch
+    definitions or referenced node. Losses are calculated for all branches.
 
     Parameters
     ----------
@@ -1376,22 +1378,25 @@ def get_objective_expressions(model, expressions, ipqv, quantities):
     expressions: dict
         * 'Vnode_syms', casadi.SX, vectors, symbols of node voltages
         * 'position_syms', casadi.SX, vector, symbols of tap positions
+          for branches
         * 'gb_mn_tot', casadi.SX, vectors, conductance and susceptance of
           branches connected to terminals
-    ipqv: casadi.SX (n,8)
-        data of P, Q, I, and V at injections
-        [:,0] Ire, current, real part
-        [:,1] Iim, current, imaginary part
-        [:,2] Pscaled, active power P10 multiplied by scaling factor kp
-        [:,3] Qscaled, reactive power Q10 multiplied by scaling factor kq
-        [:,4] Pip, active power interpolated
-        [:,5] Qip, reactive power interpolated
-        [:,6] Vabs_sqr, square of voltage magnitude
-        [:,7] interpolate?
+    ipqv: casadi.SX (n,8), data of P, Q, I, and V at injections
+        * [:,0] Ire, current, real part
+        * [:,1] Iim, current, imaginary part
+        * [:,2] Pscaled, active power P10 multiplied by scaling factor kp
+        * [:,3] Qscaled, reactive power Q10 multiplied by scaling factor kq
+        * [:,4] Pip, active power interpolated
+        * [:,5] Qip, reactive power interpolated
+        * [:,6] Vabs_sqr, square of voltage magnitude
+        * [:,7] interpolate?
+    floss: float
+        multiplier for branch losses
     quantities: str
-        string of characters 'I'|'P'|'Q'|'V'
+        string of characters 'I'|'P'|'Q'|'V'|'L'
         addresses current magnitude, active power, reactive power or magnitude
-        of voltage, case insensitive, other characters are ignored
+        of voltage, losses of branches, case insensitive,
+        other characters are ignored
 
     Returns
     -------
@@ -1399,7 +1404,7 @@ def get_objective_expressions(model, expressions, ipqv, quantities):
     diff_data = get_diff_expressions(model, expressions, ipqv, quantities)
     objective = casadi.sumsqr(diff_data[2] - diff_data[3])
     return (
-        objective + _get_branch_loss_expression(model, expressions)
+        objective + (floss * _get_branch_loss_expression(model, expressions))
         if 'L' in quantities.upper() else
         objective)
 
@@ -1841,7 +1846,8 @@ def _get_vlimits(process_vlimts, model, Vnode_sqr, step):
 
 def get_step_data(
     model, expressions, *, step=0, f_prev=_EMPTY_0r1c, objectives='',
-    constraints='', values_of_constraints=None, process_vlimits=True):
+    constraints='', values_of_constraints=None, process_vlimits=True,
+    floss=1.):
     """Prepares data for call of function optimize_step.
 
     Parameters
@@ -1897,10 +1903,21 @@ def get_step_data(
     process_vlimits: bool
         optional, default True
         add given bounds of for voltages, if any in model
+    floss: float
+        optional, default is 1.0
+        multiplier for branch losses
 
     Returns
     -------
-    Stepdata"""
+    dict
+        * ['model']
+        * ['expressions']
+        * ['factordata']
+        * ['Inode_inj']
+        * ['objective']
+        * ['constraints']
+        * ['lbg']
+        * ['ubg']"""
     factordata, Iinj_data = (
         expressions['get_factor_and_injection_data'](step, f_prev))
     Vslack_syms = expressions['Vslack_syms']
@@ -1908,8 +1925,8 @@ def get_step_data(
         model.slacks.index_of_node,
         Vslack_syms[:,0], Vslack_syms[:,1],
         expressions['inj_to_node'] @ Iinj_data[:,:2])
-    objective = get_objective_expressions(
-        model, expressions, Iinj_data, objectives)
+    objective = get_objective_expression(
+        model, expressions, Iinj_data, floss, objectives)
     expr_of_batches = get_diff_expressions(
         model, expressions, Iinj_data, constraints)
     batch_constraints = (
@@ -1982,8 +1999,8 @@ def get_step_data_fns(model, gen_factor_symbols):
     expressions = get_expressions(model, gen_factor_symbols)
     make_step_data = partial(get_step_data, model, expressions)
     def next_step_data(
-            step, voltages_ri, k, objectives='', constraints='',
-            process_vlimits=True):
+            *, step, voltages_ri, k, objectives='', constraints='',
+            process_vlimits=True, floss=1.):
         """Creates data for function 'optimize_step'.
 
         Parameters
@@ -1996,17 +2013,28 @@ def get_step_data_fns(model, gen_factor_symbols):
             factors calculated by previous calculation step
         objectives: str (optional)
             optional, default ''
-            string of characters 'I'|'P'|'Q'|'V' or empty string ''
+            string of characters 'I'|'P'|'Q'|'V'|'L' or empty string ''
         constraints: str (optional)
             optional, default ''
             string of characters 'I'|'P'|'Q'|'V' or empty string ''
         process_vlimits: bool
             optional, default True
+        floss: float
+            optional, default is 1.0
+            multiplier for branch losses
 
         Returns
         -------
         tuple
-            * Stepdata
+            * dict
+                * ['model']
+                * ['expressions']
+                * ['factordata']
+                * ['Inode_inj']
+                * ['objective']
+                * ['constraints']
+                * ['lbg']
+                * ['ubg']
             * numpy.array, values of val_factors"""
         # calculate values of previous step
         voltages_ri2 = ri_to_ri2(voltages_ri)
@@ -2020,7 +2048,8 @@ def get_step_data_fns(model, gen_factor_symbols):
             objectives=objectives,
             constraints=constraints,
             values_of_constraints=batch_values,
-            process_vlimits=process_vlimits)
+            process_vlimits=process_vlimits,
+            floss=floss)
     return make_step_data, next_step_data
 
 def optimize_step(
@@ -2099,7 +2128,10 @@ def optimize_steps(model, gen_factorsymbols, step_params=(), vminsqr=_VMINSQR):
     gen_factorsymbols: casadi.SX, shape(n,1)
         symbols of generic (for each step) decision variables or parameters
     step_params: array_like
-        dict {'objectives': objectives, 'constraints': constraints}
+        dict {'objectives': str, objectives,
+              'constraints': str, constraints,
+              'process_vlimits': bool,
+              'floss': float, factor for losses}
             if empty the function calculates power flow,
             each dict triggers an estimation step
         * objectives, ''|'P'|'Q'|'I'|'V' (string or tuple of characters)
@@ -2107,6 +2139,7 @@ def optimize_steps(model, gen_factorsymbols, step_params=(), vminsqr=_VMINSQR):
           'Q' - objective function is created with terms for reactive power
           'I' - objective function is created with terms for electric current
           'V' - objective function is created with terms for voltage
+          'L' - objective function is created with terms for losses in branches
         * constraints, ''|'P'|'Q'|'I'|'V' (string or tuple of characters)
           'P' - adds constraints keeping the initial values
                 of active powers at the location of given values
@@ -2144,11 +2177,12 @@ def optimize_steps(model, gen_factorsymbols, step_params=(), vminsqr=_VMINSQR):
         objectives = kv.get('objectives', '')
         constraints = kv.get('constraints', '')
         process_vlimits = kv.get('process_vlimits', True)
+        floss = kv.get('floss', 1.)
         factor_values = ft.get_factor_values(factordata, values_of_vars)
         step_data = next_step_data(
             step=step, voltages_ri=voltages_ri, k=factor_values,
             objectives=objectives, constraints=constraints,
-            process_vlimits=process_vlimits)
+            process_vlimits=process_vlimits, floss=floss)
         factordata = step_data['factordata']
         # estimation
         succ, voltages_ri, values_of_vars = optimize_step(
