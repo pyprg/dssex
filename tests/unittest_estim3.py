@@ -32,7 +32,6 @@ from functools import partial
 from numpy.linalg import norm
 from egrid import make_model
 
-
 # square of voltage magnitude, minimum value for load curve,
 #   if value is below _VMINSQR the load curves for P and Q converge
 #   towards a linear load curve which is 0 when V=0; P(V=0)=0, Q(V=0)=0
@@ -136,28 +135,45 @@ class Calculate_power_flow(unittest.TestCase):
             np.inf)
         self.assertLess(diff_max, 6e-3, "voltage increase about 10%")
 
-schema_vvc_vmax = """
-  +---------------------( () )-----------+------------->
-slack                     Tr           node          consumer
- V=1.+.0j   Tlink=taps     y_lo=0.9k-0.95kj           P10=30
-                           y_tr=1.3µ+1.5µj            Exp_v_p=0
+class VVC_transformer(unittest.TestCase):
+    """
+    schema_vmax:
+    ::
+          +---------------------( () )-----------+------------->
+        slack                     Tr           node          consumer
+          V=1.+.0j   Tlink=taps     y_lo=0.9k-0.95kj           P10=30
+                                    y_tr=1.3µ+1.5µj            Exp_v_p=0
 
-#. Deft(id=taps value=0 type=var min=-16 max=16 m=-.00625 n=1)"""
+        #. Deft(id=taps value=0 type=var min=-16 max=16 m=-.00625 n=1)
 
-schema_vvc_vmin = """
-  +---------------------( () )-----------+------------->
-slack                     Tr           node          consumer
- V=1.+.0j   Tlink=taps     y_lo=0.9k-0.95kj           P10=30
-                           y_tr=1.3µ+1.5µj            Exp_v_p=2
+    schema_vmin:
+    ::
+          +---------------------( () )-----------+------------->
+        slack                     Tr           node          consumer
+          V=1.+.0j   Tlink=taps     y_lo=0.9k-0.95kj           P10=30
+                                    y_tr=1.3µ+1.5µj            Exp_v_p=2
 
-#. Deft(id=taps value=0 type=var min=-16 max=16 m=-.00625 n=1)"""
-
-class VVC(unittest.TestCase):
+        #. Deft(id=taps value=0 type=var min=-16 max=16 m=-.00625 n=1)
+    """
+    _devs_vvc = [
+        grid.Slacknode(id_of_node='slack', V=1.+.0j),
+        grid.Branch(
+            id='Tr', id_of_node_A='slack', id_of_node_B='node',
+            y_lo=.9e3-.95e3j, y_tr=1.3e-6+1.5e-6j),
+        grid.Deft(
+            id='taps', type='var', value=0, min=-16, max=16, m=-.1/16, n=1),
+        grid.Tlink(id_of_branch='Tr', id_of_node='slack', id_of_factor='taps')]
+    _devs_vvc_vmax = [
+        _devs_vvc,
+        grid.Injection(id='consumer', id_of_node='node', P10=30, Exp_v_p=0)]
+    _devs_vvc_vmin = [
+        _devs_vvc,
+        grid.Injection(id='consumer', id_of_node='node', P10=30, Exp_v_p=2)]
 
     def test_min_losses_with_taps(self):
         """Voltage at secondary is driven to maximum possible value.
         """
-        model_vvc = make_model(schema_vvc_vmax)
+        model_vvc = make_model(self._devs_vvc_vmax)
         # optimize according to losses
         res = estim.estimate(model_vvc, step_params=[dict(objectives='L')])
         res_vvc = list(rt.make_printables(model_vvc, res))
@@ -168,19 +184,19 @@ class VVC(unittest.TestCase):
     def test_min_losses_with_taps_limit(self):
         """Voltage at secondary is driven to maximum limit.
         """
-        model_vvc = make_model(schema_vvc_vmax, grid.Vlimit(max=1.05))
+        model_vvc = make_model(self._devs_vvc_vmax, grid.Vlimit(max=1.05))
         # optimize according to losses
         res = estim.estimate(model_vvc, step_params=[dict(objectives='L')])
         res_vvc = list(rt.make_printables(model_vvc, res))
         tappos = res_vvc[1]['branches'].loc['Tr','Tap0']
         min_position = model_vvc.factors.gen_factordata.loc['taps', 'min']
-        self.assertEquals(tappos > min_position, True)
-        self.assertEquals(res_vvc[1]['nodes'].loc['node'].V_pu < 1.05, True)
+        self.assertGreater(tappos, min_position)
+        self.assertLess(res_vvc[1]['nodes'].loc['node'].V_pu , 1.05)
 
     def test_min_losses_with_taps2(self):
         """Voltage at secondary is driven to minimum possible value.
         """
-        model_vvc = make_model(schema_vvc_vmin)
+        model_vvc = make_model(self._devs_vvc_vmin)
         # optimize according to losses
         res = estim.estimate(model_vvc, step_params=[dict(objectives='L')])
         res_vvc = list(rt.make_printables(model_vvc, res))
@@ -189,16 +205,84 @@ class VVC(unittest.TestCase):
         self.assertEquals(tappos, expected)
 
     def test_min_losses_with_taps2_limit(self):
-        """Voltage at secondary is driven to minimum possible value.
+        """Voltage at secondary is driven to minimum limit.
         """
-        model_vvc = make_model(schema_vvc_vmin, grid.Vlimit(min=.95))
+        model_vvc = make_model(self._devs_vvc_vmin, grid.Vlimit(min=.95))
         # optimize according to losses
         res = estim.estimate(model_vvc, step_params=[dict(objectives='L')])
         res_vvc = list(rt.make_printables(model_vvc, res))
         tappos = res_vvc[1]['branches'].loc['Tr','Tap0']
         max_position = model_vvc.factors.gen_factordata.loc['taps', 'max']
-        self.assertEquals(tappos < max_position, True)
-        self.assertEquals(res_vvc[1]['nodes'].loc['node'].V_pu > .95, True)
+        self.assertLess(tappos, max_position)
+        self.assertGreater(res_vvc[1]['nodes'].loc['node'].V_pu, .95)
+
+class VVC_shuntcapacitor(unittest.TestCase):
+
+    def test_min_losses(self):
+        """
+        schema:
+        ::
+                                                          Q10=-5
+                                                          Exp_v_q=2
+                                          node          cap
+                                           +-------------||
+                                           |
+              +-----------( () )-----------+------------->
+            slack           Tr           node          consumer
+              V=1.+.0j        y_lo=0.9k-0.95kj           P10=30
+                              y_tr=1.3µ+1.5µj            Q10=15
+
+            #.Defk(id=taps min=0 max=5 is_discrete=True)
+            #.Klink(id_of_injection=cap id_of_factor=taps part=q)
+        """
+        mygrid = [
+            grid.Slacknode(id_of_node='slack', V=1.+.0j),
+            grid.Branch(
+                id='Tr', id_of_node_A='slack', id_of_node_B='node',
+                y_lo=.9e3-.95e3j, y_tr=1.3e-6+1.5e-6j),
+            grid.Injection(id='consumer', id_of_node='node', P10=30, Q10=15),
+            grid.Injection(id='cap', id_of_node='node', Q10=-5, Exp_v_q=2),
+            grid.Defk(id='taps', min=0, max=5, is_discrete=True),
+            grid.Klink(id_of_injection='cap', id_of_factor='taps', part='q')]
+        model = make_model(mygrid)
+        # optimize according to losses
+        res = estim.estimate(model, step_params=[dict(objectives='L')])
+        res_vvc = list(rt.make_printables(model, res))
+        tappos = res_vvc[1]['injections'].loc['cap','kq']
+        self.assertEqual(tappos, 3)
+
+    def test_min_losses2(self):
+        """Upper limit test.
+        schema:
+        ::
+                                                         Q10=-5
+                                                         Exp_v_q=2
+                                         node           cap
+                                           +-------------||
+                                           |
+              +-----------( () )-----------+------------->
+            slack           Tr           node          consumer
+             V=1.+.0j        y_lo=0.9k-0.95kj           P10=30
+                             y_tr=1.3µ+1.5µj            Q10=15
+
+            #.Defk(id=taps min=0 max=2 is_discrete=True)
+            #.Klink(id_of_injection=cap id_of_factor=taps part=q)
+        """
+        mygrid = [
+            grid.Slacknode(id_of_node='slack', V=1.+.0j),
+            grid.Branch(
+                id='Tr', id_of_node_A='slack', id_of_node_B='node',
+                y_lo=.9e3-.95e3j, y_tr=1.3e-6+1.5e-6j),
+            grid.Injection(id='consumer', id_of_node='node', P10=30, Q10=15),
+            grid.Injection(id='cap', id_of_node='node', Q10=-5, Exp_v_q=2),
+            grid.Defk(id='taps', min=0, max=2, is_discrete=True),
+            grid.Klink(id_of_injection='cap', id_of_factor='taps', part='q')]
+        model = make_model(mygrid)
+        # optimize according to losses
+        res = estim.estimate(model, step_params=[dict(objectives='L')])
+        res_vvc = list(rt.make_printables(model, res))
+        tappos = res_vvc[1]['injections'].loc['cap','kq']
+        self.assertEqual(tappos, 2)
 
 if __name__ == '__main__':
     unittest.main()

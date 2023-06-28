@@ -132,12 +132,11 @@ schema of separated real and imaginary parts of complex values internally while
 accepting an egrid.model.Model as input and returning a vector of
 complex voltages.
 
-Function **pfcnum.calculate_electric_data** accepts an egrid.model.Model and
+Function **pfcnum.calculate_results** accepts an egrid.model.Model and
 a voltage vector as input and calculates the power and current flow for
-branches and injections as well as losses for branches. The returned
-object additionally provides a method for calculating the residual node current
-which can be used to evaluate the quality of the obtained estimation and
-power flow calculation results.
+branches and injections as well as losses for branches. Function
+**calculate_residual_current** is a tool for checking the obtained result
+numerically.
 
 ## Volt-Var-Control (VVC)
 
