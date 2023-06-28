@@ -382,7 +382,7 @@ class Power_flow_calculation_basic2(unittest.TestCase):
             model.factors.gen_factordata.index)
         expressions = estim.get_expressions(model, gen_factor_symbols)
         step_data = estim.get_step_data(model, expressions)
-        succ_estim, Vnode_ri_estim, _ = estim.optimize_step(*step_data)
+        succ_estim, Vnode_ri_estim, _ = estim.optimize_step(**step_data)
         self.assertTrue(succ_estim, 'estimation succeeds')
         Vnode_cx_estim = estim.ri_to_complex(Vnode_ri_estim)
         succ_pfc, Vnode_cx_pfc = pfc.calculate_power_flow(
@@ -431,9 +431,9 @@ class Optimize_step(unittest.TestCase):
         expressions = estim.get_expressions(model, gen_factor_symbols)
         step_data = estim.get_step_data(
             model, expressions, objectives='P')
-        succ, x_V, x_scaling = estim.optimize_step(*step_data)
+        succ, x_V, x_scaling = estim.optimize_step(**step_data)
         self.assertTrue(succ, 'estimation succeeds')
-        V, k, pos = estim.get_Vcx_factors(step_data.factordata, x_V, x_scaling)
+        V, k, pos = estim.get_Vcx_factors(step_data['factordata'], x_V, x_scaling)
         self.assertAlmostEqual(
             # exclude slacks
             pfc.max_residual_current(model, V, positions=pos, kpq=k),
@@ -469,9 +469,9 @@ class Optimize_step(unittest.TestCase):
         expressions = estim.get_expressions(model, gen_factor_symbols)
         step_data = estim.get_step_data(
             model, expressions, objectives='P')
-        succ, x_V, x_scaling = estim.optimize_step(*step_data)
+        succ, x_V, x_scaling = estim.optimize_step(**step_data)
         self.assertTrue(succ, 'estimation succeeds')
-        V, k, pos = estim.get_Vcx_factors(step_data.factordata, x_V, x_scaling)
+        V, k, pos = estim.get_Vcx_factors(step_data['factordata'], x_V, x_scaling)
         self.assertAlmostEqual(
             # exclude slacks
             pfc.max_residual_current(model, V, positions=pos, kpq=k),
@@ -507,9 +507,9 @@ class Optimize_step(unittest.TestCase):
         expressions = estim.get_expressions(model, gen_factor_symbols)
         step_data = estim.get_step_data(
             model, expressions, objectives='Q')
-        succ, x_V, x_scaling = estim.optimize_step(*step_data)
+        succ, x_V, x_scaling = estim.optimize_step(**step_data)
         self.assertTrue(succ, 'estimation succeeds')
-        V, k, pos = estim.get_Vcx_factors(step_data.factordata, x_V, x_scaling)
+        V, k, pos = estim.get_Vcx_factors(step_data['factordata'], x_V, x_scaling)
         self.assertAlmostEqual(
             # exclude slacks
             pfc.max_residual_current(model, V, positions=pos, kpq=k),
@@ -545,9 +545,9 @@ class Optimize_step(unittest.TestCase):
         expressions = estim.get_expressions(model, gen_factor_symbols)
         step_data = estim.get_step_data(
             model, expressions, objectives='Q')
-        succ, x_V, x_scaling = estim.optimize_step(*step_data)
+        succ, x_V, x_scaling = estim.optimize_step(**step_data)
         self.assertTrue(succ, 'estimation succeeds')
-        V, k, pos = estim.get_Vcx_factors(step_data.factordata, x_V, x_scaling)
+        V, k, pos = estim.get_Vcx_factors(step_data['factordata'], x_V, x_scaling)
         self.assertAlmostEqual(
             # exclude slacks
             pfc.max_residual_current(model, V, positions=pos, kpq=k),
@@ -583,9 +583,9 @@ class Optimize_step(unittest.TestCase):
         expressions = estim.get_expressions(model, gen_factor_symbols)
         step_data = estim.get_step_data(
             model, expressions, objectives='I')
-        succ, x_V, x_scaling = estim.optimize_step(*step_data)
+        succ, x_V, x_scaling = estim.optimize_step(**step_data)
         self.assertTrue(succ, 'estimation succeeds')
-        V, k, pos = estim.get_Vcx_factors(step_data.factordata, x_V, x_scaling)
+        V, k, pos = estim.get_Vcx_factors(step_data['factordata'], x_V, x_scaling)
         self.assertAlmostEqual(
             # exclude slacks
             pfc.max_residual_current(model, V, positions=pos, kpq=k),
@@ -621,9 +621,9 @@ class Optimize_step(unittest.TestCase):
         expressions = estim.get_expressions(model, gen_factor_symbols)
         step_data = estim.get_step_data(
             model, expressions, objectives='I')
-        succ, x_V, x_scaling = estim.optimize_step(*step_data)
+        succ, x_V, x_scaling = estim.optimize_step(**step_data)
         self.assertTrue(succ, 'estimation succeeds')
-        V, k, pos = estim.get_Vcx_factors(step_data.factordata, x_V, x_scaling)
+        V, k, pos = estim.get_Vcx_factors(step_data['factordata'], x_V, x_scaling)
         inj_res = rt.calculate_injection_results(model, V, kpq=k)
         self.assertAlmostEqual(
             # exclude slacks
@@ -658,10 +658,10 @@ class Optimize_step(unittest.TestCase):
         expressions = estim.get_expressions(model, gen_factor_symbols)
         step_data = estim.get_step_data(
             model, expressions, objectives='V')
-        succ, x_V, x_scaling = estim.optimize_step(*step_data)
+        succ, x_V, x_scaling = estim.optimize_step(**step_data)
         self.assertTrue(succ, 'estimation succeeds')
         V, k, pos = estim.get_Vcx_factors(
-            step_data.factordata, x_V, x_scaling)
+            step_data['factordata'], x_V, x_scaling)
         self.assertAlmostEqual(
             # exclude slacks
             pfc.max_residual_current(model, V, positions=pos, kpq=k),

@@ -23,7 +23,7 @@ import casadi
 import pandas as pd
 import numpy as np
 from functools import partial
-from collections import defaultdict, namedtuple
+from collections import defaultdict
 from scipy.sparse import coo_matrix
 from egrid.model import get_vlimits_for_step
 from dssex.injections import calculate_cubic_coefficients
@@ -1809,52 +1809,6 @@ def get_calculate_from_result(model, vsyms, factordata, x):
 # convenience functions for easier handling of estimation
 #
 
-Stepdata = namedtuple(
-    'Stepdata',
-    'model expressions factordata Inode_inj objective constraints lbg ubg')
-Stepdata.__doc__ = """Data for calling function 'optimize_step'.
-
-Parameters
-----------
-model: egrid.model.Model
-    data of electric grid
-expressions: dict
-    * 'Vnode_syms', casadi.SX, expressions of node Voltages
-    * 'Vslack_syms', casadi.SX, symbols of slack voltages,
-       Vslack_syms[:,0] real part, Vslack_syms[:,1] imaginary part
-    * 'gb_mn_tot', conductance g / susceptance b per branch terminal
-        * gb_mn_tot[:,0] g_mn, mutual conductance
-        * gb_mn_tot[:,1] b_mn, mutual susceptance
-        * gb_mn_tot[:,2] g_tot, self conductance + mutual conductance
-        * gb_mn_tot[:,3] b_tot, self susceptance + mutual susceptance
-    * 'Y_by_V', casadi.SX, expression for Y @ V
-    * 'get_factor_and_injection_data', function
-      (int, casadi.DM) -> (tuple - Factordata, casadi.SX)
-      which is a function
-      (index_of_step, scaling_factors_of_previous_step)
-        -> (tuple - Factordata, injection_data)
-    * 'inj_to_node', casadi.SX, matrix, maps from
-      injections to power flow calculation nodes
-factordata: Factordata
-    * .vars, casadi.SX, column vector, symbols for variables
-      of factors
-    * .consts, casadi.SX, column vector, symbols for constants
-      of scaling factors
-    * .values_of_vars, casadi.DM, column vector, initial values
-      for vars
-    * .values_of_consts, casadi.DM, column vector, values for consts
-Inode_inj: casadi.SX (shape n,2)
-    * Inode_inj[:,0] - Ire, real part of current injected into node
-    * Inode_inj[:,1] - Iim, imaginary part of current injected into node
-objective: casadi.SX
-    expression to minimize
-constraints: casadi.SX (shape m,1)
-    additional constraints (additional to YV+I=0) part of function g(x,p)
-lbg: casadi.DM (shape m,1)
-    lower bound of argument 'constraints' (g)
-ubg: casadi.DM (shape m,1)
-    upper bound of argument 'constraints' (g)"""
-
 def _get_vlimits(process_vlimts, model, Vnode_sqr, step):
     """Fetches expressions, lower and upper bound of voltage limits.
 
@@ -1971,7 +1925,7 @@ def get_step_data(
     bg_inode = casadi.DM.zeros(number_of_constraints)
     lbg = casadi.vertcat(bg_inode, lbg_v)
     ubg = casadi.vertcat(bg_inode, ubg_v)
-    return Stepdata(
+    return dict(
         model=model, expressions=expressions, factordata=factordata,
         Inode_inj=Inode_inj, objective=objective,
         constraints=constraints, lbg=lbg, ubg=ubg)
@@ -2070,7 +2024,7 @@ def get_step_data_fns(model, gen_factor_symbols):
     return make_step_data, next_step_data
 
 def optimize_step(
-    model, expressions, factordata, Inode_inj, objective,
+    *, model, expressions, factordata, Inode_inj, objective,
     constraints, lbg, ubg, Vnode_ri_ini=None):
     """Runs one optimization step.
 
@@ -2180,10 +2134,10 @@ def optimize_steps(model, gen_factorsymbols, step_params=(), vminsqr=_VMINSQR):
     make_step_data, next_step_data = get_step_data_fns(
         model, gen_factorsymbols)
     step_data = make_step_data(step=0)
-    factordata = step_data.factordata
+    factordata = step_data['factordata']
     # power flow calculation for initial voltages
     succ, voltages_ri = calculate_power_flow2(
-        model, step_data.expressions, factordata, step_data.Inode_inj)
+        model, step_data['expressions'], factordata, step_data['Inode_inj'])
     values_of_vars = factordata.values_of_vars
     yield -1, succ, voltages_ri, values_of_vars, factordata
     for step, kv in enumerate(step_params):
@@ -2195,10 +2149,10 @@ def optimize_steps(model, gen_factorsymbols, step_params=(), vminsqr=_VMINSQR):
             step=step, voltages_ri=voltages_ri, k=factor_values,
             objectives=objectives, constraints=constraints,
             process_vlimits=process_vlimits)
-        factordata = step_data.factordata
+        factordata = step_data['factordata']
         # estimation
         succ, voltages_ri, values_of_vars = optimize_step(
-            *step_data, Vnode_ri_ini=voltages_ri)
+            **step_data, Vnode_ri_ini=voltages_ri)
         yield step, succ, voltages_ri, values_of_vars, factordata
 
 def get_Vcx_factors(factordata, voltages_ri, factorvalues):
@@ -2225,11 +2179,10 @@ def get_Vcx_factors(factordata, voltages_ri, factorvalues):
 
     Returns
     -------
-    V : numpy.array (shape n,1), complex
-        node voltages
-    kpq: numpy.array (shape m,2), float
-        scaling factors per injection
-    pos: numpy.array (shape n,1), float"""
+    tuple:
+        * numpy.array (shape n,1), complex, node voltages
+        * numpy.array (shape m,2), float, scaling factors per injection
+        * numpy.array (shape n,1), float, positions"""
     kpq, pos, vars_consts = ft.separate_factors(factordata, factorvalues)
     V = ri_to_complex(voltages_ri)
     return V, kpq, pos
