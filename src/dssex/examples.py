@@ -106,12 +106,14 @@ slack           Tr           node          consumer
  V=1.+.0j        y_lo=0.9k-0.95kj           P10=30
                  y_tr=1.3µ+1.5µj            Q10=15
 
-#.Defk(id=taps min=0 max=5 is_discrete=True)
+#.Defk(id=taps min=0 max=5 is_discrete=True cost=0)
 #.Klink(id_of_injection=cap id_of_factor=taps part=q)
 """
 model_vvc = make_model(schema_vvc)
 # optimize according to losses
-res = estim.estimate(model_vvc, step_params=[dict(objectives='L')])
+res = estim.estimate(
+    model_vvc,
+    step_params=[dict(objectives='LC', floss=1000)])
 res_vvc = list(rt.make_printables(model_vvc, res))
 
 tappos = res_vvc[1]['injections'].loc['cap','kq']

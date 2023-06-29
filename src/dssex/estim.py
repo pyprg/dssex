@@ -1301,7 +1301,7 @@ def get_batch_flow_expressions(model, v_syms_gb_ex, ipqv, quantity):
     exprs = casadi.vcat(batchid_expr.values())
     return batchids, vals, exprs if exprs.size1() else _SX_0r1c
 
-def get_diff_expressions(model, expressions, ipqv, quantities):
+def get_diff_expressions(model, expressions, ipqv, objectives):
     """Expresses differences between measured and calculated values.
 
     Creates a vector (casadi.SX, shape n,1) expressing the difference
@@ -1328,7 +1328,7 @@ def get_diff_expressions(model, expressions, ipqv, quantities):
         [:,5] Qip, reactive power interpolated
         [:,6] Vabs_sqr, square of voltage magnitude
         [:,7] interpolate?
-    quantities: str
+    objectives: str
         string of characters 'I'|'P'|'Q'|'V'
         addresses current magnitude, active power, reactive power or magnitude
         of voltage, case insensitive, other characters are ignored
@@ -1340,29 +1340,30 @@ def get_diff_expressions(model, expressions, ipqv, quantities):
         * id_of_batch, numpy.array<str>
         * value, casadi.DM, vector (shape n,1)
         * expression, casadi.SX, vector (shape n,1)"""
-    _quantities = []
+    _objectives = []
     _ids = []
     _vals = []
     _exprs = casadi.SX(0, 1)
-    for quantity in quantities.upper():
-        if quantity in 'IPQ':
+    for objective in objectives:
+        if objective in 'IPQ':
             ids, vals, exprs = get_batch_flow_expressions(
-                model, expressions, ipqv, quantity)
-            _quantities.extend([quantity]*len(ids))
+                model, expressions, ipqv, objective)
+            _objectives.extend([objective]*len(ids))
             _ids.extend(ids)
             _vals.extend(vals)
             _exprs = casadi.vertcat(_exprs, exprs)
-        elif quantity=='V':
+        elif objective=='V':
             vvals = value_of_voltages(model.vvalues)
             count_of_values = len(vvals)
-            _quantities.extend([quantity]*count_of_values)
+            _objectives.extend([objective]*count_of_values)
             _ids.extend(vvals.id_of_node)
             _vals.extend(vvals.V)
             _exprs = casadi.vertcat(
                 _exprs, expressions['Vnode_syms'][vvals.index,2].sqrt())
-    return np.array(_quantities), np.array(_ids), casadi.DM(_vals), _exprs
+    return np.array(_objectives), np.array(_ids), casadi.DM(_vals), _exprs
 
-def get_objective_expression(model, expressions, ipqv, floss, quantities):
+def get_objective_expression(
+        model, expressions, factordata, Iinj_data, floss, objectives):
     """Creates expression for objective function.
 
     Creates a vector (casadi.SX, shape n,1) expressing the difference
@@ -1381,7 +1382,9 @@ def get_objective_expression(model, expressions, ipqv, floss, quantities):
           for branches
         * 'gb_mn_tot', casadi.SX, vectors, conductance and susceptance of
           branches connected to terminals
-    ipqv: casadi.SX (n,8), data of P, Q, I, and V at injections
+    factordata: Factordata
+
+    Iinj_data: casadi.SX (n,8), data of P, Q, I, and V at injections
         * [:,0] Ire, current, real part
         * [:,1] Iim, current, imaginary part
         * [:,2] Pscaled, active power P10 multiplied by scaling factor kp
@@ -1392,8 +1395,8 @@ def get_objective_expression(model, expressions, ipqv, floss, quantities):
         * [:,7] interpolate?
     floss: float
         multiplier for branch losses
-    quantities: str
-        string of characters 'I'|'P'|'Q'|'V'|'L'
+    objectives: str
+        string of characters 'I'|'P'|'Q'|'V'|'L'|'C'
         addresses current magnitude, active power, reactive power or magnitude
         of voltage, losses of branches, case insensitive,
         other characters are ignored
@@ -1401,12 +1404,17 @@ def get_objective_expression(model, expressions, ipqv, floss, quantities):
     Returns
     -------
     casadi.SX"""
-    diff_data = get_diff_expressions(model, expressions, ipqv, quantities)
+    diff_data = get_diff_expressions(model, expressions, Iinj_data, objectives)
     objective = casadi.sumsqr(diff_data[2] - diff_data[3])
-    return (
-        objective + (floss * _get_branch_loss_expression(model, expressions))
-        if 'L' in quantities.upper() else
-        objective)
+    if 'C' in objectives:
+        change = factordata.values_of_vars - factordata.vars
+        # sigmoid for calculation of absolute value, smooth, differentiable
+        change_abs = casadi.erf(100*change) * change
+        cost = change_abs * factordata.cost_of_change
+        objective += cost
+    if 'L' in objectives:
+        objective += (floss * _get_branch_loss_expression(model, expressions))
+    return objective
 
 def get_batch_constraints(values_of_constraints, expressions_of_batches):
     """Creates expressions of constraints for keeping batch values constant.
@@ -1879,10 +1887,11 @@ def get_step_data(
         result output of factors (only) calculated in previous step, if any
     objectives: str
         optional, default ''
-        string of characters 'I'|'P'|'Q'|'V' or empty string ''
+        string of characters 'I'|'P'|'Q'|'V'|'L'|'C' or empty string ''
         addresses differences of calculated and given values to be minimized,
         the characters are symbols for given current magnitude, active power,
-        reactive power or magnitude of voltage,
+        reactive power or magnitude of voltage, losses of branches and
+        costs for change of factors
         case insensitive, other characters are ignored
     constraints: str
         optional, default ''
@@ -1926,7 +1935,7 @@ def get_step_data(
         Vslack_syms[:,0], Vslack_syms[:,1],
         expressions['inj_to_node'] @ Iinj_data[:,:2])
     objective = get_objective_expression(
-        model, expressions, Iinj_data, floss, objectives)
+        model, expressions, factordata, Iinj_data, floss, objectives)
     expr_of_batches = get_diff_expressions(
         model, expressions, Iinj_data, constraints)
     batch_constraints = (
@@ -2174,8 +2183,8 @@ def optimize_steps(model, gen_factorsymbols, step_params=(), vminsqr=_VMINSQR):
     values_of_vars = factordata.values_of_vars
     yield -1, succ, voltages_ri, values_of_vars, factordata
     for step, kv in enumerate(step_params):
-        objectives = kv.get('objectives', '')
-        constraints = kv.get('constraints', '')
+        objectives = kv.get('objectives', '').upper()
+        constraints = kv.get('constraints', '').upper()
         process_vlimits = kv.get('process_vlimits', True)
         floss = kv.get('floss', 1.)
         factor_values = ft.get_factor_values(factordata, values_of_vars)
