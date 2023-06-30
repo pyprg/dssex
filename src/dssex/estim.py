@@ -773,11 +773,11 @@ def _power_into_branch(
         S = y_tot' V' V - y_mn' V_other' V = S_tot - S_mn
     matrix form of y_tot and y_tot' (== conjugate(y_tot))
     ::
-                +-            -+           +-            -+
-                | g_tot -b_tot |           |  g_tot b_tot |
-        y_tot = |              |  y_tot' = |              |
-                | b_tot  g_tot |           | -b_tot g_tot |
-                +-            -+           +-            -+
+                +-            -+             +-            -+
+                | g_tot -b_tot |             |  g_tot b_tot |
+        y_tot = |              | ;  y_tot' = |              |
+                | b_tot  g_tot |             | -b_tot g_tot |
+                +-            -+             +-            -+
     V' V in matrix form:
     ::
                                  +-   -+
@@ -1229,6 +1229,8 @@ def get_batch_expressions(model, v_syms_gb_ex, ipqv, quantity):
 def _get_branch_loss_expression(model, v_syms_gb_ex):
     """Creates an expression for active power losses of all branches.
 
+    Losses are calculated for 3-phase-branches.
+
     Parameters
     ----------
     model: egrid.model.Model
@@ -1247,7 +1249,8 @@ def _get_branch_loss_expression(model, v_syms_gb_ex):
     if len(branchterminals):
         Vterm = Vnode[branchterminals.index_of_node,:]
         Vother = Vnode[branchterminals.index_of_other_node,:]
-        p_term = (
+        # single phase to 3-phase
+        p_term = 3 * (
             _power_into_branch(
                 gb_mn_tot[:,2], gb_mn_tot[:,3], gb_mn_tot[:,0], gb_mn_tot[:,1],
                 Vterm[:,2], Vterm[:,0], Vterm[:,1], Vother[:,0], Vother[:,1])
@@ -1411,7 +1414,7 @@ def get_objective_expression(
         # sigmoid for calculation of absolute value, smooth, differentiable
         change_abs = casadi.erf(100*change) * change
         cost = change_abs * factordata.cost_of_change
-        objective += cost
+        objective += casadi.sum1(cost)
     if 'L' in objectives:
         objective += (floss * _get_branch_loss_expression(model, expressions))
     return objective
