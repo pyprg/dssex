@@ -93,7 +93,7 @@ def _calculate_injection_results(injections, Vinj, SI, kpq):
     df['V_pu'] = np.abs(Vinj)
     df['I_pu'] = np.abs(SI[1])
     df['Vcx_pu'] = Vinj
-    df['Scx_pu'] = SI[0]
+    df['Scx_pu'] = S
     df['Icx_pu'] = SI[1]
     if kpq is None:
         df['kp'] = 1.
