@@ -141,8 +141,8 @@ class VVC_transformer(unittest.TestCase):
     ::
           +---------------------( () )-----------+------------->
         slack                     Tr           node          consumer
-          V=1.+.0j   Tlink=taps     y_lo=0.9k-0.95kj           P10=30
-                                    y_tr=1.3µ+1.5µj            Exp_v_p=0
+          V=1.+.0j   Tlink=taps    y_lo=0.9k-0.95kj           P10=30
+                                   y_tr=1.3µ+1.5µj            Exp_v_p=0
 
         #. Deft(id=taps value=0 type=var min=-16 max=16 m=-.00625 n=1)
 
@@ -150,8 +150,8 @@ class VVC_transformer(unittest.TestCase):
     ::
           +---------------------( () )-----------+------------->
         slack                     Tr           node          consumer
-          V=1.+.0j   Tlink=taps     y_lo=0.9k-0.95kj           P10=30
-                                    y_tr=1.3µ+1.5µj            Exp_v_p=2
+          V=1.+.0j   Tlink=taps    y_lo=0.9k-0.95kj           P10=30
+                                   y_tr=1.3µ+1.5µj            Exp_v_p=2
 
         #. Deft(id=taps value=0 type=var min=-16 max=16 m=-.00625 n=1)
     """
@@ -217,6 +217,29 @@ class VVC_transformer(unittest.TestCase):
         self.assertGreater(res_vvc[1]['nodes'].loc['node'].V_pu, .95)
 
 class VVC_shuntcapacitor(unittest.TestCase):
+    """
+    schema:
+    ::
+                                                      Q10=-5
+                                                      Exp_v_q=2
+                                      node          cap
+                                       +-------------||
+                                       |
+          +-----------[ -- ]-----------+------------->
+        slack           Br           node          consumer
+          V=1.+.0j       y_lo=0.9k-0.95kj           P10=30
+                         y_tr=1.3µ+1.5µj            Q10=15
+
+        #.Klink(id_of_injection=cap id_of_factor=taps part=q)
+    """
+    _mygrid = [
+        grid.Slacknode(id_of_node='slack', V=1.+.0j),
+        grid.Branch(
+            id='Br', id_of_node_A='slack', id_of_node_B='node',
+            y_lo=.9e3-.95e3j, y_tr=1.3e-6+1.5e-6j),
+        grid.Injection(id='consumer', id_of_node='node', P10=30, Q10=15),
+        grid.Injection(id='cap', id_of_node='node', Q10=-5, Exp_v_q=2),
+        grid.Klink(id_of_injection='cap', id_of_factor='taps', part='q')]
 
     def test_min_losses(self):
         """
@@ -227,24 +250,17 @@ class VVC_shuntcapacitor(unittest.TestCase):
                                           node          cap
                                            +-------------||
                                            |
-              +-----------( () )-----------+------------->
-            slack           Tr           node          consumer
-              V=1.+.0j        y_lo=0.9k-0.95kj           P10=30
-                              y_tr=1.3µ+1.5µj            Q10=15
+              +-----------[ -- ]-----------+------------->
+            slack           Br           node          consumer
+              V=1.+.0j       y_lo=0.9k-0.95kj           P10=30
+                             y_tr=1.3µ+1.5µj            Q10=15
 
             #.Defk(id=taps min=0 max=5 is_discrete=True)
             #.Klink(id_of_injection=cap id_of_factor=taps part=q)
         """
-        mygrid = [
-            grid.Slacknode(id_of_node='slack', V=1.+.0j),
-            grid.Branch(
-                id='Tr', id_of_node_A='slack', id_of_node_B='node',
-                y_lo=.9e3-.95e3j, y_tr=1.3e-6+1.5e-6j),
-            grid.Injection(id='consumer', id_of_node='node', P10=30, Q10=15),
-            grid.Injection(id='cap', id_of_node='node', Q10=-5, Exp_v_q=2),
-            grid.Defk(id='taps', min=0, max=5, is_discrete=True),
-            grid.Klink(id_of_injection='cap', id_of_factor='taps', part='q')]
-        model = make_model(mygrid)
+        model = make_model(
+            self._mygrid,
+            grid.Defk(id='taps', min=0, max=5, is_discrete=True))
         # optimize according to losses
         res = estim.estimate(model, step_params=[dict(objectives='L')])
         res_vvc = list(rt.make_printables(model, res))
@@ -255,34 +271,92 @@ class VVC_shuntcapacitor(unittest.TestCase):
         """Upper limit test.
         schema:
         ::
-                                                         Q10=-5
-                                                         Exp_v_q=2
-                                         node           cap
+                                                          Q10=-5
+                                                          Exp_v_q=2
+                                          node           cap
                                            +-------------||
                                            |
-              +-----------( () )-----------+------------->
-            slack           Tr           node          consumer
-             V=1.+.0j        y_lo=0.9k-0.95kj           P10=30
+              +-----------[ -- ]-----------+------------->
+            slack           Br           node          consumer
+              V=1.+.0j       y_lo=0.9k-0.95kj           P10=30
                              y_tr=1.3µ+1.5µj            Q10=15
 
             #.Defk(id=taps min=0 max=2 is_discrete=True)
             #.Klink(id_of_injection=cap id_of_factor=taps part=q)
         """
-        mygrid = [
-            grid.Slacknode(id_of_node='slack', V=1.+.0j),
-            grid.Branch(
-                id='Tr', id_of_node_A='slack', id_of_node_B='node',
-                y_lo=.9e3-.95e3j, y_tr=1.3e-6+1.5e-6j),
-            grid.Injection(id='consumer', id_of_node='node', P10=30, Q10=15),
-            grid.Injection(id='cap', id_of_node='node', Q10=-5, Exp_v_q=2),
-            grid.Defk(id='taps', min=0, max=2, is_discrete=True),
-            grid.Klink(id_of_injection='cap', id_of_factor='taps', part='q')]
-        model = make_model(mygrid)
+        model = make_model(
+            self._mygrid,
+            grid.Defk(id='taps', min=0, max=2, is_discrete=True))
         # optimize according to losses
         res = estim.estimate(model, step_params=[dict(objectives='L')])
         res_vvc = list(rt.make_printables(model, res))
         tappos = res_vvc[1]['injections'].loc['cap','kq']
         self.assertEqual(tappos, 2)
+
+    def test_min_cost(self):
+        """minimize cost, consider cost of losses, cost of tap change
+
+        test with cost for change:
+            * smaller than savings due to decreased losses
+            * with costs exceeding potential savings
+        """
+        model = make_model(
+            self._mygrid,
+            grid.Defk(id='taps', value=1, min=0, max=5, is_discrete=True))
+        # optimize according to losses
+        _, res = estim.estimate(model, step_params=[dict(objectives='L')])
+        tappos = (
+            rt.calculate_electric_data2(model, res)
+            ['injections'].loc['cap','kq'])
+        self.assertGreater(tappos, 0)
+        # make final tappos = initial tappos  - 1
+        tappos_initial = tappos-1
+        model2 = make_model(
+            self._mygrid,
+            grid.Defk(
+                id='taps', value=tappos_initial, min=0, max=5,
+                is_discrete=True))
+        ini2, res2 = estim.estimate(model2, step_params=[dict(objectives='L')])
+        ed_ini2 = rt.calculate_electric_data2(model2, ini2)
+        tappos_ini2 = ed_ini2['injections'].loc['cap','kq']
+        ed_res2 = rt.calculate_electric_data2(model2, res2)
+        tappos_optimized2 = ed_res2['injections'].loc['cap','kq']
+        diff_tappos2 = tappos_optimized2 - tappos_ini2
+        # check that diff of tappos is indeed 1
+        self.assertEquals(diff_tappos2, 1)
+        losses_ini2 = ed_ini2['branches'].loc['Br','Ploss_pu']
+        losses_res2 = ed_res2['branches'].loc['Br','Ploss_pu']
+        diff_losses2 = losses_ini2 - losses_res2
+        self.assertGreater(diff_losses2, 0)
+        #
+        loss_factor = 100
+        savings_of_losses = loss_factor * diff_losses2
+        #
+        # cost of change are smaller than savings of losses
+        #
+        model2.factors.gen_factordata.loc['taps','cost'] = (
+            .999 * savings_of_losses)
+        ini3, res3 = estim.estimate(
+            model2, step_params=[dict(objectives='LC', floss=loss_factor)])
+        ed_res3 = rt.calculate_electric_data2(model2, res3)
+        tappos_optimized3 = ed_res3['injections'].loc['cap','kq']
+        self.assertEquals(tappos_optimized3, tappos_optimized2)
+        #
+        # cost of change are greater than savings by potential decrease of
+        #   losses ==> optimal position of taps will not change
+        #
+        model2.factors.gen_factordata.loc['taps','cost'] = (
+            1.001 * savings_of_losses)
+        # model4 = make_model(
+        #     self._mygrid,
+        #     grid.Defk(
+        #         id='taps', value=tappos_initial, min=0, max=5,
+        #         cost= 1.02 * savings_of_losses, is_discrete=True))
+        ini4, res4 = estim.estimate(
+            model2, step_params=[dict(objectives='LC', floss=loss_factor)])
+        ed_res4 = rt.calculate_electric_data2(model2, res4)
+        tappos_optimized4 = ed_res4['injections'].loc['cap','kq']
+        self.assertEquals(tappos_optimized4, tappos_initial)
 
 if __name__ == '__main__':
     unittest.main()
