@@ -17,7 +17,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 @author: pyprg
 """
-
 import unittest
 import context # adds parent folder of dssex to search path
 import numpy as np

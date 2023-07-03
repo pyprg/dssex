@@ -514,8 +514,7 @@ def _get_branch_flow_values(f_mn_tot, vnode_ri2, branchterminals):
 # slices I/P/Q-vectors from result of function _get_branch_flow_values
 _branch_flow_slicer = dict(I=np.s_[:,:2], P=np.s_[:,2], Q=np.s_[:,3])
 
-def _get_batch_values_br(
-        model, f_mn_tot, vnode_ri2, selector, vminsqr=.8**2):
+def _get_batch_values_br(model, f_mn_tot, vnode_ri2, selector, vminsqr):
     """Calculates a vector of absolute current, active power or reactive power.
 
     The expressions are based on the batch definitions.

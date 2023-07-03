@@ -19,7 +19,6 @@ Created on Wed May 24 21:51:35 2023
 
 @author: pyprg
 """
-
 import unittest
 import context # adds parent folder of dssex to search path
 import numpy as np

@@ -96,13 +96,13 @@ calc_estim2 = rt.make_printable(
     rt.calculate_electric_data(model, res2[2], kpq=res2[3], positions=res2[4]))
 #%% VVC
 schema_vvc = """
-                                              Q10=-5
-                                              Exp_v_q=2
+                                             Q10=-5
+                                             Exp_v_q=2
                               node          cap
                                +-------------||
                                |
-  +-----------( () )-----------+------------->
-slack           Tr           node          consumer
+  +-----------[ -- ]-----------+------------->
+slack           Br           node          consumer
   V=1.+.0j       y_lo=0.9k-0.95kj           P10=60
                  y_tr=1.3µ+1.5µj            Q10=15
 
@@ -120,6 +120,6 @@ res_vvc = list(rt.make_printables(model_vvc, res))
 tappos_ini = res_vvc[0]['injections'].loc['cap','kq']
 tappos_optimized = res_vvc[1]['injections'].loc['cap','kq']
 
-losses_ini = res_vvc[0]['branches'].loc['Tr','Ploss_pu']
-losses_optimized = res_vvc[1]['branches'].loc['Tr','Ploss_pu']
+losses_ini = res_vvc[0]['branches'].loc['Br','Ploss_pu']
+losses_optimized = res_vvc[1]['branches'].loc['Br','Ploss_pu']
 diff_losses = losses_ini - losses_optimized

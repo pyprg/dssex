@@ -19,7 +19,6 @@ Created on Sun Apr  2 13:15:05 2023
 
 @author: pyprg
 """
-
 import unittest
 import context # adds parent folder of dssex to search path
 import numpy as np
@@ -220,8 +219,8 @@ class VVC_shuntcapacitor(unittest.TestCase):
     """
     schema:
     ::
-                                                      Q10=-5
-                                                      Exp_v_q=2
+                                                     Q10=-5
+                                                     Exp_v_q=2
                                       node          cap
                                        +-------------||
                                        |
@@ -245,8 +244,8 @@ class VVC_shuntcapacitor(unittest.TestCase):
         """
         schema:
         ::
-                                                          Q10=-5
-                                                          Exp_v_q=2
+                                                         Q10=-5
+                                                         Exp_v_q=2
                                           node          cap
                                            +-------------||
                                            |
@@ -309,7 +308,7 @@ class VVC_shuntcapacitor(unittest.TestCase):
             rt.calculate_electric_data2(model, res)
             ['injections'].loc['cap','kq'])
         self.assertGreater(tappos, 0)
-        # make final tappos = initial tappos  - 1
+        # make initial tappos = final tappos - 1
         tappos_initial = tappos-1
         model2 = make_model(
             self._mygrid,
@@ -347,11 +346,6 @@ class VVC_shuntcapacitor(unittest.TestCase):
         #
         model2.factors.gen_factordata.loc['taps','cost'] = (
             1.001 * savings_of_losses)
-        # model4 = make_model(
-        #     self._mygrid,
-        #     grid.Defk(
-        #         id='taps', value=tappos_initial, min=0, max=5,
-        #         cost= 1.02 * savings_of_losses, is_discrete=True))
         ini4, res4 = estim.estimate(
             model2, step_params=[dict(objectives='LC', floss=loss_factor)])
         ed_res4 = rt.calculate_electric_data2(model2, res4)

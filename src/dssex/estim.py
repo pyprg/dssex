@@ -1327,14 +1327,14 @@ def get_diff_expressions(model, expressions, ipqv, objectives):
         [:,1] Iim, current, imaginary part
         [:,2] Pscaled, active power P10 multiplied by scaling factor kp
         [:,3] Qscaled, reactive power Q10 multiplied by scaling factor kq
-        [:,4] Pip, active power interpolated
-        [:,5] Qip, reactive power interpolated
+        [:,4] Pip, active power, interpolated
+        [:,5] Qip, reactive power, interpolated
         [:,6] Vabs_sqr, square of voltage magnitude
         [:,7] interpolate?
     objectives: str
         string of characters 'I'|'P'|'Q'|'V'
         addresses current magnitude, active power, reactive power or magnitude
-        of voltage, case insensitive, other characters are ignored
+        of voltage, other characters are ignored
 
     Returns
     -------
@@ -1392,8 +1392,8 @@ def get_objective_expression(
         * [:,1] Iim, current, imaginary part
         * [:,2] Pscaled, active power P10 multiplied by scaling factor kp
         * [:,3] Qscaled, reactive power Q10 multiplied by scaling factor kq
-        * [:,4] Pip, active power interpolated
-        * [:,5] Qip, reactive power interpolated
+        * [:,4] Pip, active power, interpolated
+        * [:,5] Qip, reactive power, interpolated
         * [:,6] Vabs_sqr, square of voltage magnitude
         * [:,7] interpolate?
     floss: float
@@ -1401,8 +1401,7 @@ def get_objective_expression(
     objectives: str
         string of characters 'I'|'P'|'Q'|'V'|'L'|'C'
         addresses current magnitude, active power, reactive power or magnitude
-        of voltage, losses of branches, case insensitive,
-        other characters are ignored
+        of voltage, losses of branches, other characters are ignored
 
     Returns
     -------
@@ -1894,8 +1893,7 @@ def get_step_data(
         addresses differences of calculated and given values to be minimized,
         the characters are symbols for given current magnitude, active power,
         reactive power or magnitude of voltage, losses of branches and
-        costs for change of factors
-        case insensitive, other characters are ignored
+        costs for change of factors, other characters are ignored
     constraints: str
         optional, default ''
         string of characters 'I'|'P'|'Q'|'V' or empty string ''
@@ -1903,7 +1901,7 @@ def get_step_data(
         to be kept constant, the values are obtained from a previous
         calculation/initialization step, the characters are symbols for
         given current magnitude, active power, reactive power or
-        magnitude of voltage, case insensitive, other characters are ignored,
+        magnitude of voltage, other characters are ignored,
         values must be given with argument 'values_of_constraints',
         conditions must be satisfied
     values_of_constraints: tuple
@@ -1922,14 +1920,14 @@ def get_step_data(
     Returns
     -------
     dict
-        * ['model']
-        * ['expressions']
-        * ['factordata']
-        * ['Inode_inj']
-        * ['objective']
-        * ['constraints']
-        * ['lbg']
-        * ['ubg']"""
+        * ['model'], egrid.model.Model
+        * ['expressions'], dict
+        * ['factordata'], factors.Factordata
+        * ['Inode_inj'], casadi.SX
+        * ['objective'], str
+        * ['constraints'], str
+        * ['lbg'], casadi.DM
+        * ['ubg'], casadi.DM"""
     factordata, Iinj_data = (
         expressions['get_factor_and_injection_data'](step, f_prev))
     Vslack_syms = expressions['Vslack_syms']
@@ -1981,11 +1979,13 @@ def get_step_data_fns(model, gen_factor_symbols):
             ()->(Stepdata), optional parameters:
               objectives: str
                   optional, default ''
-                  string of characters 'I'|'P'|'Q'|'V' or empty string '',
-                  addresses quantities (of measurements/setpoints)
+                  string of characters 'I'|'P'|'Q'|'V'|'L'|'C'
+                  or empty string '',
+                  addresses quantities (of measurements/setpoints),
+                  branch losses and cost
               step: int
                   optional, default 0
-              f_prev: scaling factors calculated by previous step
+              f_prev: factors calculated by previous step
                   optional, default None
               constraints: str
                   optional, default ''
@@ -2004,7 +2004,8 @@ def get_step_data_fns(model, gen_factor_symbols):
                   scaling factors calculated by previous calculation step
               objectives: str (optional)
                   optional, default ''
-                  string of characters 'I'|'P'|'Q'|'V' or empty string ''
+                  string of characters 'I'|'P'|'Q'|'V'|'L'|'C'
+                  or empty string ''
               constraints: str (optional)
                   optional, default ''
                   string of characters 'I'|'P'|'Q'|'V' or empty string ''"""
@@ -2025,7 +2026,7 @@ def get_step_data_fns(model, gen_factor_symbols):
             factors calculated by previous calculation step
         objectives: str (optional)
             optional, default ''
-            string of characters 'I'|'P'|'Q'|'V'|'L' or empty string ''
+            string of characters 'I'|'P'|'Q'|'V'|'L'|'C' or empty string ''
         constraints: str (optional)
             optional, default ''
             string of characters 'I'|'P'|'Q'|'V' or empty string ''
@@ -2043,8 +2044,8 @@ def get_step_data_fns(model, gen_factor_symbols):
                 * ['expressions']
                 * ['factordata']
                 * ['Inode_inj']
-                * ['objective']
-                * ['constraints']
+                * ['objective'], str
+                * ['constraints'], str
                 * ['lbg']
                 * ['ubg']
             * numpy.array, values of val_factors"""

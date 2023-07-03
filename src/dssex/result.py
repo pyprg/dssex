@@ -372,10 +372,8 @@ def calculate_branch_results(model, /, Vnode, *, positions=None):
     terminalfactors = model.factors.terminalfactors
     Vcx_term_ab = _vterm_from_vnode(branchterminals, Vnode)
     positions_ = (
-            (positions
-             if positions else
-             terminalfactors.value.to_numpy())
-            .reshape(-1))
+        (positions if positions else terminalfactors.value.to_numpy())
+        .reshape(-1))
     Iterm = _calculate_terminal_current(model, Vcx_term_ab, positions_)
     return _calculate_branch_results(
         branchterminals, terminalfactors, Iterm, Vcx_term_ab, positions_)
@@ -631,7 +629,7 @@ def get_switch_flow(bridgeterminals, Icx_branchterm, Icx_injection):
 
 def _calculate_bridge_results(
         bridgeterminals, Icx_branchterm, Icx_injection, Vnode):
-    """Calculates electric values for branches.
+    """Calculates electric values for branches without impedance.
 
     Parameters
     ----------
