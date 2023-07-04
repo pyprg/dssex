@@ -1090,26 +1090,53 @@ def make_get_branch_expressions(v_syms_gb_ex, quantity):
 # expressions of differences, measured - calculated
 #
 
+def _select_and_check_for_single_current(vals, key):
+    selected = vals[key]
+    assert selected.size < 2, (
+        'more than one current value is given for one batch, however, '
+        'only a single current value is possible '
+        'as addition cannot be used for magnitudes of complex currents')
+    return selected
+
+def _select_and_check_for_single_cost(vals, key):
+    selected = vals[key]
+    assert selected.size < 2, (
+        'more than one cost value is given for one batch, however, '
+        'only a single cost values is possible')
+    return selected
+
 def _make_get_value(values, quantity):
-    """Helper, creates a function retrieving a value from
-    ivalues, pvalues, qvalues or vvalues. Returns 'per-phase' values
+    """Helper, creates a function retrieving a value from model.
+
+    ivalues, pvalues, qvalues or vvalues or cost. Returns 'per-phase' values
     (one third of given P or Q).
+
+    Returns cost for 3-phase PQ. Keep in mind the calculation is made with
+    one third of P and Q.
 
     Parameters
     ----------
     values: pandas.DataFrame
 
-    quantity: 'I'|'P'|'Q'|'V'
+    quantity: 'I'|'P'|'Q'|'V'|'cost'
+        selects returned values
 
     Returns
     -------
     function
         (str) -> (float)
         (index) -> (value)"""
-    vals = (
-        values[quantity]
-        if quantity in 'IV' else values[quantity] * values.direction / 3.)
-    return lambda idx: vals[idx]
+    vals = values[quantity]
+    if quantity in 'PQ':
+        vals *= values.direction / 3. # convert to single phase
+        return lambda key: vals[key].sum()
+    elif quantity in 'V':
+        return lambda key: vals[key].mean()
+    elif quantity == 'cost':
+        vals *= values.direction # cost for 3 phase value !
+        return partial(_select_and_check_for_single_cost, vals)
+    elif quantity == 'I':
+        return partial(_select_and_check_for_single_current, vals)
 
 def _get_batch_expressions_br(model, v_syms_gb_ex, quantity):
     """Creates a vector (casadi.SX, shape n,2/n,1) expressing calculated branch
@@ -1260,7 +1287,7 @@ def _get_branch_loss_expression(model, v_syms_gb_ex):
         return casadi.sum1(p_term_a + p_term_b)
     return casadi.SX(0)
 
-def get_batch_flow_expressions(model, v_syms_gb_ex, ipqv, quantity):
+def get_batch_flow_expressions(model, v_syms_gb_ex, ipqv, quantity, cost):
     """Expresses differences between measured and calculated values.
 
     Creates a vector (casadi.SX, shape n,1) expressing the difference
@@ -1289,19 +1316,23 @@ def get_batch_flow_expressions(model, v_syms_gb_ex, ipqv, quantity):
         [:,7] interpolate?
     quantity: 'I'|'P'|'Q'
         addresses current magnitude, active power or reactive power
+    cost: bool
+        returns cost instead of values of active/reactive power (only for P/Q)
 
     Returns
     -------
-    casadi.SX
-        vector (shape n,1)"""
+    tuple:
+        * iterable, str, Ids of batches
+        * iterable, float, values
+        * casadi.SX, (shape n,1), expressions"""
     assert quantity in 'IPQ', \
         f'quantity needs to be one of "I", "P" or "Q" but is "{quantity}"'
     values = get_values(model, quantity).set_index('id_of_batch')
-    get_value = _make_get_value(values, quantity)
     batchid_expr = get_batch_expressions(model, v_syms_gb_ex, ipqv, quantity)
+    exprs = casadi.vcat(batchid_expr.values())
+    get_value = _make_get_value(values, 'cost' if cost else quantity)
     batchids = batchid_expr.keys()
     vals = list(map(get_value, batchids))
-    exprs = casadi.vcat(batchid_expr.values())
     return batchids, vals, exprs if exprs.size1() else _SX_0r1c
 
 def get_diff_expressions(model, expressions, ipqv, objectives):
@@ -1350,7 +1381,7 @@ def get_diff_expressions(model, expressions, ipqv, objectives):
     for objective in objectives:
         if objective in 'IPQ':
             ids, vals, exprs = get_batch_flow_expressions(
-                model, expressions, ipqv, objective)
+                model, expressions, ipqv, objective, cost=False)
             _objectives.extend([objective]*len(ids))
             _ids.extend(ids)
             _vals.extend(vals)
@@ -1892,8 +1923,8 @@ def get_step_data(
         string of characters 'I'|'P'|'Q'|'V'|'L'|'C' or empty string ''
         addresses differences of calculated and given values to be minimized,
         the characters are symbols for given current magnitude, active power,
-        reactive power or magnitude of voltage, losses of branches and
-        costs for change of factors, other characters are ignored
+        reactive power or magnitude of voltage, losses of branches and for
+        cost, other characters are ignored
     constraints: str
         optional, default ''
         string of characters 'I'|'P'|'Q'|'V' or empty string ''
@@ -2147,12 +2178,13 @@ def optimize_steps(model, gen_factorsymbols, step_params=(), vminsqr=_VMINSQR):
               'floss': float, factor for losses}
             if empty the function calculates power flow,
             each dict triggers an estimation step
-        * objectives, ''|'P'|'Q'|'I'|'V' (string or tuple of characters)
+        * objectives, ''|'P'|'Q'|'I'|'V'|'L'|'C' (also string of characters)
           'P' - objective function is created with terms for active power
           'Q' - objective function is created with terms for reactive power
           'I' - objective function is created with terms for electric current
           'V' - objective function is created with terms for voltage
           'L' - objective function is created with terms for losses in branches
+          'C' - objective function is created with terms for cost
         * constraints, ''|'P'|'Q'|'I'|'V' (string or tuple of characters)
           'P' - adds constraints keeping the initial values
                 of active powers at the location of given values
@@ -2163,7 +2195,11 @@ def optimize_steps(model, gen_factorsymbols, step_params=(), vminsqr=_VMINSQR):
           'V' - adds constraints keeping the initial values
                 of voltages at the location of given values
     vminsqr: float (default _VMINSQR)
-        minimum
+        minimum voltage at injection, if the voltage is below this limit
+        affected injections are interpolated and do not follow the given
+        curve anymore, the interploation is towards a linear function reaching
+        P,Q == 0,0 when |V| == 0, the given value of the argument must be
+        the squared value of the limit
 
     Yields
     ------
@@ -2245,13 +2281,14 @@ def estimate(model, step_params=(), vminsqr=_VMINSQR):
         dict {'objectives': objectives, 'constraints': constraints}
             if empty the function calculates power flow,
             each dict triggers an estimation step
-        * objectives, ''|'P'|'Q'|'I'|'V'|'L' (string or tuple of characters)
+        * objectives, ''|'P'|'Q'|'I'|'V'|'L'|'C' (also string of characters)
           'P' - objective function is created with terms for active power
           'Q' - objective function is created with terms for reactive power
           'I' - objective function is created with terms for electric current
           'V' - objective function is created with terms for voltage
           'L' - objective function is created with terms for losses of branches
-        * constraints, ''|'P'|'Q'|'I'|'V' (string or tuple of characters)
+          'C' - objective function is created with terms for cost
+        * constraints, ''|'P'|'Q'|'I'|'V' (also string of characters)
           'P' - adds constraints keeping the initial values
                 of active powers at the location of given
                 active power values during this step

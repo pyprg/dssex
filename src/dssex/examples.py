@@ -88,17 +88,14 @@ init, res, res2 = estim.estimate(
         # second step: optimize measured V,
         #   keep PQ at locations of measurement constant
         dict(objectives='V', constraints='PQ')])
-calc_init = rt.make_printable(
-    rt.calculate_electric_data(model, init[2], kpq=init[3], positions=init[4]))
-calc_estim = rt.make_printable(
-    rt.calculate_electric_data(model, res[2], kpq=res[3], positions=res[4]))
-calc_estim2 = rt.make_printable(
-    rt.calculate_electric_data(model, res2[2], kpq=res2[3], positions=res2[4]))
+calc_init = rt.make_printable(rt.calculate_electric_data2(model, init))
+calc_estim = rt.make_printable(rt.calculate_electric_data2(model, res))
+calc_estim2 = rt.make_printable(rt.calculate_electric_data2(model, res2))
 #%% VVC
 schema_vvc = """
                                              Q10=-5
                                              Exp_v_q=2
-                              node          cap
+                             node           cap
                                +-------------||
                                |
   +-----------[ -- ]-----------+------------->

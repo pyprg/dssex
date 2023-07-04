@@ -53,7 +53,7 @@ get_injected_power_fn = partial(pfc.get_calc_injected_power_fn, _VMINSQR)
 #                                      \|/ consumer_2  \|/ consumer_3
 #                                       '               '
 
-grid1 = (
+_grid1 = (
     grid.Slacknode('n_0', V=1.+0.j),
     grid.Branch('line_0', 'n_0', 'n_1', y_lo=1e3-1e3j),
     grid.Branch('line_1', 'n_1', 'n_2', y_lo=1e3-1e3j),
@@ -77,28 +77,32 @@ class Batch(unittest.TestCase):
             grid.PValue('batch_0'),
             grid.QValue('batch_0'),
             grid.Output('batch_0', id_of_device='line_0', id_of_node='n_0'),
+            
             # given value of I, P, Q at consumer_1
             grid.IValue('batch_1'),
             grid.PValue('batch_1'),
             grid.QValue('batch_1'),
             grid.Output('batch_1', id_of_device='consumer_1'),
+            
             # given value of I, P, Q at n_1/line_1 and n_1/line_2
             grid.IValue('batch_2'),
             grid.PValue('batch_2'),
             grid.QValue('batch_2'),
             grid.Output('batch_2', id_of_device='line_1', id_of_node='n_1'),
             grid.Output('batch_2', id_of_device='line_2', id_of_node='n_1'),
+            
             # given value of I, P, Q at consumer_2 and consumer_3
             grid.IValue('batch_3'),
             grid.PValue('batch_3'),
             grid.QValue('batch_3'),
             grid.Output('batch_3', id_of_device='consumer_2'),
             grid.Output('batch_3', id_of_device='consumer_3'),
+            
             # given voltage at node n_3
             grid.Vvalue('n_2'),
             grid.Vvalue('n_3')]
         kpq = np.ones((3,2), dtype=float)
-        model = make_model(grid1, ipq_batches)
+        model = make_model(_grid1, ipq_batches)
         #factordefs = ft.make_factordefs(model)
         # calculate power flow
         success, vnode_ri = estim.calculate_power_flow(
