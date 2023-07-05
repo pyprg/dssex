@@ -1106,9 +1106,9 @@ def _select_and_check_for_single_cost(vals, key):
     return selected
 
 def _make_get_value(values, quantity):
-    """Helper, creates a function retrieving a value from model.
+    """Helper, creates a function for retrieving a value from model.
 
-    ivalues, pvalues, qvalues or vvalues or cost. Returns 'per-phase' values
+    ivalues, pvalues, qvalues or vvalues. Returns 'per-phase' values
     (one third of given P or Q).
 
     Returns cost for 3-phase PQ. Keep in mind the calculation is made with
@@ -1126,15 +1126,21 @@ def _make_get_value(values, quantity):
     function
         (str) -> (float)
         (index) -> (value)"""
-    vals = values[quantity]
+    try:
+        vals = values[quantity]
+    except KeyError:
+        return lambda _: 0
     if quantity in 'PQ':
         vals *= values.direction / 3. # convert to single phase
         return lambda key: vals[key].sum()
     elif quantity in 'V':
         return lambda key: vals[key].mean()
     elif quantity == 'cost':
-        vals *= values.direction # cost for 3 phase value !
-        return partial(_select_and_check_for_single_cost, vals)
+        try:
+            vals *= values.direction # cost for 3 phase value !
+            return partial(_select_and_check_for_single_cost, vals)
+        except:
+            return lambda _: 0
     elif quantity == 'I':
         return partial(_select_and_check_for_single_current, vals)
 
@@ -1295,6 +1301,8 @@ def get_batch_flow_expressions(model, v_syms_gb_ex, ipqv, quantity, cost):
     or reactive power. The expressions are based on the batch definitions.
     Intended use is building the objective.
 
+    Returns the cost and expression for P or Q if cost==True.
+
     Parameters
     ----------
     model: egrid.model.Model
@@ -1322,8 +1330,8 @@ def get_batch_flow_expressions(model, v_syms_gb_ex, ipqv, quantity, cost):
     Returns
     -------
     tuple:
-        * iterable, str, Ids of batches
-        * iterable, float, values
+        * array_like, str, Ids of batches
+        * array_like, float, values
         * casadi.SX, (shape n,1), expressions"""
     assert quantity in 'IPQ', \
         f'quantity needs to be one of "I", "P" or "Q" but is "{quantity}"'
@@ -1334,6 +1342,55 @@ def get_batch_flow_expressions(model, v_syms_gb_ex, ipqv, quantity, cost):
     batchids = batchid_expr.keys()
     vals = list(map(get_value, batchids))
     return batchids, vals, exprs if exprs.size1() else _SX_0r1c
+
+def get_flow_cost_expression(model, v_syms_gb_ex, ipqv):
+    """Creates an expression for cost of active and reactive power flow.
+
+    Parameters
+    ----------
+    model: egrid.model.Model
+        model of electric network for calculation
+    v_syms_gb_ex: dict
+        * 'Vnode_syms', casadi.SX, vectors, symbols of node voltages
+        * 'gb_mn_tot', casadi.SX, vectors, conductance and susceptance of
+          branches connected to terminals
+    ipqv: casadi.SX (n,8)
+        [:,0] Ire, injected current, real part
+        [:,1] Iim, injected current, imaginary part
+        [:,2] Pscaled, injected active power P10 multiplied by
+              scaling factor kp
+        [:,3] Qscaled, injected reactive power Q10 multiplied by
+              scaling factor kq
+        [:,4] Pip, injected active power interpolated
+        [:,5] Qip, injected reactive power interpolated
+        [:,6] Vabs_sqr, square of voltage magnitude
+        [:,7] interpolate?
+
+    Returns
+    -------
+    casadi.SX"""
+    batchids_p, vals_p, exprs_p = get_batch_flow_expressions(
+        model, v_syms_gb_ex, ipqv, 'P', True)
+    batchids_q, vals_q, exprs_q = get_batch_flow_expressions(
+        model, v_syms_gb_ex, ipqv, 'Q', True)
+    return (
+        casadi.sum1(casadi.DM(vals_p) * exprs_p)
+        + casadi.sum1(casadi.DM(vals_q) * exprs_q))
+
+def get_change_cost_expression(factordata):
+    """Creates an expression for cost of factor change.
+
+    Parameters
+    ----------
+    factordata: factors.Factordata
+
+    Returns
+    -------
+    casadi.SX"""
+    change = factordata.values_of_vars - factordata.vars
+    # sigmoid for calculation of absolute value, smooth, differentiable
+    change_abs = casadi.erf(100*change) * change
+    return casadi.sum1(change_abs * factordata.cost_of_change)
 
 def get_diff_expressions(model, expressions, ipqv, objectives):
     """Expresses differences between measured and calculated values.
@@ -1440,11 +1497,9 @@ def get_objective_expression(
     diff_data = get_diff_expressions(model, expressions, Iinj_data, objectives)
     objective = casadi.sumsqr(diff_data[2] - diff_data[3])
     if 'C' in objectives:
-        change = factordata.values_of_vars - factordata.vars
-        # sigmoid for calculation of absolute value, smooth, differentiable
-        change_abs = casadi.erf(100*change) * change
-        cost = change_abs * factordata.cost_of_change
-        objective += casadi.sum1(cost)
+        objective += (
+            get_change_cost_expression(factordata)
+            + get_flow_cost_expression(model, expressions, Iinj_data))
     if 'L' in objectives:
         objective += (floss * _get_branch_loss_expression(model, expressions))
     return objective

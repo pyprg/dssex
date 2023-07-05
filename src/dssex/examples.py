@@ -99,9 +99,9 @@ schema_vvc = """
                                +-------------||
                                |
   +-----------[ -- ]-----------+------------->
-slack           Br           node          consumer
-  V=1.+.0j       y_lo=0.9k-0.95kj           P10=60
-                 y_tr=1.3µ+1.5µj            Q10=15
+slack           Br           node           consumer
+  V=1.+.0j       y_lo=0.9k-0.95kj            P10=60
+      P.cost=.1  y_tr=1.3µ+1.5µj             Q10=15
 
 #.Defk(id=taps value=1 min=0 max=5 is_discrete=True cost=.6)
 #.Klink(id_of_injection=cap id_of_factor=taps part=q)
