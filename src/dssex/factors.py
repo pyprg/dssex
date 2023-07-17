@@ -68,11 +68,12 @@ def _create_symbols_with_ids(ids):
         casadi.vertcat(*(casadi.SX.sym(id_) for id_ in ids)))
 
 Factorsymbols = namedtuple(
-    'Factorsymbols', 'kpq vars consts')
+    'Factorsymbols', 'all kpq vars consts')
 Factorsymbols.__doc__ = """Symbols for factors of one step.
 
 Parameters
 ----------
+all: casadi.SX
 kpq: casadi.SX
     shape nx2, scaling factors for active and reactive power
     (for each injection)
@@ -111,6 +112,8 @@ def make_factor_symbols(
     Returns
     -------
     Factorsymbols
+        * .all, casadi.SX
+            all symbols
         * .kpq, casadi.SX
             shape nx2, scaling factors for active and reactive power
             (for each injection)
@@ -122,6 +125,7 @@ def make_factor_symbols(
         gen_factor_symbols,
         _create_symbols_with_ids(id_of_step_symbol))
     return Factorsymbols(
+        all=symbols,
         kpq=casadi.horzcat(
             symbols[index_of_kpq_symbol[:,0]].reshape((-1,1)),
             symbols[index_of_kpq_symbol[:,1]].reshape((-1,1))),
@@ -130,7 +134,7 @@ def make_factor_symbols(
 
 Factordata = namedtuple(
     'Factordata',
-    'kpq vars consts '
+    'all id_to_idx kpq vars consts '
     'values_of_vars cost_of_change var_min var_max is_discrete '
     'values_of_consts '
     'var_const_to_factor var_const_to_kp var_const_to_kq var_const_to_ftaps')
@@ -139,6 +143,10 @@ Symbols of variables and constants for factors.
 
 Parameters
 ----------
+all: casadi.SX
+    all variables and consts (parameters)
+id_to_idx: pandas.Series (index: id_of_factor)
+    index of factor in Factordata.all
 kpq: casadi.SX
     two column vectors, symbols for scaling factors of active and
     reactive power per injection
@@ -196,6 +204,8 @@ def make_factordata(model, gen_factor_symbols, step=0, f_prev=_NPARRAY_0r1c):
         fm.index_of_var_symbol,
         fm.index_of_const_symbol)
     return Factordata(
+        all=symbols.all,
+        id_to_idx=fm.id_to_idx,
         kpq=symbols.kpq,
         vars=symbols.vars,
         consts=symbols.consts,

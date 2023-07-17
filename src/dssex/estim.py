@@ -1487,7 +1487,7 @@ def get_objective_expression(
     floss: float
         multiplier for branch losses
     objectives: str
-        string of characters 'I'|'P'|'Q'|'V'|'L'|'C'
+        string of characters 'I'|'P'|'Q'|'V'|'L'|'C'|'T'
         addresses current magnitude, active power, reactive power or magnitude
         of voltage, losses of branches, other characters are ignored
 
@@ -1961,8 +1961,11 @@ def get_step_data(
             * gb_mn_tot[:,3] b_tot, self susceptance + mutual susceptance
         * 'Y_by_V', casadi.SX, expression for Y @ V
         * 'get_factor_and_injection_data', function
+
           (int, numpy.array<float>) -> (tuple - Factordata, casadi.SX)
+
           which is a function
+
           (index_of_step, factors_of_previous_step)
             -> (tuple - Factordata, injection_data)
         * 'inj_to_node', casadi.SX, matrix, maps from
@@ -1975,11 +1978,17 @@ def get_step_data(
         result output of factors (only) calculated in previous step, if any
     objectives: str
         optional, default ''
-        string of characters 'I'|'P'|'Q'|'V'|'L'|'C' or empty string ''
+        string of characters 'I'|'P'|'Q'|'V'|'L'|'C'|'T' or empty string ''
         addresses differences of calculated and given values to be minimized,
-        the characters are symbols for given current magnitude, active power,
-        reactive power or magnitude of voltage, losses of branches and for
-        cost, other characters are ignored
+        the characters are symbols for:
+            * 'I' given current magnitude
+            * 'P' active power
+            * 'Q' reactive power
+            * 'V' magnitude of voltage
+            * 'L' losses of branches
+            * 'C' for cost
+            * 'T' for terms from model.terms
+        other characters are ignored
     constraints: str
         optional, default ''
         string of characters 'I'|'P'|'Q'|'V' or empty string ''
@@ -2112,7 +2121,7 @@ def get_step_data_fns(model, gen_factor_symbols):
             factors calculated by previous calculation step
         objectives: str (optional)
             optional, default ''
-            string of characters 'I'|'P'|'Q'|'V'|'L'|'C' or empty string ''
+            string of characters 'I'|'P'|'Q'|'V'|'L'|'C'|'T' or empty string ''
         constraints: str (optional)
             optional, default ''
             string of characters 'I'|'P'|'Q'|'V' or empty string ''
@@ -2240,6 +2249,7 @@ def optimize_steps(model, gen_factorsymbols, step_params=(), vminsqr=_VMINSQR):
           'V' - objective function is created with terms for voltage
           'L' - objective function is created with terms for losses in branches
           'C' - objective function is created with terms for cost
+          'T' - objective function is created with terms of model.terms
         * constraints, ''|'P'|'Q'|'I'|'V' (string or tuple of characters)
           'P' - adds constraints keeping the initial values
                 of active powers at the location of given values
@@ -2336,13 +2346,14 @@ def estimate(model, step_params=(), vminsqr=_VMINSQR):
         dict {'objectives': objectives, 'constraints': constraints}
             if empty the function calculates power flow,
             each dict triggers an estimation step
-        * objectives, ''|'P'|'Q'|'I'|'V'|'L'|'C' (also string of characters)
+        * objectives, ''|'P'|'Q'|'I'|'V'|'L'|'C'|'T' (also string of characters)
           'P' - objective function is created with terms for active power
           'Q' - objective function is created with terms for reactive power
           'I' - objective function is created with terms for electric current
           'V' - objective function is created with terms for voltage
           'L' - objective function is created with terms for losses of branches
           'C' - objective function is created with terms for cost
+          'T' - objective function is created with terms of model.terms
         * constraints, ''|'P'|'Q'|'I'|'V' (also string of characters)
           'P' - adds constraints keeping the initial values
                 of active powers at the location of given

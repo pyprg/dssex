@@ -57,6 +57,8 @@ V=1.00      y_tr=1e-6+1e-6j        y_tr=1µ+1µj            y_tr=1.3µ+1.5µj   
 #. Defk(id=kq_Gen7 max=7)
 #. Klink(id_of_injection=Gen_7 part=q id_of_factor=kq_Gen7)
 # Deft(id=taps value=0)
+#. Defoterm(args=(kp kq))
+#. Defoterm(args=(kp kq))
 """
 
 import numpy as np
