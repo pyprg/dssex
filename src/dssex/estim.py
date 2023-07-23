@@ -1102,7 +1102,7 @@ def _select_and_check_for_single_cost(vals, key):
     selected = vals[key]
     assert selected.size < 2, (
         'more than one cost value is given for one batch, however, '
-        'only a single cost values is possible')
+        'only a single cost value is possible')
     return selected
 
 def _make_get_value(values, quantity):

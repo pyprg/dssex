@@ -92,32 +92,5 @@ init, res, res2 = estim.estimate(
 calc_init = rt.make_printable(rt.calculate_electric_data2(model, init))
 calc_estim = rt.make_printable(rt.calculate_electric_data2(model, res))
 calc_estim2 = rt.make_printable(rt.calculate_electric_data2(model, res2))
-#%% VVC
-schema_vvc = """
-                                             Q10=-5
-                                             Exp_v_q=2
-                             node           cap
-                               +-------------||
-                               |
-  +-----------[ -- ]-----------+------------->
-slack           Br           node           consumer
-  V=1.+.0j       y_lo=0.9k-0.95kj            P10=60
-      P.cost=.1  y_tr=1.3µ+1.5µj             Q10=15
 
-#.Defk(id=taps value=1 min=0 max=5 is_discrete=True cost=.6)
-#.Klink(id_of_injection=cap id_of_factor=taps part=q)
-"""
-model_vvc = make_model(schema_vvc)
 
-# optimize according to losses
-res = estim.estimate(
-    model_vvc,
-    step_params=[dict(objectives='LC', floss=100)])
-res_vvc = list(rt.make_printables(model_vvc, res))
-
-tappos_ini = res_vvc[0]['injections'].loc['cap','kq']
-tappos_optimized = res_vvc[1]['injections'].loc['cap','kq']
-
-losses_ini = res_vvc[0]['branches'].loc['Br','Ploss_pu']
-losses_optimized = res_vvc[1]['branches'].loc['Br','Ploss_pu']
-diff_losses = losses_ini - losses_optimized

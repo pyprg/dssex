@@ -24,10 +24,291 @@ import numpy as np
 import context # adds parent folder of dssex to search path
 import egrid.builder as grid
 import dssex.result as rt
+import dssex.factors as ft
 import dssex.estim as estim
 import dssex.pfcnum as pfc
 from numpy.testing import assert_array_almost_equal
 from egrid import make_model
+
+class Optimize_step(unittest.TestCase):
+    # node: 0               1               2
+
+    #       |     line_0    |     line_1    |
+    #       +-----=====-----+-----=====-----+
+    #       |               |               |
+    #                                      \|/ consumer
+    #                                       '
+    grid0 = (
+        grid.Slacknode('n_0', V=1.+0.j),
+        grid.Branch('line_0', 'n_0', 'n_1', y_lo=1e3-1e3j),
+        grid.Branch('line_1', 'n_1', 'n_2', y_lo=1e3-1e3j),
+        grid.Injection('consumer', 'n_2', P10=30.0, Q10=10.0))
+
+
+    def test_scale_p_meet_p(self):
+        """Scale active power of consumer in order to meet the
+        given active power P at a terminal of a branch (measurement or
+        setpoint). Given P is assigned to n_0/line_0."""
+        model = make_model(
+            self.grid0,
+            # give value of active power P at n_0/line_0
+            grid.PValue('PQ_line_0', P=40.0),
+            grid.Output('PQ_line_0', id_of_device='line_0', id_of_node='n_0'),
+            # scaling factor kp for active power P of consumer
+            grid.Defk('kp', step=0),
+            grid.Klink(
+                id_of_injection='consumer',
+                part='p',
+                id_of_factor='kp',
+                step=0))
+        gen_factor_symbols = ft._create_symbols_with_ids(
+            model.factors.gen_factordata.index)
+        expressions = estim.get_expressions(model, gen_factor_symbols)
+        step_data = estim.get_step_data(
+            model, expressions, objectives='P')
+        succ, x_V, x_scaling = estim.optimize_step(**step_data)
+        self.assertTrue(succ, 'estimation succeeds')
+        V, k, pos = estim.get_Vcx_factors(step_data['factordata'], x_V, x_scaling)
+        self.assertAlmostEqual(
+            # exclude slacks
+            pfc.max_residual_current(model, V, positions=pos, kpq=k),
+            0,
+            delta=1e-12,
+            msg='Inode is almost 0')
+        given_values = model.pvalues.set_index('id_of_batch')
+        res = rt.calculate_electric_data(model, V, kpq=k)
+        self.assertAlmostEqual(
+            res['branches'].loc['line_0'].P0_pu,
+            given_values.loc['PQ_line_0'].P,
+            places=7,
+            msg='estimated active power equals given active power')
+
+    def test_scale_p_meet_p2(self):
+        """Scale active power of consumer in order to meet the
+        given active power P at a terminal of an injection (measurement or
+        setpoint). Given P is assigned to consumer."""
+        model = make_model(
+            self.grid0,
+            # give value of active power P at n_0/line_0
+            grid.PValue('PQ_consumer', P=40.0),
+            grid.Output('PQ_consumer', id_of_device='consumer'),
+            # scaling factor kp for active power P of consumer
+            grid.Defk('kp', step=0),
+            grid.Klink(
+                id_of_injection='consumer',
+                part='p',
+                id_of_factor='kp',
+                step=0))
+        gen_factor_symbols = ft._create_symbols_with_ids(
+            model.factors.gen_factordata.index)
+        expressions = estim.get_expressions(model, gen_factor_symbols)
+        step_data = estim.get_step_data(
+            model, expressions, objectives='P')
+        succ, x_V, x_scaling = estim.optimize_step(**step_data)
+        self.assertTrue(succ, 'estimation succeeds')
+        V, k, pos = estim.get_Vcx_factors(step_data['factordata'], x_V, x_scaling)
+        self.assertAlmostEqual(
+            # exclude slacks
+            pfc.max_residual_current(model, V, positions=pos, kpq=k),
+            0,
+            delta=1e-8,
+            msg='Inode is almost 0')
+        inj_res = rt.calculate_injection_results(model, V, kpq=k)
+        given_values = model.pvalues.set_index('id_of_batch')
+        self.assertAlmostEqual(
+            inj_res.loc['consumer'].P_pu,
+            given_values.loc['PQ_consumer'].P,
+            delta=1e-8,
+            msg='estimated active power equals given active power')
+
+    def test_scale_q_meet_q(self):
+        """Scale reactive power of consumer in order to meet the
+        given reactive power Q at a terminal of a branch (measurement or
+        setpoint). Given Q is assigned to n_0/line_0."""
+        model = make_model(
+            self.grid0,
+            # give value of active power P at n_0/line_0
+            grid.QValue('PQ_line_0', Q=40.0),
+            grid.Output('PQ_line_0', id_of_device='line_0', id_of_node='n_0'),
+            # scaling factor kq for reactive power Q of consumer
+            grid.Defk('kq', step=0),
+            grid.Klink(
+                id_of_injection='consumer',
+                part='q',
+                id_of_factor='kq',
+                step=0))
+        gen_factor_symbols = ft._create_symbols_with_ids(
+            model.factors.gen_factordata.index)
+        expressions = estim.get_expressions(model, gen_factor_symbols)
+        step_data = estim.get_step_data(
+            model, expressions, objectives='Q')
+        succ, x_V, x_scaling = estim.optimize_step(**step_data)
+        self.assertTrue(succ, 'estimation succeeds')
+        V, k, pos = estim.get_Vcx_factors(step_data['factordata'], x_V, x_scaling)
+        self.assertAlmostEqual(
+            # exclude slacks
+            pfc.max_residual_current(model, V, positions=pos, kpq=k),
+            0,
+            delta=1e-10,
+            msg='Inode is almost 0')
+        branch_res = rt.calculate_branch_results(model, V, positions=pos)
+        given_values = model.qvalues.set_index('id_of_batch')
+        self.assertAlmostEqual(
+            branch_res.loc['line_0'].Q0_pu,
+            given_values.loc['PQ_line_0'].Q,
+            places=6,
+            msg='estimated reactive power equals given reactive power')
+
+    def test_scale_q_meet_q2(self):
+        """Scale reactive power of consumer in order to meet the
+        given reactive power Q at a terminal of an injection (measurement or
+        setpoint). Given Q is assigned to consumer."""
+        model = make_model(
+            self.grid0,
+            # give value of active power P at n_0/line_0
+            grid.QValue('PQ_consumer', Q=40.0),
+            grid.Output('PQ_consumer', id_of_device='consumer'),
+            # scaling factor kq for reactive power Q of consumer
+            grid.Defk('kq', step=0),
+            grid.Klink(
+                id_of_injection='consumer',
+                part='q',
+                id_of_factor='kq',
+                step=0))
+        gen_factor_symbols = ft._create_symbols_with_ids(
+            model.factors.gen_factordata.index)
+        expressions = estim.get_expressions(model, gen_factor_symbols)
+        step_data = estim.get_step_data(
+            model, expressions, objectives='Q')
+        succ, x_V, x_scaling = estim.optimize_step(**step_data)
+        self.assertTrue(succ, 'estimation succeeds')
+        V, k, pos = estim.get_Vcx_factors(step_data['factordata'], x_V, x_scaling)
+        self.assertAlmostEqual(
+            # exclude slacks
+            pfc.max_residual_current(model, V, positions=pos, kpq=k),
+            0,
+            delta=1e-8,
+            msg='Inode is almost 0')
+        inj_res = rt.calculate_injection_results(model, V, kpq=k)
+        given_values = model.qvalues.set_index('id_of_batch')
+        self.assertAlmostEqual(
+            inj_res.loc['consumer'].Q_pu,
+            given_values.loc['PQ_consumer'].Q,
+            delta=1e-8,
+            msg='estimated reactive power equals given reactive power')
+
+    def test_scale_pq_meet_i(self):
+        """Scale active and reactive power of consumer in order to meet the
+        given current I at a terminal of a branch (measurement or setpoint).
+        Given I is assigned to n_0/line_0."""
+        model = make_model(
+            self.grid0,
+            # give value of electric current I at n_0/line_0
+            grid.IValue('I_line_0', I=40.0),
+            grid.Output('I_line_0', id_of_device='line_0', id_of_node='n_0'),
+            # scaling factor kpq for active/reactive power P/Q of consumer
+            grid.Defk('kpq', step=0),
+            grid.Klink(
+                id_of_injection='consumer',
+                part='pq',
+                id_of_factor='kpq',
+                step=0))
+        gen_factor_symbols = ft._create_symbols_with_ids(
+            model.factors.gen_factordata.index)
+        expressions = estim.get_expressions(model, gen_factor_symbols)
+        step_data = estim.get_step_data(
+            model, expressions, objectives='I')
+        succ, x_V, x_scaling = estim.optimize_step(**step_data)
+        self.assertTrue(succ, 'estimation succeeds')
+        V, k, pos = estim.get_Vcx_factors(step_data['factordata'], x_V, x_scaling)
+        self.assertAlmostEqual(
+            # exclude slacks
+            pfc.max_residual_current(model, V, positions=pos, kpq=k),
+            0,
+            delta=1e-12,
+            msg='Inode is almost 0')
+        branch_res = rt.calculate_branch_results(model, V, positions=pos)
+        given_values = model.ivalues.set_index('id_of_batch')
+        self.assertAlmostEqual(
+            branch_res.loc['line_0'].I0_pu,
+            given_values.loc['I_line_0'].I,
+            places=7,
+            msg='estimated electric current equals given electric current')
+
+    def test_scale_pq_meet_i2(self):
+        """Scale active and reactive power of consumer in order to meet the
+        given current I at a terminal of an injection (measurement or setpoint).
+        Given I is assigned to consumer."""
+        model = make_model(
+            self.grid0,
+            # give value of active power P at n_0/line_0
+            grid.IValue('I_consumer', I=40.0),
+            grid.Output('I_consumer', id_of_device='consumer'),
+            # scaling factor kpq for active/reactive power P/Q of consumer
+            grid.Defk('kpq', step=0),
+            grid.Klink(
+                id_of_injection='consumer',
+                part='pq',
+                id_of_factor=('kpq', 'kpq'),
+                step=0))
+        gen_factor_symbols = ft._create_symbols_with_ids(
+            model.factors.gen_factordata.index)
+        expressions = estim.get_expressions(model, gen_factor_symbols)
+        step_data = estim.get_step_data(
+            model, expressions, objectives='I')
+        succ, x_V, x_scaling = estim.optimize_step(**step_data)
+        self.assertTrue(succ, 'estimation succeeds')
+        V, k, pos = estim.get_Vcx_factors(step_data['factordata'], x_V, x_scaling)
+        inj_res = rt.calculate_injection_results(model, V, kpq=k)
+        self.assertAlmostEqual(
+            # exclude slacks
+            pfc.max_residual_current(model, V, positions=pos, kpq=k),
+            0,
+            delta=1e-8,
+            msg='Inode is almost 0')
+        given_values = model.ivalues.set_index('id_of_batch')
+        self.assertAlmostEqual(
+            inj_res.loc['consumer'].I_pu,
+            given_values.loc['I_consumer'].I,
+            delta=1e-8,
+            msg='estimated electric current equals given electric current')
+
+    def test_scale_q_meet_v(self):
+        """Scale reactive power of consumer in order to meet the
+        given voltage V (measurement or setpoint).
+        Given V is assigned to node 2 ('n_2')."""
+        model = make_model(
+            self.grid0,
+            # give magnitude of voltage at n_2
+            grid.Vvalue('n_2', V=1.02),
+            # scaling factor kq for reactive power Q of consumer
+            grid.Defk('kq', step=0),
+            grid.Klink(
+                id_of_injection='consumer',
+                part='q',
+                id_of_factor='kq',
+                step=0))
+        gen_factor_symbols = ft._create_symbols_with_ids(
+            model.factors.gen_factordata.index)
+        expressions = estim.get_expressions(model, gen_factor_symbols)
+        step_data = estim.get_step_data(
+            model, expressions, objectives='V')
+        succ, x_V, x_scaling = estim.optimize_step(**step_data)
+        self.assertTrue(succ, 'estimation succeeds')
+        V, k, pos = estim.get_Vcx_factors(
+            step_data['factordata'], x_V, x_scaling)
+        self.assertAlmostEqual(
+            # exclude slacks
+            pfc.max_residual_current(model, V, positions=pos, kpq=k),
+            0,
+            delta=1e-8,
+            msg='Inode is almost 0')
+        given_V_at_node = model.vvalues.set_index('id_of_node').loc['n_2']
+        self.assertAlmostEqual(
+            np.abs(V[given_V_at_node.index_of_node])[0],
+            given_V_at_node.V,
+            places=10,
+            msg='estimated voltage equals given voltage')
 
 class Estimate_minimal(unittest.TestCase):
 
@@ -919,6 +1200,77 @@ class Estimate_branch_injection(unittest.TestCase):
             0.,
             places=14,
             msg='tap_branch_1 shall be discrete')
+
+class Term(unittest.TestCase):
+    """
+    schema:
+    ::
+        slack ---------> injection
+                P=4       P10=5
+                Q=3       Q10=2
+        #. Defk(id=(kp kq))
+        #. Klink(id_of_injection=injection part=(p q) id_of_factor=(kp kq))
+        #. Defoterm(args=(kp kq))
+        #. Defoterm(args=(kp kq), weight=3.0, step=2)"""
+    model = make_model(
+        grid.Slacknode('slack'),
+        grid.Injection('injection', 'slack', P10=5., Q10=2.),
+        grid.PValue(id_of_batch='b', P=4),
+        grid.QValue(id_of_batch='b', Q=3),
+        grid.Output(id_of_batch='b', id_of_device='injection'),
+        grid.Defk(id=('kp', 'kq')),
+        grid.Klink(
+            id_of_injection='injection',
+            part=('p', 'q'),
+            id_of_factor=('kp', 'kq')),
+        grid.Defoterm(args=('kp', 'kq')),
+        grid.Defoterm(args=('kp', 'kq'), weight=3.0, step=2))
+
+    def test_diff_pq(self):
+        """runs basic tests with diff-term, also test weight"""
+        res_ = estim.estimate(
+            self.model,
+            step_params=[
+                # meet P and Q
+                dict(objectives='PQ'),
+                # meet P and Q + keep diff 'kp - kq' small
+                dict(objectives='PQT'),
+                dict(objectives='PQT')])
+        ini, *res = rt.make_printables(self.model, res_)
+        inj_ini = ini['injections']
+        assert_array_almost_equal(
+            inj_ini[['P_pu', 'Q_pu', 'kp', 'kq']].to_numpy()[0],
+            #P   Q   kp  kq
+            [5., 2., 1., 1.])
+        # optimized to meet P=4 and Q=3
+        inj_0 = res[0]['injections']
+        P_pu_0, Q_pu_0, kp_0, kq_0 = (
+            inj_0[['P_pu', 'Q_pu', 'kp', 'kq']].to_numpy()[0])
+        assert_array_almost_equal(
+            [P_pu_0, Q_pu_0],
+            #P   Q
+            [4., 3.])
+        self.assertLess(kp_0, 1.)
+        self.assertGreater(kq_0, 1.)
+        # meet P and Q + keep diff 'kp - kq' small
+        #   scales neither P nor Q sufficiently kp is to great, kq to small
+        inj_1 = res[1]['injections']
+        P_pu_1, Q_pu_1, kp_1, kq_1 = (
+            inj_1[['P_pu', 'Q_pu', 'kp', 'kq']].to_numpy()[0])
+        self.assertLess(kp_1, 1.)
+        self.assertLess(kp_0, kp_1)
+        self.assertGreater(kq_1, 1.)
+        self.assertGreater(kq_0, kq_1)
+        # meet P and Q + keep diff 'kp - kq' small
+        #   scales neither P nor Q sufficiently kp is to great, kq to small
+        #   deviation is greater than previous optimization step
+        inj_2 = res[2]['injections']
+        P_pu_2, Q_pu_2, kp_2, kq_2 = (
+            inj_2[['P_pu', 'Q_pu', 'kp', 'kq']].to_numpy()[0])
+        self.assertLess(kp_2, 1.)
+        self.assertLess(kp_1, kp_2)
+        self.assertGreater(kq_2, 1.)
+        self.assertGreater(kq_1, kq_2)
 
 if __name__ == '__main__':
     unittest.main()
