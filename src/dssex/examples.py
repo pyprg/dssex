@@ -53,11 +53,10 @@ V=1.00      y_tr=1e-6+1e-6j        y_tr=1µ+1µj            y_tr=1.3µ+1.5µj   
 
 #. Defk(id=(kp kq))
 #. Klink(id_of_injection=(load_2 load_3) part=(p q) id_of_factor=(kp kq))
-#. Klink(id_of_injection=(load_51 load_6) part=q id_of_factor=kq)
-#. Defk(id=kq_Gen7 max=7)
-#. Klink(id_of_injection=Gen_7 part=q id_of_factor=kq_Gen7)
+# Klink(id_of_injection=(load_51 load_6) part=q id_of_factor=kq)
+# Defk(id=kq_Gen7 max=7)
+# Klink(id_of_injection=Gen_7 part=q id_of_factor=kq_Gen7)
 # Deft(id=taps value=0)
-#. Defoterm(args=(kp kq))
 #. Defoterm(args=(kp kq))
 """
 
@@ -86,7 +85,7 @@ init, res, res2 = estim.estimate(
     model,
     step_params=[
         # first step: optimize measured PQ
-        dict(objectives='PQ'),
+        dict(objectives='PQT'),
         # second step: optimize measured V,
         #   keep PQ at locations of measurement constant
         dict(objectives='V', constraints='PQ')])

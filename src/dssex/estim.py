@@ -25,7 +25,7 @@ import numpy as np
 from functools import partial
 from collections import defaultdict
 from scipy.sparse import coo_matrix
-from egrid.model import get_vlimits_for_step
+from egrid.model import get_vlimits_for_step, get_terms_for_step
 from dssex.injections import calculate_cubic_coefficients
 from dssex.batch import (
     get_values, get_batches, value_of_voltages, get_batch_values)
@@ -1262,7 +1262,8 @@ def get_batch_expressions(model, v_syms_gb_ex, ipqv, quantity):
 def _get_branch_loss_expression(model, v_syms_gb_ex):
     """Creates an expression for active power losses of all branches.
 
-    Losses are calculated for 3-phase-branches.
+    Losses are calculated for 3-phase-branches which means that the one
+    phase values are multiplied by 3.
 
     Parameters
     ----------
@@ -1292,6 +1293,85 @@ def _get_branch_loss_expression(model, v_syms_gb_ex):
         p_term_b = p_term[model.terminal_to_branch[1]]
         return casadi.sum1(p_term_a + p_term_b)
     return casadi.SX(0)
+
+def _get_diff_expression(symbols):
+    """Generates squared difference expression.
+
+    Parameters
+    ----------
+    symbols: casadi.SX (shape n,1)
+        symbols
+
+    Returns
+    -------
+    casadi.SX (shape 1,1)"""
+    size = symbols.size1()
+    return (
+        casadi.sumsqr(
+            # value - average
+            symbols - (casadi.sum1(symbols) / size))
+        if 1 < size else casadi.sumsqr(symbols))
+
+_expression_functions = {
+    'diff': _get_diff_expression}
+
+def _get_expression_function(name):
+    """Returns the expression building function for the given name.
+
+    Parameters
+    ----------
+    name: str
+        identifier of function
+
+    Returns
+    -------
+    function
+        (casadi.SX (shape n,1)) -> (casadi.SX (shape 1,1))"""
+    return _expression_functions.get(name, lambda _:_SX_0r1c)
+
+def _get_symbols(symbols, id_to_idx, ids):
+    """Fetches symbols for given IDs
+
+    Parameters
+    ----------
+    symbols: casadi.SX
+        symbols of decision variables and parameters (constants)
+    id_to_idx: pandas.Series (index: id_of_symbol)
+        int, index of symbol in argument symbols
+    ids: iterable
+        string, identifiers of symbols
+
+    Returns
+    -------
+    casadi.SX
+        (shape n,1)"""
+    try:
+        return symbols[id_to_idx.loc[list(ids)]]
+    except:
+        return _SX_0r1c
+
+def _get_oterm_expressions(symbols, id_to_idx, oterms):
+    """Creates a term for the objective function.
+
+    Parameters
+    ----------
+    symbols: casadi.SX
+        symbols of decision variables and parameters (constants)
+    id_to_idx: pandas.Series (index: id_of_symbol)
+        int, index of symbol in argument symbols
+    oterms: pandas.DataFrame
+        * ['args'], iterable string, identifiers of arguments
+        * ['fn'], str, identifier of function
+
+    Returns
+    -------
+    casadi.SX
+        term of objective function"""
+    get_symbols = partial(_get_symbols, symbols, id_to_idx)
+    return casadi.sum1(
+        casadi.vcat(
+            [_get_expression_function(row.fn.lower())(get_symbols(row.args))
+             for _, row in oterms.iterrows()]))
 
 def get_batch_flow_expressions(model, v_syms_gb_ex, ipqv, quantity, cost):
     """Expresses differences between measured and calculated values.
@@ -1380,6 +1460,10 @@ def get_flow_cost_expression(model, v_syms_gb_ex, ipqv):
 def get_change_cost_expression(factordata):
     """Creates an expression for cost of factor change.
 
+    Cost are equivalent to
+    ::
+        some_factor * abs(value_before_change - value_after_change)
+
     Parameters
     ----------
     factordata: factors.Factordata
@@ -1398,7 +1482,8 @@ def get_diff_expressions(model, expressions, ipqv, objectives):
     Creates a vector (casadi.SX, shape n,1) expressing the difference
     between measured and calculated values for absolute current, active power
     or reactive power and voltage. The expressions are based on the batch
-    definitions or referenced node. Intended use is building the objective.
+    definitions (P/Q/I) or referenced (V) node. Intended use is building
+    the objective function.
 
     Parameters
     ----------
@@ -1454,7 +1539,7 @@ def get_diff_expressions(model, expressions, ipqv, objectives):
     return np.array(_objectives), np.array(_ids), casadi.DM(_vals), _exprs
 
 def get_objective_expression(
-        model, expressions, factordata, Iinj_data, floss, objectives):
+        model, expressions, factordata, Iinj_data, floss, oterms, objectives):
     """Creates expression for objective function.
 
     Creates a vector (casadi.SX, shape n,1) expressing the difference
@@ -1486,6 +1571,11 @@ def get_objective_expression(
         * [:,7] interpolate?
     floss: float
         multiplier for branch losses
+    oterms: pandas.DataFrames
+        * ['id']
+        * ['args']
+        * ['fn']
+        * ['step']
     objectives: str
         string of characters 'I'|'P'|'Q'|'V'|'L'|'C'|'T'
         addresses current magnitude, active power, reactive power or magnitude
@@ -1497,11 +1587,17 @@ def get_objective_expression(
     diff_data = get_diff_expressions(model, expressions, Iinj_data, objectives)
     objective = casadi.sumsqr(diff_data[2] - diff_data[3])
     if 'C' in objectives:
+        # 'C' - cost
         objective += (
             get_change_cost_expression(factordata)
             + get_flow_cost_expression(model, expressions, Iinj_data))
     if 'L' in objectives:
+        # 'L' - cost of losses
         objective += (floss * _get_branch_loss_expression(model, expressions))
+    if 'T' in objectives:
+        # 'T' - objective function terms explicitely given by model
+        objective += _get_oterm_expressions(
+            factordata.all, factordata.id_to_idx, oterms)
     return objective
 
 def get_batch_constraints(values_of_constraints, expressions_of_batches):
@@ -2030,8 +2126,9 @@ def get_step_data(
         model.slacks.index_of_node,
         Vslack_syms[:,0], Vslack_syms[:,1],
         expressions['inj_to_node'] @ Iinj_data[:,:2])
+    oterms = get_terms_for_step(model.terms, step)
     objective = get_objective_expression(
-        model, expressions, factordata, Iinj_data, floss, objectives)
+        model, expressions, factordata, Iinj_data, floss, oterms, objectives)
     expr_of_batches = get_diff_expressions(
         model, expressions, Iinj_data, constraints)
     batch_constraints = (
