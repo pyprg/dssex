@@ -142,7 +142,9 @@ numerically.
 
 Features added for studying of Volt-Var-Control (VVC) problems:
 
-    * discrete decision variables
+    * discrete decision variables (shunt capacitors)
     * decision variables for tap positions
     * minimum and maximum limits for absolute voltages at nodes
     * expressions for power losses of branches used in objective function
+    * cost for active and reactive power (e.g. import/generation)
+    * cost for change of factors (e.g. position of taps)

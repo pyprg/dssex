@@ -1236,7 +1236,7 @@ class Term(unittest.TestCase):
                 # meet P and Q + keep diff 'kp - kq' small
                 dict(objectives='PQT'),
                 dict(objectives='PQT')])
-        ini, *res = rt.make_printables(self.model, res_)
+        ini, *res = rt.get_printable_results(self.model, res_)
         inj_ini = ini['injections']
         assert_array_almost_equal(
             inj_ini[['P_pu', 'Q_pu', 'kp', 'kq']].to_numpy()[0],
@@ -1253,7 +1253,8 @@ class Term(unittest.TestCase):
         self.assertLess(kp_0, 1.)
         self.assertGreater(kq_0, 1.)
         # meet P and Q + keep diff 'kp - kq' small
-        #   scales neither P nor Q sufficiently kp is to great, kq to small
+        #   scales neither P nor Q sufficiently in order to meet given P and Q, 
+        #   kp is to great, kq to small
         inj_1 = res[1]['injections']
         P_pu_1, Q_pu_1, kp_1, kq_1 = (
             inj_1[['P_pu', 'Q_pu', 'kp', 'kq']].to_numpy()[0])

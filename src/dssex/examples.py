@@ -58,14 +58,15 @@ V=1.00      y_tr=1e-6+1e-6j        y_tr=1µ+1µj            y_tr=1.3µ+1.5µj   
 # Klink(id_of_injection=Gen_7 part=q id_of_factor=kq_Gen7)
 # Deft(id=taps value=0)
 #. Defoterm(args=(kp kq))
+#. Defvl(min=.85 max=1.15)
 """
 
 import numpy as np
 import dssex.pfcnum as pfc
 import dssex.result as rt
-from egrid import make_model
+from egrid import make_model_checked
 
-model = make_model(schema)
+model = make_model_checked(schema)
 #%% Power Flow Calculation
 # manual input
 kpq = np.full((len(model.injections), 2), 1., dtype=float)
@@ -81,16 +82,26 @@ residual_current = pfc.calculate_residual_current(
 
 #%% State Estimation
 import dssex.estim as estim
-init, res, res2 = estim.estimate(
+res = list(estim.estimate(
     model,
     step_params=[
         # first step: optimize measured PQ
         dict(objectives='PQT'),
         # second step: optimize measured V,
         #   keep PQ at locations of measurement constant
-        dict(objectives='V', constraints='PQ')])
-calc_init = rt.make_printable(rt.calculate_electric_data2(model, init))
-calc_estim = rt.make_printable(rt.calculate_electric_data2(model, res))
-calc_estim2 = rt.make_printable(rt.calculate_electric_data2(model, res2))
-
-
+        dict(objectives='V', constraints='PQ')]))
+calc_ = list(rt.get_printable_results(model, res))
+#%% VVC
+from egrid import make_model
+import egrid.builder as grid
+model2 = make_model_checked([])
+success, vcx = pfc.calculate_power_flow(model2)
+# results power flow calculation
+calc_pf = rt.make_printable(rt.calculate_electric_data(model2, vcx))
+#%% VVC
+from egrid import make_model
+import egrid.builder as grid
+model3 = make_model_checked([grid.Slacknode()])
+success, vcx = pfc.calculate_power_flow(model3)
+# results power flow calculation
+calc_pf = rt.make_printable(rt.calculate_electric_data(model3, vcx))

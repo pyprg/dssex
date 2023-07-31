@@ -1668,7 +1668,6 @@ def get_optimize_vk(model, expressions):
     Vmin = [-np.inf] * count_of_vri
     Vmax = [np.inf] * count_of_vri
     def optimize_vk(
-        # Vnode_ri_ini, factordata, Inode_inj, diff_data, constraints, lbg, ubg):
         Vnode_ri_ini, factordata, Inode_inj, objective, constraints, lbg, ubg):
         """Solves an optimization task.
 
@@ -2038,8 +2037,7 @@ def _get_vlimits(process_vlimts, model, Vnode_sqr, step):
 
 def get_step_data(
     model, expressions, *, step=0, f_prev=_EMPTY_0r1c, objectives='',
-    constraints='', values_of_constraints=None, process_vlimits=True,
-    floss=1.):
+    constraints='', values_of_constraints=None,  floss=1.):
     """Prepares data for call of function optimize_step.
 
     Parameters
@@ -2101,9 +2099,6 @@ def get_step_data(
         * [1] numpy.array<str>, id_of_batch
         * [2] numpy.array<float>, vector (shape n,1), value
         values for constraints (refer to argument 'constraints')
-    process_vlimits: bool
-        optional, default True
-        add given bounds of for voltages, if any in model
     floss: float
         optional, default is 1.0
         multiplier for branch losses
@@ -2135,6 +2130,7 @@ def get_step_data(
         _SX_0r1c
         if values_of_constraints is None or len(expr_of_batches[0])==0 else
         get_batch_constraints(values_of_constraints, expr_of_batches))
+    process_vlimits = 'B' in constraints
     vlimits, lbg_v, ubg_v = _get_vlimits(
         process_vlimits, model, expressions['Vnode_syms'][:,2], step)
     constraints = casadi.vertcat(batch_constraints, vlimits)
@@ -2204,8 +2200,7 @@ def get_step_data_fns(model, gen_factor_symbols):
     expressions = get_expressions(model, gen_factor_symbols)
     make_step_data = partial(get_step_data, model, expressions)
     def next_step_data(
-            *, step, voltages_ri, k, objectives='', constraints='',
-            process_vlimits=True, floss=1.):
+            *, step, voltages_ri, k, objectives='', constraints='', floss=1.):
         """Creates data for function 'optimize_step'.
 
         Parameters
@@ -2222,8 +2217,6 @@ def get_step_data_fns(model, gen_factor_symbols):
         constraints: str (optional)
             optional, default ''
             string of characters 'I'|'P'|'Q'|'V' or empty string ''
-        process_vlimits: bool
-            optional, default True
         floss: float
             optional, default is 1.0
             multiplier for branch losses
@@ -2253,7 +2246,6 @@ def get_step_data_fns(model, gen_factor_symbols):
             objectives=objectives,
             constraints=constraints,
             values_of_constraints=batch_values,
-            process_vlimits=process_vlimits,
             floss=floss)
     return make_step_data, next_step_data
 
@@ -2335,7 +2327,6 @@ def optimize_steps(model, gen_factorsymbols, step_params=(), vminsqr=_VMINSQR):
     step_params: array_like
         dict {'objectives': str, objectives,
               'constraints': str, constraints,
-              'process_vlimits': bool,
               'floss': float, factor for losses}
             if empty the function calculates power flow,
             each dict triggers an estimation step
@@ -2347,7 +2338,7 @@ def optimize_steps(model, gen_factorsymbols, step_params=(), vminsqr=_VMINSQR):
           'L' - objective function is created with terms for losses in branches
           'C' - objective function is created with terms for cost
           'T' - objective function is created with terms of model.terms
-        * constraints, ''|'P'|'Q'|'I'|'V' (string or tuple of characters)
+        * constraints, ''|'P'|'Q'|'I'|'V'|'B' (string or tuple of characters)
           'P' - adds constraints keeping the initial values
                 of active powers at the location of given values
           'Q' - adds constraints keeping the initial values
@@ -2356,6 +2347,7 @@ def optimize_steps(model, gen_factorsymbols, step_params=(), vminsqr=_VMINSQR):
                 of electric current at the location of given values
           'V' - adds constraints keeping the initial values
                 of voltages at the location of given values
+          'B' - consider voltage limits (if any)
     vminsqr: float (default _VMINSQR)
         minimum voltage at injection, if the voltage is below this limit
         affected injections are interpolated and do not follow the given
@@ -2387,13 +2379,11 @@ def optimize_steps(model, gen_factorsymbols, step_params=(), vminsqr=_VMINSQR):
     for step, kv in enumerate(step_params):
         objectives = kv.get('objectives', '').upper()
         constraints = kv.get('constraints', '').upper()
-        process_vlimits = kv.get('process_vlimits', True)
         floss = kv.get('floss', 1.)
         factor_values = ft.get_factor_values(factordata, values_of_vars)
         step_data = next_step_data(
             step=step, voltages_ri=voltages_ri, k=factor_values,
-            objectives=objectives, constraints=constraints,
-            process_vlimits=process_vlimits, floss=floss)
+            objectives=objectives, constraints=constraints, floss=floss)
         factordata = step_data['factordata']
         # estimation
         succ, voltages_ri, values_of_vars = optimize_step(
@@ -2451,7 +2441,7 @@ def estimate(model, step_params=(), vminsqr=_VMINSQR):
           'L' - objective function is created with terms for losses of branches
           'C' - objective function is created with terms for cost
           'T' - objective function is created with terms of model.terms
-        * constraints, ''|'P'|'Q'|'I'|'V' (also string of characters)
+        * constraints, ''|'P'|'Q'|'I'|'V'|'B' (also string of characters)
           'P' - adds constraints keeping the initial values
                 of active powers at the location of given
                 active power values during this step
@@ -2464,6 +2454,7 @@ def estimate(model, step_params=(), vminsqr=_VMINSQR):
           'V' - adds constraints keeping the initial values
                 of voltages at the location of given
                 voltage values during this step
+          'B' - consider voltage limits (if any, 'B' for bounds)
     vminsqr: float (default _VMINSQR)
         minimum
 

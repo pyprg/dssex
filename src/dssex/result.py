@@ -972,7 +972,7 @@ def make_printable(dict_of_frames):
         k:filter_columns(df).sort_index(axis=1).fillna('-').round(3)
         for k,df in dict_of_frames.items()}
 
-def make_printables(model, results):
+def get_printable_results(model, results):
     """Calculates and arranges electric data for each optimization step.
 
     Parameters

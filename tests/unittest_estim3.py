@@ -68,7 +68,7 @@ class VVC_transformer(unittest.TestCase):
         model_vvc = make_model(self._devs_vvc_vmax)
         # optimize according to losses
         res = estim.estimate(model_vvc, step_params=[dict(objectives='L')])
-        res_vvc = list(rt.make_printables(model_vvc, res))
+        res_vvc = list(rt.get_printable_results(model_vvc, res))
         tappos = res_vvc[1]['branches'].loc['Tr','Tap0']
         expected = model_vvc.factors.gen_factordata.loc['taps', 'min']
         self.assertEquals(tappos, expected)
@@ -79,7 +79,7 @@ class VVC_transformer(unittest.TestCase):
         model_vvc = make_model(self._devs_vvc_vmax, grid.Vlimit(max=1.05))
         # optimize according to losses
         res = estim.estimate(model_vvc, step_params=[dict(objectives='L')])
-        res_vvc = list(rt.make_printables(model_vvc, res))
+        res_vvc = list(rt.get_printable_results(model_vvc, res))
         tappos = res_vvc[1]['branches'].loc['Tr','Tap0']
         min_position = model_vvc.factors.gen_factordata.loc['taps', 'min']
         self.assertGreater(tappos, min_position)
@@ -91,7 +91,7 @@ class VVC_transformer(unittest.TestCase):
         model_vvc = make_model(self._devs_vvc_vmin)
         # optimize according to losses
         res = estim.estimate(model_vvc, step_params=[dict(objectives='L')])
-        res_vvc = list(rt.make_printables(model_vvc, res))
+        res_vvc = list(rt.get_printable_results(model_vvc, res))
         tappos = res_vvc[1]['branches'].loc['Tr','Tap0']
         expected = model_vvc.factors.gen_factordata.loc['taps', 'max']
         self.assertEquals(tappos, expected)
@@ -102,7 +102,7 @@ class VVC_transformer(unittest.TestCase):
         model_vvc = make_model(self._devs_vvc_vmin, grid.Vlimit(min=.95))
         # optimize according to losses
         res = estim.estimate(model_vvc, step_params=[dict(objectives='L')])
-        res_vvc = list(rt.make_printables(model_vvc, res))
+        res_vvc = list(rt.get_printable_results(model_vvc, res))
         tappos = res_vvc[1]['branches'].loc['Tr','Tap0']
         max_position = model_vvc.factors.gen_factordata.loc['taps', 'max']
         self.assertLess(tappos, max_position)
@@ -115,8 +115,8 @@ class VVC_shuntcapacitor(unittest.TestCase):
                                                       Q10=-5
                                                       Exp_v_q=2
                                       node          cap
-                                        +-------------||
-                                        |
+                                       +-------------||
+                                       |
           +-----------[ -- ]-----------+------------->
         slack           Br           node          consumer
           V=1.+.0j       y_lo=0.9k-0.95kj           P10=30
@@ -140,8 +140,8 @@ class VVC_shuntcapacitor(unittest.TestCase):
                                                           Q10=-5
                                                           Exp_v_q=2
                                           node          cap
-                                            +-------------||
-                                            |
+                                           +-------------||
+                                           |
               +-----------[ -- ]-----------+------------->
             slack           Br           node          consumer
               V=1.+.0j       y_lo=0.9k-0.95kj           P10=30
@@ -155,7 +155,7 @@ class VVC_shuntcapacitor(unittest.TestCase):
             grid.Defk(id='taps', min=0, max=5, is_discrete=True))
         # optimize according to losses
         res = estim.estimate(model, step_params=[dict(objectives='L')])
-        res_vvc = list(rt.make_printables(model, res))
+        res_vvc = list(rt.get_printable_results(model, res))
         tappos = res_vvc[1]['injections'].loc['cap','kq']
         self.assertEqual(tappos, 3)
 
@@ -165,9 +165,9 @@ class VVC_shuntcapacitor(unittest.TestCase):
         ::
                                                           Q10=-5
                                                           Exp_v_q=2
-                                          node           cap
-                                            +-------------||
-                                            |
+                                         node           cap
+                                           +-------------||
+                                           |
               +-----------[ -- ]-----------+------------->
             slack           Br           node          consumer
               V=1.+.0j       y_lo=0.9k-0.95kj           P10=30
@@ -181,7 +181,7 @@ class VVC_shuntcapacitor(unittest.TestCase):
             grid.Defk(id='taps', min=0, max=2, is_discrete=True))
         # optimize according to losses
         res = estim.estimate(model, step_params=[dict(objectives='L')])
-        res_vvc = list(rt.make_printables(model, res))
+        res_vvc = list(rt.get_printable_results(model, res))
         tappos = res_vvc[1]['injections'].loc['cap','kq']
         self.assertEqual(tappos, 2)
 
@@ -287,7 +287,7 @@ class Flow_cost(unittest.TestCase):
         res0_ = estim.estimate(
             model_vvc,
             step_params=[dict(objectives='C')])
-        ini_0, res_0 = rt.make_printables(model_vvc, res0_)
+        ini_0, res_0 = rt.get_printable_results(model_vvc, res0_)
         # max generation
         assert_array_almost_equal(
             res_0['injections'].loc['gen',['kp', 'kq']].to_numpy(),
@@ -298,7 +298,7 @@ class Flow_cost(unittest.TestCase):
         res1_ = estim.estimate(
             model_vvc,
             step_params=[dict(objectives='C')])
-        ini_1, res_1 = rt.make_printables(model_vvc, res1_)
+        ini_1, res_1 = rt.get_printable_results(model_vvc, res1_)
         # max consumption
         assert_array_almost_equal(
             res_1['injections'].loc['gen',['kp', 'kq']].to_numpy(),
