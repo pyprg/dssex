@@ -972,6 +972,39 @@ def make_printable(dict_of_frames):
         k:filter_columns(df).sort_index(axis=1).fillna('-').round(3)
         for k,df in dict_of_frames.items()}
 
+def get_printable_result(
+        model, /, Vnode, *, positions=None,
+        kpq=None, loadcurve='interpolated', vminsqr=.64):
+    """Calculates and arranges electric data for one power flow calculation.
+
+    Parameters
+    ----------
+    model: egrid.model.Model
+        data of the electric power network
+    Vnode: numpy.array
+        complex, vector of node voltages
+    positions: numpy.array
+        optional
+        float, tap positions, one entry for each record in
+        model.factors.terminalfactors
+    kpq: numpy.array, float, (nx2)
+        optional
+        scaling factors for active and reactive power
+    loadcurve: 'original' | 'interpolated' | 'square'
+        optional, default is 'interpolated'
+    vminsqr: float
+        optional, default is 0.64
+        upper limit of interpolation, interpolates if |V|² < vminsqr
+
+    Returns
+    -------
+    dict
+        pandas.DataFrame"""
+    return make_printable(
+        calculate_electric_data(
+            model, Vnode=Vnode, positions=positions, kpq=kpq,
+            loadcurve=loadcurve, vminsqr=vminsqr))
+
 def get_printable_results(model, results):
     """Calculates and arranges electric data for each optimization step.
 

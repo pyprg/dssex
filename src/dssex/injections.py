@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Copyright (C) 2022 pyprg
+Copyright (C) 2022, 2023 pyprg
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -26,7 +26,7 @@ from numpy.linalg import solve
 
 def get_coefficients_matrix(x1_sqr):
     """Creates a matrix for the calculation of coefficients for a cubic
-    function interpolation
+    function interpolation.
     ::
         f(x) = Ax³ + Bx² + Cx; f(0)=0
     The returned matrix M is used for the calculation of the coefficents
@@ -53,8 +53,8 @@ def get_coefficients_matrix(x1_sqr):
         [3.*x1_sqr,  2.*x1, 1.]]) # df(x1)/dx
 
 def make_calculate_coefficients(x1_sqr):
-    """Creates a factory function for the calculation of coefficients for
-    cubic polynomials.
+    """Creates a function calculating coefficients of cubic polynomials.
+
     (numpy.array<float> shape r,c) -> (numpy.array<float> (shape r,3,c)).
     The returned function creates an array of shape (3,1) for each scalar.
 
@@ -186,7 +186,8 @@ def polynome(x1, exp, x):
 
 def interpolate(x1, exp, x):
     """Function for checking the interpolation concept.
-    the function x**exp shall be interpolated near x~0 that y->0 for x=0.
+
+    The function x**exp shall be interpolated near x~0 that y->0 for x=0.
     The function is interpolated with a polynome of third order.
 
     Parameters

@@ -74,12 +74,10 @@ pos = []#[('taps', -16)]
 positions = pfc.get_positions(model.factors, pos)
 success, vcx = pfc.calculate_power_flow(model, kpq=kpq, positions=positions)
 # results power flow calculation
-calc_pf = rt.make_printable(
-    rt.calculate_electric_data(model, vcx, kpq=kpq, positions=positions))
+calc_pf = rt.get_printable_result(model, vcx, kpq=kpq, positions=positions)
 # accuracy
 residual_current = pfc.calculate_residual_current(
     model, vcx, positions=positions, kpq=kpq)
-
 #%% State Estimation
 import dssex.estim as estim
 res = list(estim.estimate(
@@ -104,4 +102,4 @@ import egrid.builder as grid
 model3 = make_model_checked([grid.Slacknode()])
 success, vcx = pfc.calculate_power_flow(model3)
 # results power flow calculation
-calc_pf = rt.make_printable(rt.calculate_electric_data(model3, vcx))
+calc_pf = rt.get_printable_result(model3, vcx)

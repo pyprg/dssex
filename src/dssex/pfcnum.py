@@ -1183,8 +1183,8 @@ def calculate_residual_current(
     ----------
     model: egrid.model.Model
         model of grid for calculation
-    Vnode : TYPE
-        DESCRIPTION.
+    Vnode: array_like, complex
+        node voltage vector
     positions: numpy.array
         optional, default None
         float, tap-position
@@ -1217,8 +1217,8 @@ def max_residual_current(
     ----------
     model: egrid.model.Model
         model of grid for calculation
-    Vnode : TYPE
-        DESCRIPTION.
+    Vnode: array_like, complex
+        node voltage vector
     positions: numpy.array
         optional, default None
         float, tap-position
@@ -1278,11 +1278,11 @@ def get_positions(factors, pos=()):
 
     Parameters
     ----------
-    factors : egrid.factors.Factors
+    factors: egrid.factors.Factors
         * .gen_factordata
         * .terminalfactors
         factors is retrieved from egrid.model.Model.factors
-    pos : iterable, optional
+    pos: iterable, optional
         tuple(str - id_of_terminalfactor, float - position)
         positions for selected terminalfactors,
         example: pos=[('taps', -16), ('taps2', 3)],
