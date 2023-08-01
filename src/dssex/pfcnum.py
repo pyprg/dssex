@@ -489,7 +489,10 @@ def calculate_injected_node_current(
     Vnode_ri2 = np.hstack(np.vsplit(Vnode_ri, 2))
     Vnode_ri2_sqr = np.power(Vnode_ri2, 2)
     Vnode_abs_sqr = Vnode_ri2_sqr.sum(axis=1).reshape(-1, 1)
-    Vinj_abs_sqr = mnodeinjT @ Vnode_abs_sqr
+    try:
+        Vinj_abs_sqr = mnodeinjT @ Vnode_abs_sqr
+    except ValueError:
+        raise ValueError('faulty connections from nodes to injections')
     Pinj, Qinj = calc_injected_power(Vinj_abs_sqr)
     Sinj = (
         np.hstack([Pinj.reshape(-1, 1), Qinj.reshape(-1, 1)])

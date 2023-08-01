@@ -50,12 +50,15 @@ def calculate_pf(model, step_params=()):
         dict {'objectives': objectives, 'constraints': constraints}
             if empty the function calculates power flow,
             each dict triggers an estimation step
-        * objectives, ''|'P'|'Q'|'I'|'V' (string or tuple of characters)
+        * objectives, ''|'P'|'Q'|'I'|'V'|'L'|'C'|'T' (also string of characters)
           'P' - objective function is created with terms for active power
           'Q' - objective function is created with terms for reactive power
           'I' - objective function is created with terms for electric current
           'V' - objective function is created with terms for voltage
-        * constraints, ''|'P'|'Q'|'I'|'V' (string or tuple of characters)
+          'L' - objective function is created with terms for losses of branches
+          'C' - objective function is created with terms for cost
+          'T' - objective function is created with terms of model.terms
+        * constraints, ''|'P'|'Q'|'I'|'V'|'B' (also string of characters)
           'P' - adds constraints keeping the initial values
                 of active powers at the location of given
                 active power values during this step
@@ -68,6 +71,7 @@ def calculate_pf(model, step_params=()):
           'V' - adds constraints keeping the initial values
                 of voltages at the location of given
                 voltage values during this step
+          'B' - consider voltage limits (if any, 'B' for bounds)
 
     Returns
     -------
@@ -109,7 +113,7 @@ def print_power_flow(*args):
     A multiline string can be the model e.g
     (the default input if no args are given)
     ::
-         slack=True   y_lo=1e3-1e3j             y_lo=2e3-2e3j
+         slack=True   y_lo=1e3-1e3j           y_lo=2e3-2e3j
         n0<----------cable--------->n1<------line------>n2
                                     |                   |
                                     |                   |
@@ -120,18 +124,24 @@ def print_power_flow(*args):
                       Exp_v_q=2
 
     letters, numbers, '=', and '.' are evaluated data
+
     names of connectivity nodes start with 'n'
+
     adjacent entities are connected unless the name has a leading or
       trailing underscore '_'
-    lines with first character '#' are not evaluated
+
+    lines with first character '#' are not part of input graph
+
+    lines starting with '#.' provide non-graph input data e.g. scaling factors
+
 
     Parameters
     ----------
     args: iterable (optional)
         egrid.builder.(
             Branch | Slacknode | Injection | Output |
-            PValue | QValue | IValue | Vvalue | Branchtaps |
-            Deff | Link | Message) | str"""
+            PValue | QValue | IValue | Vvalue | Vlimit |
+            Defk | Deft | Defoterm | Klink | Tlink | Message) | str"""
     from egrid import make_model_checked
     from dssex.result import make_printable
     if not args:

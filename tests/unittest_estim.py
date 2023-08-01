@@ -52,9 +52,22 @@ grid_pfc = (
 
 class Power_flow_calculation_basic(unittest.TestCase):
 
+    def test_calculate_power_flow_without_elements(self):
+        """Power flow calculation with one slack node."""
+        model = make_model()
+        # calculate
+        success, vnode_ri = estim.calculate_power_flow(
+            model, vminsqr=_VMINSQR)
+        # test
+        self.assertTrue(success, "calculate_power_flow shall succeed")
+        vnode_cx = estim.ri_to_complex(vnode_ri)
+        self.assertEqual(
+            len(vnode_cx),
+            0,
+            'empty voltage vector')
+
     def test_calculate_power_flow_slack(self):
-        """Power flow calculation with one slack node.
-        Minimal configuration."""
+        """Power flow calculation with one slack node."""
         vcx_slack = 0.9+0.2j
         model = make_model(grid.Slacknode('n_0', V=vcx_slack))
         # calculate
@@ -74,6 +87,23 @@ class Power_flow_calculation_basic(unittest.TestCase):
         model = make_model(
             grid.Slacknode('n_0', V=vcx_slack),
             grid.Injection('consumer', 'n_0', P10=30.0))
+        # calculate
+        success, vnode_ri = estim.calculate_power_flow(
+            model, vminsqr=_VMINSQR)
+        # test
+        self.assertTrue(success, "calculate_power_flow shall succeed")
+        vnode_cx = estim.ri_to_complex(vnode_ri)
+        self.assertAlmostEqual(
+            vnode_cx[0,0],
+            vcx_slack,
+            'calculated slack voltage is {vcx_slack}')
+
+    def test_calculate_power_flow_slack_bridge(self):
+        """Power flow calculation with one branch."""
+        vcx_slack = 0.95+0.2j
+        model = make_model(
+            grid.Slacknode('n_0', V=vcx_slack),
+            grid.Branch('switch', 'n_0', 'n_1'))
         # calculate
         success, vnode_ri = estim.calculate_power_flow(
             model, vminsqr=_VMINSQR)
