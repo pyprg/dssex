@@ -77,27 +77,27 @@ class Batch(unittest.TestCase):
             grid.PValue('batch_0'),
             grid.QValue('batch_0'),
             grid.Output('batch_0', id_of_device='line_0', id_of_node='n_0'),
-            
+
             # given value of I, P, Q at consumer_1
             grid.IValue('batch_1'),
             grid.PValue('batch_1'),
             grid.QValue('batch_1'),
             grid.Output('batch_1', id_of_device='consumer_1'),
-            
+
             # given value of I, P, Q at n_1/line_1 and n_1/line_2
             grid.IValue('batch_2'),
             grid.PValue('batch_2'),
             grid.QValue('batch_2'),
             grid.Output('batch_2', id_of_device='line_1', id_of_node='n_1'),
             grid.Output('batch_2', id_of_device='line_2', id_of_node='n_1'),
-            
+
             # given value of I, P, Q at consumer_2 and consumer_3
             grid.IValue('batch_3'),
             grid.PValue('batch_3'),
             grid.QValue('batch_3'),
             grid.Output('batch_3', id_of_device='consumer_2'),
             grid.Output('batch_3', id_of_device='consumer_3'),
-            
+
             # given voltage at node n_3
             grid.Vvalue('n_2'),
             grid.Vvalue('n_3')]

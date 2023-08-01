@@ -78,7 +78,8 @@ class VVC_transformer(unittest.TestCase):
         """
         model_vvc = make_model(self._devs_vvc_vmax, grid.Vlimit(max=1.05))
         # optimize according to losses
-        res = estim.estimate(model_vvc, step_params=[dict(objectives='L')])
+        res = estim.estimate(
+            model_vvc, step_params=[dict(objectives='L', constraints='B')])
         res_vvc = list(rt.get_printable_results(model_vvc, res))
         tappos = res_vvc[1]['branches'].loc['Tr','Tap0']
         min_position = model_vvc.factors.gen_factordata.loc['taps', 'min']
@@ -101,7 +102,9 @@ class VVC_transformer(unittest.TestCase):
         """
         model_vvc = make_model(self._devs_vvc_vmin, grid.Vlimit(min=.95))
         # optimize according to losses
-        res = estim.estimate(model_vvc, step_params=[dict(objectives='L')])
+        res = estim.estimate(
+            model_vvc,
+            step_params=[dict(objectives='L', constraints='B')])
         res_vvc = list(rt.get_printable_results(model_vvc, res))
         tappos = res_vvc[1]['branches'].loc['Tr','Tap0']
         max_position = model_vvc.factors.gen_factordata.loc['taps', 'max']
