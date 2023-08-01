@@ -1598,7 +1598,7 @@ def get_objective_expression(
         # 'T' - objective function terms explicitely given by model
         objective += _get_oterm_expressions(
             factordata.all, factordata.id_to_idx, oterms)
-    return objective
+    return _SX_0r1c if objective.is_zero() else objective
 
 def get_batch_constraints(values_of_constraints, expressions_of_batches):
     """Creates expressions of constraints for keeping batch values constant.
