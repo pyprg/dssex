@@ -587,6 +587,7 @@ def get_switch_flow(bridgeterminals, Icx_branchterm, Icx_injection):
     Parameters
     ----------
     bridgeterminals: pandas.DataFrame (index_of_terminal)
+        * .id_of_node, str, identifier of connectivity node
         * .index_of_node, int, index of power flow calculation node
         * .switch_flow_index, int, index of switch flow calculation node
         * .index_of_other_terminal, index of other terminal at same branch
@@ -610,7 +611,7 @@ def get_switch_flow(bridgeterminals, Icx_branchterm, Icx_injection):
         Icx, complex current flowing into the terminal"""
     groups_of_terminals = (
         bridgeterminals[
-            ['index_of_node', 'switch_flow_index',
+            ['id_of_node', 'index_of_node', 'switch_flow_index',
              'index_of_other_terminal', 'at_slack']]
         .groupby('index_of_node'))
     at_pfc_node_border = Icx_branchterm.index_of_node.isin(
@@ -687,10 +688,13 @@ def _calculate_bridge_results(
     bridgeterminal_res['V0cx_pu'] = (
         Vnode[bridgeterminals_a.index_of_node])
     bridgeterminal_res['V1cx_pu'] = bridgeterminal_res.V0cx_pu
+    # calculate power for 3 phases
     bridgeterminal_res['S0cx_pu'] = (
-        bridgeterminal_res.V0cx_pu * np.conjugate(bridgeterminal_res.I0cx_pu))
+        3 * bridgeterminal_res.V0cx_pu
+        * np.conjugate(bridgeterminal_res.I0cx_pu))
     bridgeterminal_res['S1cx_pu'] = (
-        bridgeterminal_res.V1cx_pu * np.conjugate(bridgeterminal_res.I1cx_pu))
+        3 * bridgeterminal_res.V1cx_pu
+        * np.conjugate(bridgeterminal_res.I1cx_pu))
     bridgeterminal_res['I0_pu'] = np.abs(bridgeterminal_res.I0cx_pu)
     bridgeterminal_res['I1_pu'] = bridgeterminal_res.I0_pu
     bridgeterminal_res['V0_pu'] = np.abs(bridgeterminal_res.V0cx_pu)
