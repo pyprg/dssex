@@ -92,44 +92,38 @@ res = list(estim.estimate(
         dict(objectives='V', constraints='PQ')]))
 calc_ = list(rt.get_printable_results(model, res))
 #%% VVC
-model2 = make_model_checked()
-success2, vcx2 = pfc.calculate_power_flow(model2)
-calc_pf2 = rt.get_printable_result(model2, vcx2)
-#%% VVC
-model3 = make_model_checked(grid.Slacknode())
-success3, vcx3= pfc.calculate_power_flow(model3)
-calc_pf3 = rt.get_printable_result(model3, vcx3)
-#%% VVC
-model4 = make_model_checked(
-    grid.Slacknode(), 
-    grid.Branch(id='br0', id_of_node_A='slack', id_of_node_B='n1'))
-success4, vcx4 = pfc.calculate_power_flow(model4)
-calc_pf4 = rt.get_printable_result(model4, vcx4)
-#%% VVC
-model5 = make_model_checked(
-    grid.Slacknode(), 
-    grid.Injection(id='inj0', id_of_node='slack', P10=10, Q10=5))
-messages5 = model5.messages
-success5, vcx5 = pfc.calculate_power_flow(model5)
-calc_pf5 = rt.get_printable_result(model5, vcx5)
-#%% VVC
-model6 = make_model_checked(
-    grid.Slacknode(), 
-    grid.Branch(id='br0', id_of_node_A='slack', id_of_node_B='n1'), 
-    grid.Injection(id='inj0', id_of_node='n1', P10=10, Q10=5))
-messages6 = model6.messages
-success6, vcx6 = pfc.calculate_power_flow(model6)
-calc_pf6 = rt.get_printable_result(model6, vcx6)
-#%% VVC
-model7 = make_model_checked(
-    grid.Slacknode(), 
-    grid.Branch(id='br0', id_of_node_A='slack', id_of_node_B='n1'), 
-    grid.Injection(id='inj0', id_of_node='n2', P10=10, Q10=5))
-messages7 = model7.messages
-#%%
-success7, vcx7 = pfc.calculate_power_flow(model7)
-#%%
-calc_pf7 = rt.get_printable_result(model7, vcx7)
+schema_vvc = """
+                   (                                 ~~~
+               +-->(                                 ~~~
+slack +--------+   (-Branch-------------+ n +-------||||| heating_
+        Tlink=ltc     y_lo=1e3-1e3j       |                P10=200
+                      y_tr=1e-6+1e-6j     |
+                                          |        \<-+->/
+                                          |           |
+                        _cap ||---------+ n +-------((~)) motor_
+                          Q10=-10                          P10=160
+                          Exp_v_q=2                        Q10=10
+
+
+#.Deft(id=ltc value=0)
+#.Defk(id=kcap min=0 max=10 value=0 is_discrete=True)
+#.Klink(id_of_injection=cap id_of_factor=kcap part=q)
+#.Vlimit(min=.95)
+"""
+
+model_vvc = make_model_checked(schema_vvc)
+
+from egrid.factors import initial_values
+
+ini = initial_values(model_vvc)
+
+
+messages_vvc = model_vvc.messages
+success_vvc, vcx_vvc = pfc.calculate_power_flow(model_vvc, **ini)
+calc_vvc = rt.get_printable_result(model_vvc, vcx_vvc, **ini)
+
+np.abs(vcx_vvc[model_vvc.vlimits.index_of_node]) < model_vvc.vlimits['min'].to_numpy().reshape(-1,1)
+
 
 
 

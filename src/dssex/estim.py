@@ -1578,8 +1578,9 @@ def get_objective_expression(
         * ['step']
     objectives: str
         string of characters 'I'|'P'|'Q'|'V'|'L'|'C'|'T'
-        addresses current magnitude, active power, reactive power or magnitude
-        of voltage, losses of branches, other characters are ignored
+        addresses current magnitude, active power, reactive power, magnitude
+        of voltage, losses of branches or terms of objective function which
+        are part of the model, other characters are ignored
 
     Returns
     -------

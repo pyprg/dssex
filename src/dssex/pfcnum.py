@@ -250,7 +250,7 @@ def create_gb_matrix(model, f_mn_tot):
         B.tocsc()[count_of_slacks:, :]])
     return bmat([[G_, -B_], [B_,  G_]])
 
-def _get_squared_injected_power_fn(injections, kpq=None):
+def _get_squared_injected_power_fn(injections, kpq):
     """Calculates power flowing into injections.
 
     Formula:
@@ -268,10 +268,8 @@ def _get_squared_injected_power_fn(injections, kpq=None):
         * .Q10
         * .Exp_v_p
         * .Exp_v_q
-    kpq: numpy.array, float, (nx2)
-        optional
+    kpq: numpy.array, float, (nx2) | None
         scaling factors for active and reactive power
-    loadcurve: 'original' | 'interpolated' | 'square'
 
     Returns
     -------
@@ -303,7 +301,7 @@ def _get_squared_injected_power_fn(injections, kpq=None):
         return np.array(P10) * Vsqr, np.array(Q10) * Vsqr
     return calc_injected_power
 
-def _get_original_injected_power_fn(injections, kpq=None):
+def _get_original_injected_power_fn(injections, kpq):
     """Calculates power flowing through injections.
 
     Injected power is calculated this way
@@ -322,10 +320,8 @@ def _get_original_injected_power_fn(injections, kpq=None):
         * .Q10
         * .Exp_v_p
         * .Exp_v_q
-    kpq: numpy.array, float, (nx2)
-        optional
+    kpq: numpy.array, float, (nx2) | None
         scaling factors for active and reactive power
-    loadcurve: 'original' | 'interpolated' | 'square'
 
     Returns
     -------
@@ -361,7 +357,7 @@ def _get_original_injected_power_fn(injections, kpq=None):
         return Pres, Qres
     return calc_injected_power
 
-def _get_interpolated_injected_power_fn(vminsqr, injections, kpq=None):
+def _get_interpolated_injected_power_fn(vminsqr, injections, kpq):
     """Calculates power flowing through injections.
 
     Parameters
@@ -373,10 +369,8 @@ def _get_interpolated_injected_power_fn(vminsqr, injections, kpq=None):
         * .Q10
         * .Exp_v_p
         * .Exp_v_q
-    pq_factors: numpy.array, float, (nx2)
-        optional
+    kpq: numpy.array, float, (nx2) | None
         factors for active and reactive power
-    loadcurve: 'original' | 'interpolated' | 'square'
 
     Returns
     -------
@@ -564,7 +558,7 @@ def solved(precision, gb, Vnode_ri, Iinj_node_ri):
     return norm(Ires, np.inf) < precision if 0 < Ires.shape[0] else True
 
 def calculate_power_flow(
-        model, Vslack=None, Vinit=None,
+        model, /, Vslack=None, *, Vinit=None,
         kpq=None, positions=None, loadcurve='original',
         precision=1e-8, max_iter=30):
     """Power flow calculating function.
@@ -584,10 +578,12 @@ def calculate_power_flow(
         float, start value of iteration, node voltage vector,
         real parts then imaginary parts
     kpq: numpy.array (nx2), optional
-        float, scaling factors for active and reactive power of loads
-    positions : array_like (shape n,1) | None
+        float, scaling factors for active and reactive power of loads,
+        uses 1.0 if omitted
+    positions : array_like (shape n,1) | None, optional
         float, tap positions, one value for each row in terminalfactors,
-        ordered according to terminalfactors
+        ordered according to terminalfactors,
+        applies factors of model if omitted
     loadcurve: 'original' | 'interpolated' | 'square', optional
         default is 'original', just first letter is used
     precision: float, optional
