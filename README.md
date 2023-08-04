@@ -101,7 +101,7 @@ This split avoids numeric problems created by different magnitudes of
 voltages, powers and currents. Weighting factors shall be avoided.
 Including additional (consistent) measurements shall yield better results.
 
-Function **estim.estimate** implements described method.
+Function **estim.estimate_stepwise** implements described method.
 
 ## Separate Real and Imaginary Parts
 

@@ -2004,7 +2004,7 @@ def get_calculate_from_result(model, vsyms, factordata, x):
          casadi.vertcat(np.real(Vslacks_neg), np.imag(Vslacks_neg))))
 
 #
-# convenience functions for easier handling of estimation
+#
 #
 
 def _get_vlimits(process_vlimts, model, Vnode_sqr, step):
@@ -2342,7 +2342,7 @@ def calculate_initial_powerflow(ini_data):
 def _make_step_data(
         step_data_fn, step_params, step,
         succ, voltages_ri, values_of_vars, factordata):
-    """Controls the optimization loop.
+    """Controls the optimization loop according to parameters 'step_params'.
 
     Creates data for steps. Optimization loop stops when '_make_step_data'
     returns None.
@@ -2403,62 +2403,6 @@ def optimization_loop(ini_data, make_step_data):
             **step_data, Vnode_ri_ini=voltages_ri)
         yield step, succ, voltages_ri, values_of_vars, factordata
 
-def optimize_steps(model, gen_factorsymbols, step_params=(), vminsqr=_VMINSQR):
-    """Estimates grid status stepwise.
-
-    Parameters
-    ----------
-    model: egrid.model.Model
-        data of electric network
-    gen_factorsymbols: casadi.SX, shape(n,1)
-        symbols of generic (for each step) decision variables or parameters
-    step_params: array_like
-        dict {'objectives': str, objectives,
-              'constraints': str, constraints,
-              'floss': float, factor for losses}
-            if empty the function calculates power flow,
-            each dict triggers an estimation step
-        * objectives, ''|'P'|'Q'|'I'|'V'|'L'|'C'|'T' (string of characters)
-          'P' - objective function is created with terms for active power
-          'Q' - objective function is created with terms for reactive power
-          'I' - objective function is created with terms for electric current
-          'V' - objective function is created with terms for voltage
-          'L' - objective function is created with terms for losses in branches
-          'C' - objective function is created with terms for cost
-          'T' - objective function is created with terms of model.terms
-        * constraints, ''|'P'|'Q'|'I'|'V'|'U' (string of characters)
-          'P' - adds constraints keeping the initial values
-                of active powers at the location of given values
-          'Q' - adds constraints keeping the initial values
-                of reactive powers at the location of given values
-          'I' - adds constraints keeping the initial values
-                of electric current at the location of given values
-          'V' - adds constraints keeping the initial values
-                of voltages at the location of given values
-          'U' - consider voltage limits (if any)
-    vminsqr: float (default _VMINSQR)
-        minimum voltage at injection, if the voltage is below this limit
-        affected injections are interpolated and do not follow the given
-        curve anymore, the interploation is towards a linear function reaching
-        P,Q == 0,0 when |V| == 0, the given value of the argument must be
-        the squared value of the limit
-
-    Yields
-    ------
-    tuple
-        * int, index of estimation step,
-          (-1 for initial power flow calculation, 0 for first estimation, ...)
-        * bool, success?
-        * voltages_ri, casadi.DM (shape 2n,1)
-          calculated node voltages, real voltages then imaginary voltages
-        * k, casadi.DM (shape m,1)
-          factors
-        * factordata, Factordata,
-          factor data of step"""
-    ini_data, step_data_fn = get_step_data_fn(model, gen_factorsymbols)
-    make_step_data = partial(_make_step_data, step_data_fn, step_params)
-    yield from optimization_loop(ini_data, make_step_data)
-
 def get_Vcx_factors(factordata, voltages_ri, factorvalues):
     """Helper. Arranges solver result.
 
@@ -2491,7 +2435,7 @@ def get_Vcx_factors(factordata, voltages_ri, factorvalues):
     V = ri_to_complex(voltages_ri)
     return V, kpq, pos
 
-def estimate(model, step_params=(), vminsqr=_VMINSQR):
+def estimate_stepwise(model, step_params=(), vminsqr=_VMINSQR):
     """Estimates grid status stepwise.
 
     Parameters
@@ -2540,9 +2484,11 @@ def estimate(model, step_params=(), vminsqr=_VMINSQR):
         * pq_factors : numpy.array, float (shape m,2)
             scaling factors for injections
         * tappositions"""
-    gen_factor_symbols = ft._create_symbols_with_ids(
+    gen_factorsymbols = ft._create_symbols_with_ids(
         model.factors.gen_factordata.index)
+    ini_data, step_data_fn = get_step_data_fn(model, gen_factorsymbols)
+    make_step_data = partial(_make_step_data, step_data_fn, step_params)
     return (
         (step, succ, *get_Vcx_factors(factordata, v_ri, factorvalues))
-        for step, succ, v_ri, factorvalues, factordata in optimize_steps(
-            model, gen_factor_symbols, step_params, vminsqr))
+        for step, succ, v_ri, factorvalues, factordata in
+            optimization_loop(ini_data, make_step_data))

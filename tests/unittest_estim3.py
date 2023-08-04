@@ -67,7 +67,8 @@ class VVC_transformer(unittest.TestCase):
         """
         model_vvc = make_model(self._devs_vvc_vmax)
         # optimize according to losses
-        res = estim.estimate(model_vvc, step_params=[dict(objectives='L')])
+        res = estim.estimate_stepwise(
+            model_vvc, step_params=[dict(objectives='L')])
         res_vvc = list(rt.get_printable_results(model_vvc, res))
         tappos = res_vvc[1]['branches'].loc['Tr','Tap0']
         expected = model_vvc.factors.gen_factordata.loc['taps', 'min']
@@ -78,7 +79,7 @@ class VVC_transformer(unittest.TestCase):
         """
         model_vvc = make_model(self._devs_vvc_vmax, grid.Vlimit(max=1.05))
         # optimize according to losses
-        res = estim.estimate(
+        res = estim.estimate_stepwise(
             model_vvc, step_params=[dict(objectives='L', constraints='U')])
         res_vvc = list(rt.get_printable_results(model_vvc, res))
         tappos = res_vvc[1]['branches'].loc['Tr','Tap0']
@@ -91,7 +92,8 @@ class VVC_transformer(unittest.TestCase):
         """
         model_vvc = make_model(self._devs_vvc_vmin)
         # optimize according to losses
-        res = estim.estimate(model_vvc, step_params=[dict(objectives='L')])
+        res = estim.estimate_stepwise(
+            model_vvc, step_params=[dict(objectives='L')])
         res_vvc = list(rt.get_printable_results(model_vvc, res))
         tappos = res_vvc[1]['branches'].loc['Tr','Tap0']
         expected = model_vvc.factors.gen_factordata.loc['taps', 'max']
@@ -102,7 +104,7 @@ class VVC_transformer(unittest.TestCase):
         """
         model_vvc = make_model(self._devs_vvc_vmin, grid.Vlimit(min=.95))
         # optimize according to losses
-        res = estim.estimate(
+        res = estim.estimate_stepwise(
             model_vvc,
             step_params=[dict(objectives='L', constraints='U')])
         res_vvc = list(rt.get_printable_results(model_vvc, res))
@@ -157,7 +159,8 @@ class VVC_shuntcapacitor(unittest.TestCase):
             self._mygrid,
             grid.Defk(id='taps', min=0, max=5, is_discrete=True))
         # optimize according to losses
-        res = estim.estimate(model, step_params=[dict(objectives='L')])
+        res = estim.estimate_stepwise(
+            model, step_params=[dict(objectives='L')])
         res_vvc = list(rt.get_printable_results(model, res))
         tappos = res_vvc[1]['injections'].loc['cap','kq']
         self.assertEqual(tappos, 3)
@@ -183,7 +186,8 @@ class VVC_shuntcapacitor(unittest.TestCase):
             self._mygrid,
             grid.Defk(id='taps', min=0, max=2, is_discrete=True))
         # optimize according to losses
-        res = estim.estimate(model, step_params=[dict(objectives='L')])
+        res = estim.estimate_stepwise(
+            model, step_params=[dict(objectives='L')])
         res_vvc = list(rt.get_printable_results(model, res))
         tappos = res_vvc[1]['injections'].loc['cap','kq']
         self.assertEqual(tappos, 2)
@@ -199,7 +203,8 @@ class VVC_shuntcapacitor(unittest.TestCase):
             self._mygrid,
             grid.Defk(id='taps', value=1, min=0, max=5, is_discrete=True))
         # optimize according to losses
-        _, res = estim.estimate(model, step_params=[dict(objectives='L')])
+        _, res = estim.estimate_stepwise(
+            model, step_params=[dict(objectives='L')])
         tappos = (
             rt.calculate_electric_data2(model, res)
             ['injections'].loc['cap','kq'])
@@ -211,7 +216,8 @@ class VVC_shuntcapacitor(unittest.TestCase):
             grid.Defk(
                 id='taps', value=tappos_initial, min=0, max=5,
                 is_discrete=True))
-        ini2, res2 = estim.estimate(model2, step_params=[dict(objectives='L')])
+        ini2, res2 = estim.estimate_stepwise(
+            model2, step_params=[dict(objectives='L')])
         ed_ini2 = rt.calculate_electric_data2(model2, ini2)
         tappos_ini2 = ed_ini2['injections'].loc['cap','kq']
         ed_res2 = rt.calculate_electric_data2(model2, res2)
@@ -231,7 +237,7 @@ class VVC_shuntcapacitor(unittest.TestCase):
         #
         model2.factors.gen_factordata.loc['taps','cost'] = (
             .999 * savings_of_losses)
-        ini3, res3 = estim.estimate(
+        ini3, res3 = estim.estimate_stepwise(
             model2, step_params=[dict(objectives='LC', floss=loss_factor)])
         ed_res3 = rt.calculate_electric_data2(model2, res3)
         tappos_optimized3 = ed_res3['injections'].loc['cap','kq']
@@ -242,7 +248,7 @@ class VVC_shuntcapacitor(unittest.TestCase):
         #
         model2.factors.gen_factordata.loc['taps','cost'] = (
             1.001 * savings_of_losses)
-        ini4, res4 = estim.estimate(
+        ini4, res4 = estim.estimate_stepwise(
             model2, step_params=[dict(objectives='LC', floss=loss_factor)])
         ed_res4 = rt.calculate_electric_data2(model2, res4)
         tappos_optimized4 = ed_res4['injections'].loc['cap','kq']
@@ -287,7 +293,7 @@ class Flow_cost(unittest.TestCase):
            grid.PValue(id_of_batch='n_gen', cost=.4),
            grid.Output(id_of_batch='n_gen', id_of_device='gen'))
         # optimize according to cost
-        res0_ = estim.estimate(
+        res0_ = estim.estimate_stepwise(
             model_vvc,
             step_params=[dict(objectives='C')])
         ini_0, res_0 = rt.get_printable_results(model_vvc, res0_)
@@ -298,7 +304,7 @@ class Flow_cost(unittest.TestCase):
         # increase the cost of generation
         model_vvc.pvalues\
             .loc[model_vvc.pvalues.id_of_batch=='n_gen', 'cost'] = -.6
-        res1_ = estim.estimate(
+        res1_ = estim.estimate_stepwise(
             model_vvc,
             step_params=[dict(objectives='C')])
         ini_1, res_1 = rt.get_printable_results(model_vvc, res1_)

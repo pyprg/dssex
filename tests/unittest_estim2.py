@@ -111,7 +111,8 @@ class Optimize_step(unittest.TestCase):
         succ, x_V, x_scaling = estim.optimize_step(
             **step_data, Vnode_ri_ini=voltages_ri)
         self.assertTrue(succ, 'estimation succeeds')
-        V, k, pos = estim.get_Vcx_factors(step_data['factordata'], x_V, x_scaling)
+        V, k, pos = estim.get_Vcx_factors(
+            step_data['factordata'], x_V, x_scaling)
         self.assertAlmostEqual(
             # exclude slacks
             pfc.max_residual_current(model, V, positions=pos, kpq=k),
@@ -151,7 +152,8 @@ class Optimize_step(unittest.TestCase):
         succ, x_V, x_scaling = estim.optimize_step(
             **step_data, Vnode_ri_ini=voltages_ri)
         self.assertTrue(succ, 'estimation succeeds')
-        V, k, pos = estim.get_Vcx_factors(step_data['factordata'], x_V, x_scaling)
+        V, k, pos = estim.get_Vcx_factors(
+            step_data['factordata'], x_V, x_scaling)
         self.assertAlmostEqual(
             # exclude slacks
             pfc.max_residual_current(model, V, positions=pos, kpq=k),
@@ -191,7 +193,8 @@ class Optimize_step(unittest.TestCase):
         succ, x_V, x_scaling = estim.optimize_step(
             **step_data, Vnode_ri_ini=voltages_ri)
         self.assertTrue(succ, 'estimation succeeds')
-        V, k, pos = estim.get_Vcx_factors(step_data['factordata'], x_V, x_scaling)
+        V, k, pos = estim.get_Vcx_factors(
+            step_data['factordata'], x_V, x_scaling)
         self.assertAlmostEqual(
             # exclude slacks
             pfc.max_residual_current(model, V, positions=pos, kpq=k),
@@ -231,7 +234,8 @@ class Optimize_step(unittest.TestCase):
         succ, x_V, x_scaling = estim.optimize_step(
             **step_data, Vnode_ri_ini=voltages_ri)
         self.assertTrue(succ, 'estimation succeeds')
-        V, k, pos = estim.get_Vcx_factors(step_data['factordata'], x_V, x_scaling)
+        V, k, pos = estim.get_Vcx_factors(
+            step_data['factordata'], x_V, x_scaling)
         self.assertAlmostEqual(
             # exclude slacks
             pfc.max_residual_current(model, V, positions=pos, kpq=k),
@@ -271,7 +275,8 @@ class Optimize_step(unittest.TestCase):
         succ, x_V, x_scaling = estim.optimize_step(
             **step_data, Vnode_ri_ini=voltages_ri)
         self.assertTrue(succ, 'estimation succeeds')
-        V, k, pos = estim.get_Vcx_factors(step_data['factordata'], x_V, x_scaling)
+        V, k, pos = estim.get_Vcx_factors(
+            step_data['factordata'], x_V, x_scaling)
         inj_res = rt.calculate_injection_results(model, V, kpq=k)
         self.assertAlmostEqual(
             # exclude slacks
@@ -330,7 +335,7 @@ class Estimate_minimal(unittest.TestCase):
     def test_empty_model(self):
         """estimate empty grid-model"""
         model = make_model()
-        res, *tail = estim.estimate(model)
+        res, *tail = estim.estimate_stepwise(model)
         self.assertIsInstance(
             res, tuple, 'estimate returns tuple for empty model')
         self.assertEqual(
@@ -360,7 +365,7 @@ class Estimate_minimal(unittest.TestCase):
         """the only element is the slacknode"""
         vcx_slack = 0.95+0.02j
         model = make_model(grid.Slacknode('n_0', V=vcx_slack))
-        res, *tail = estim.estimate(model)
+        res, *tail = estim.estimate_stepwise(model)
         self.assertIsInstance(
             res, tuple, 'estimate returns tuple')
         self.assertEqual(
@@ -399,7 +404,7 @@ class Estimate_injection(unittest.TestCase):
         model = make_model(
             grid.Slacknode('n_0', V=vcx_slack),
             grid.Injection('consumer', 'n_0', P10=s.real, Q10=s.imag))
-        res, *tail = estim.estimate(model)
+        res, *tail = estim.estimate_stepwise(model)
         self.assertIsInstance(
             res, tuple, 'estimate returns tuple')
         self.assertEqual(
@@ -443,7 +448,7 @@ class Estimate_injection(unittest.TestCase):
             # measurement
             grid.PValue(id_of_batch='p_of_consumter', P=9, direction=1.),
             grid.Output(id_of_batch='p_of_consumer', id_of_device='consumer'))
-        init, res = estim.estimate(
+        init, res = estim.estimate_stepwise(
             model,
             step_params=[dict(objectives='Q')])
         self.assertIsInstance(
@@ -488,7 +493,7 @@ class Estimate_injection(unittest.TestCase):
             # measurement
             grid.PValue(id_of_batch='p_of_consumer', P=20., direction=1.),
             grid.Output(id_of_batch='p_of_consumer', id_of_device='consumer'))
-        init, res = estim.estimate(
+        init, res = estim.estimate_stepwise(
             model,
             step_params=[dict(objectives='P')])
         self.assertIsInstance(
@@ -534,7 +539,7 @@ class Estimate_injection(unittest.TestCase):
             # measurement
             grid.PValue(id_of_batch='p_of_consumer', P=Pval, direction=1.),
             grid.Output(id_of_batch='p_of_consumer', id_of_device='consumer'))
-        init, res = estim.estimate(
+        init, res = estim.estimate_stepwise(
             model,
             step_params=[dict(objectives='P')])
         self.assertIsInstance(
@@ -589,7 +594,7 @@ class Estimate_injection(unittest.TestCase):
             grid.PValue(id_of_batch='pq_of_consumer', P=Pval),
             grid.QValue(id_of_batch='pq_of_consumer', Q=Qval),
             grid.Output(id_of_batch='pq_of_consumer', id_of_device='consumer'))
-        init, res = estim.estimate(
+        init, res = estim.estimate_stepwise(
             model,
             step_params=[dict(objectives='P', constraints='Q')])
         self.assertIsInstance(
@@ -638,7 +643,7 @@ class Estimate_injection(unittest.TestCase):
             grid.PValue(id_of_batch='pq_of_consumer', P=Pval),
             grid.QValue(id_of_batch='pq_of_consumer', Q=Qval),
             grid.Output(id_of_batch='pq_of_consumer', id_of_device='consumer'))
-        init, res = estim.estimate(
+        init, res = estim.estimate_stepwise(
             model,
             step_params=[dict(objectives='PQ')])
         self.assertIsInstance(
@@ -688,7 +693,7 @@ class Estimate_injection(unittest.TestCase):
             # measurements
             grid.IValue(id_of_batch='i_of_consumer', I=Ival),
             grid.Output(id_of_batch='i_of_consumer', id_of_device='consumer'))
-        init, res = estim.estimate(
+        init, res = estim.estimate_stepwise(
             model,
             step_params=[dict(objectives='I')])
         self.assertIsInstance(
@@ -727,7 +732,7 @@ class Estimate_branch_injection(unittest.TestCase):
             grid.Slacknode('n_0', V=vcx_slack),
             grid.Branch('line', 'n_0', 'n_1', y_lo=1e3-1e3j, y_tr=1e-6+1e-6j),
             grid.Injection('consumer', 'n_1', P10=s.real, Q10=s.imag))
-        res, *tail = estim.estimate(model)
+        res, *tail = estim.estimate_stepwise(model)
         self.assertIsInstance(
             res, tuple, 'estimate returns tuple')
         self.assertEqual(
@@ -780,7 +785,7 @@ class Estimate_branch_injection(unittest.TestCase):
                 id_of_batch='p_at_line',
                 id_of_device='line',
                 id_of_node='n_0'))
-        init, res = estim.estimate(
+        init, res = estim.estimate_stepwise(
             model,
             step_params=[dict(objectives='Q')])
         self.assertIsInstance(
@@ -830,7 +835,8 @@ class Estimate_branch_injection(unittest.TestCase):
                 id_of_batch='q_at_line',
                 id_of_device='line',
                 id_of_node='n_0'))
-        init, res = estim.estimate(model, step_params=[dict(objectives='Q')])
+        init, res = estim.estimate_stepwise(
+            model, step_params=[dict(objectives='Q')])
         self.assertIsInstance(res, tuple, 'estimate returns tuple')
         self.assertEqual(
             len(res),
@@ -882,7 +888,8 @@ class Estimate_branch_injection(unittest.TestCase):
                 id_of_batch='p_of_line',
                 id_of_device='line',
                 id_of_node='n_0'))
-        init, res = estim.estimate(model, step_params=[dict(objectives='P')])
+        init, res = estim.estimate_stepwise(
+            model, step_params=[dict(objectives='P')])
         # check
         self.assertTrue(res[1], 'estimate succeeds')
         # maximum of residual node currents without slacknode
@@ -928,7 +935,8 @@ class Estimate_branch_injection(unittest.TestCase):
                 id_of_batch='p_of_line',
                 id_of_device='line',
                 id_of_node='n_0'))
-        init, res = estim.estimate(model, step_params=[dict(objectives='P')])
+        init, res = estim.estimate_stepwise(
+            model, step_params=[dict(objectives='P')])
         # check
         self.assertTrue(res[1], 'estimate succeeds')
         max_dev = pfc.max_residual_current(
@@ -978,7 +986,7 @@ class Estimate_branch_injection(unittest.TestCase):
                 id_of_batch='pq_of_line',
                 id_of_device='line',
                 id_of_node='n_0'))
-        init, res = estim.estimate(
+        init, res = estim.estimate_stepwise(
             model,
             step_params=[dict(objectives='PQ')])
         # check
@@ -1031,7 +1039,7 @@ class Estimate_branch_injection(unittest.TestCase):
                 id_of_batch='pq_of_line',
                 id_of_device='line',
                 id_of_node='n_0'))
-        init, res0, res = estim.estimate(
+        init, res0, res = estim.estimate_stepwise(
             model,
             step_params=[
                 dict(objectives='P'),
@@ -1081,7 +1089,7 @@ class Estimate_branch_injection(unittest.TestCase):
             # measurements
             grid.IValue(id_of_batch='i_of_consumer', I=Ival),
             grid.Output(id_of_batch='i_of_consumer', id_of_device='consumer'))
-        init, res = estim.estimate(
+        init, res = estim.estimate_stepwise(
             model,
             step_params=[dict(objectives='I')])
         # check
@@ -1117,7 +1125,7 @@ class Estimate_branch_injection(unittest.TestCase):
                 id_of_injection='consumer', part='q', id_of_factor='kq'),
             # measurement/setpoint
             grid.Vvalue(id_of_node='n_2', V=Vval))
-        init, res = estim.estimate(
+        init, res = estim.estimate_stepwise(
             model, step_params=[dict(objectives='V')])
         # check
         self.assertTrue(res[1], 'estimate succeeds')
@@ -1151,7 +1159,7 @@ class Estimate_branch_injection(unittest.TestCase):
                 id_of_injection='consumer', part='q', id_of_factor='kq'),
             # measurement/setpoint
             grid.Vvalue(id_of_node='n_2', V=Vval))
-        init, res = estim.estimate(
+        init, res = estim.estimate_stepwise(
             model, step_params=[dict(objectives='V')])
         # check
         self.assertTrue(res[1], 'estimate succeeds')
@@ -1193,7 +1201,7 @@ class Estimate_branch_injection(unittest.TestCase):
                 id_of_factor='tap_branch_1'),
             # measurement/setpoint
             grid.Vvalue(id_of_node='n_2', V=Vval))
-        init, res = estim.estimate(
+        init, res = estim.estimate_stepwise(
             model, step_params=[dict(objectives='V')])
         # check
         self.assertTrue(res[1], 'estimate succeeds')
@@ -1243,7 +1251,7 @@ class Term(unittest.TestCase):
 
     def test_diff_pq(self):
         """runs basic tests with diff-term, also test weight"""
-        res_ = estim.estimate(
+        res_ = estim.estimate_stepwise(
             self.model,
             step_params=[
                 # meet P and Q

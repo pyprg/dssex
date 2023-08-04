@@ -83,7 +83,7 @@ residual_current = pfc.calculate_residual_current(
 #%% State Estimation
 import dssex.estim as estim
 model = make_model_checked()
-res = list(estim.estimate(
+res = list(estim.estimate_stepwise(
     model,
     step_params=[
         # first step: optimize measured PQ
