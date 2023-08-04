@@ -64,15 +64,16 @@ V=1.00      y_tr=1e-6+1e-6j        y_tr=1µ+1µj            y_tr=1.3µ+1.5µj   
 import numpy as np
 import dssex.pfcnum as pfc
 import dssex.result as rt
-from egrid import make_model_checked
 import egrid.builder as grid
+from egrid import make_model_checked
+from egrid.model import get_positions
 
 model = make_model_checked(schema)
 #%% Power Flow Calculation
 # manual input
 kpq = np.full((len(model.injections), 2), 1., dtype=float)
 pos = []#[('taps', -16)]
-positions = pfc.get_positions(model.factors, pos)
+positions = get_positions(model.factors, pos)
 success, vcx = pfc.calculate_power_flow(model, kpq=kpq, positions=positions)
 # results power flow calculation
 calc_pf = rt.get_printable_result(model, vcx, kpq=kpq, positions=positions)
@@ -105,26 +106,36 @@ slack +--------+   (-Branch-------------+ n +-------||||| heating_
                           Exp_v_q=2                        Q10=10
 
 
-#.Deft(id=ltc value=0)
-#.Defk(id=kcap min=0 max=10 value=0 is_discrete=True)
+#.Deft(id=ltc type=var min=-16 max=16 value=0 is_discrete=True)
+#.Defk(id=kcap type=var min=0 max=10 value=0 is_discrete=True)
 #.Klink(id_of_injection=cap id_of_factor=kcap part=q)
 #.Vlimit(min=.95)
 """
 
 model_vvc = make_model_checked(schema_vvc)
 
-from egrid.factors import initial_values
+from egrid.model import initial_values, initial_voltage_limits
 
 ini = initial_values(model_vvc)
-
-
 messages_vvc = model_vvc.messages
 success_vvc, vcx_vvc = pfc.calculate_power_flow(model_vvc, **ini)
 calc_vvc = rt.get_printable_result(model_vvc, vcx_vvc, **ini)
+#%%VVC
 
-np.abs(vcx_vvc[model_vvc.vlimits.index_of_node]) < model_vvc.vlimits['min'].to_numpy().reshape(-1,1)
 
+def get_violated_voltages(vlimits, vcx):
+    index_of_node = vlimits.index
+    vnode_abs = np.abs(vcx_vvc[index_of_node]).reshape(-1)
+    vmin = vlimits['min'].to_numpy().reshape(-1)
+    vmax = vlimits['max'].to_numpy().reshape(-1)
+    idxs_st_min = index_of_node[vnode_abs < vmin]
+    idxs_gt_max = index_of_node[vmax < vnode_abs]
+    vtarget = np.hstack([1.05 * vmin[idxs_st_min], .95 * vmax[idxs_gt_max]])
+    idxs = np.hstack([idxs_st_min, idxs_gt_max])
+    return idxs, vtarget
 
+vlimits = initial_voltage_limits(model_vvc)
+idxs, vtarget = get_violated_voltages(vlimits, vcx_vvc)
 
 
 

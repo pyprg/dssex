@@ -66,9 +66,12 @@ class Optimize_step(unittest.TestCase):
         expressions = estim.get_expressions(model, gen_factor_symbols)
         step_data = estim.get_step_data(
             model, expressions, objectives='P')
-        succ, x_V, x_scaling = estim.optimize_step(**step_data)
+        _, voltages_ri, __ = estim.calculate_initial_powerflow(step_data)
+        succ, x_V, x_scaling = estim.optimize_step(
+            **step_data, Vnode_ri_ini=voltages_ri)
         self.assertTrue(succ, 'estimation succeeds')
-        V, k, pos = estim.get_Vcx_factors(step_data['factordata'], x_V, x_scaling)
+        V, k, pos = estim.get_Vcx_factors(
+            step_data['factordata'], x_V, x_scaling)
         self.assertAlmostEqual(
             # exclude slacks
             pfc.max_residual_current(model, V, positions=pos, kpq=k),
@@ -104,7 +107,9 @@ class Optimize_step(unittest.TestCase):
         expressions = estim.get_expressions(model, gen_factor_symbols)
         step_data = estim.get_step_data(
             model, expressions, objectives='P')
-        succ, x_V, x_scaling = estim.optimize_step(**step_data)
+        _, voltages_ri, __ = estim.calculate_initial_powerflow(step_data)
+        succ, x_V, x_scaling = estim.optimize_step(
+            **step_data, Vnode_ri_ini=voltages_ri)
         self.assertTrue(succ, 'estimation succeeds')
         V, k, pos = estim.get_Vcx_factors(step_data['factordata'], x_V, x_scaling)
         self.assertAlmostEqual(
@@ -142,7 +147,9 @@ class Optimize_step(unittest.TestCase):
         expressions = estim.get_expressions(model, gen_factor_symbols)
         step_data = estim.get_step_data(
             model, expressions, objectives='Q')
-        succ, x_V, x_scaling = estim.optimize_step(**step_data)
+        _, voltages_ri, __ = estim.calculate_initial_powerflow(step_data)
+        succ, x_V, x_scaling = estim.optimize_step(
+            **step_data, Vnode_ri_ini=voltages_ri)
         self.assertTrue(succ, 'estimation succeeds')
         V, k, pos = estim.get_Vcx_factors(step_data['factordata'], x_V, x_scaling)
         self.assertAlmostEqual(
@@ -180,7 +187,9 @@ class Optimize_step(unittest.TestCase):
         expressions = estim.get_expressions(model, gen_factor_symbols)
         step_data = estim.get_step_data(
             model, expressions, objectives='Q')
-        succ, x_V, x_scaling = estim.optimize_step(**step_data)
+        _, voltages_ri, __ = estim.calculate_initial_powerflow(step_data)
+        succ, x_V, x_scaling = estim.optimize_step(
+            **step_data, Vnode_ri_ini=voltages_ri)
         self.assertTrue(succ, 'estimation succeeds')
         V, k, pos = estim.get_Vcx_factors(step_data['factordata'], x_V, x_scaling)
         self.assertAlmostEqual(
@@ -218,7 +227,9 @@ class Optimize_step(unittest.TestCase):
         expressions = estim.get_expressions(model, gen_factor_symbols)
         step_data = estim.get_step_data(
             model, expressions, objectives='I')
-        succ, x_V, x_scaling = estim.optimize_step(**step_data)
+        _, voltages_ri, __ = estim.calculate_initial_powerflow(step_data)
+        succ, x_V, x_scaling = estim.optimize_step(
+            **step_data, Vnode_ri_ini=voltages_ri)
         self.assertTrue(succ, 'estimation succeeds')
         V, k, pos = estim.get_Vcx_factors(step_data['factordata'], x_V, x_scaling)
         self.assertAlmostEqual(
@@ -256,7 +267,9 @@ class Optimize_step(unittest.TestCase):
         expressions = estim.get_expressions(model, gen_factor_symbols)
         step_data = estim.get_step_data(
             model, expressions, objectives='I')
-        succ, x_V, x_scaling = estim.optimize_step(**step_data)
+        _, voltages_ri, __ = estim.calculate_initial_powerflow(step_data)
+        succ, x_V, x_scaling = estim.optimize_step(
+            **step_data, Vnode_ri_ini=voltages_ri)
         self.assertTrue(succ, 'estimation succeeds')
         V, k, pos = estim.get_Vcx_factors(step_data['factordata'], x_V, x_scaling)
         inj_res = rt.calculate_injection_results(model, V, kpq=k)
@@ -293,7 +306,9 @@ class Optimize_step(unittest.TestCase):
         expressions = estim.get_expressions(model, gen_factor_symbols)
         step_data = estim.get_step_data(
             model, expressions, objectives='V')
-        succ, x_V, x_scaling = estim.optimize_step(**step_data)
+        _, voltages_ri, __ = estim.calculate_initial_powerflow(step_data)
+        succ, x_V, x_scaling = estim.optimize_step(
+            **step_data, Vnode_ri_ini=voltages_ri)
         self.assertTrue(succ, 'estimation succeeds')
         V, k, pos = estim.get_Vcx_factors(
             step_data['factordata'], x_V, x_scaling)
@@ -1253,7 +1268,7 @@ class Term(unittest.TestCase):
         self.assertLess(kp_0, 1.)
         self.assertGreater(kq_0, 1.)
         # meet P and Q + keep diff 'kp - kq' small
-        #   scales neither P nor Q sufficiently in order to meet given P and Q, 
+        #   scales neither P nor Q sufficiently in order to meet given P and Q,
         #   kp is to great, kq to small
         inj_1 = res[1]['injections']
         P_pu_1, Q_pu_1, kp_1, kq_1 = (

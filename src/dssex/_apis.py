@@ -58,7 +58,7 @@ def calculate_pf(model, step_params=()):
           'L' - objective function is created with terms for losses of branches
           'C' - objective function is created with terms for cost
           'T' - objective function is created with terms of model.terms
-        * constraints, ''|'P'|'Q'|'I'|'V'|'B' (also string of characters)
+        * constraints, ''|'P'|'Q'|'I'|'V'|'U' (also string of characters)
           'P' - adds constraints keeping the initial values
                 of active powers at the location of given
                 active power values during this step
@@ -71,7 +71,7 @@ def calculate_pf(model, step_params=()):
           'V' - adds constraints keeping the initial values
                 of voltages at the location of given
                 voltage values during this step
-          'B' - consider voltage limits (if any, 'B' for bounds)
+          'U' - consider voltage limits (if any, 'U' for bounds)
 
     Returns
     -------

@@ -413,7 +413,9 @@ class Power_flow_calculation_basic2(unittest.TestCase):
             model.factors.gen_factordata.index)
         expressions = estim.get_expressions(model, gen_factor_symbols)
         step_data = estim.get_step_data(model, expressions)
-        succ_estim, Vnode_ri_estim, _ = estim.optimize_step(**step_data)
+        _, voltages_ri, __ = estim.calculate_initial_powerflow(step_data)
+        succ_estim, Vnode_ri_estim, _ = estim.optimize_step(
+            **step_data, Vnode_ri_ini=voltages_ri)
         self.assertTrue(succ_estim, 'estimation succeeds')
         Vnode_cx_estim = estim.ri_to_complex(Vnode_ri_estim)
         succ_pfc, Vnode_cx_pfc = pfc.calculate_power_flow(

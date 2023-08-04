@@ -22,14 +22,15 @@ Created on Sat Sep 10 11:28:52 2022
 import casadi
 import pandas as pd
 import numpy as np
+import dssex.factors as ft
 from functools import partial
 from collections import defaultdict
+from itertools import count
 from scipy.sparse import coo_matrix
 from egrid.model import get_vlimits_for_step, get_terms_for_step
 from dssex.injections import calculate_cubic_coefficients
 from dssex.batch import (
     get_values, get_batches, value_of_voltages, get_batch_values)
-import dssex.factors as ft
 # square of voltage magnitude, default value, minimum value for load curve,
 #   if value is below _VMINSQR the load curves for P and Q converge
 #   towards a linear load curve which is 0 when V=0; P(V=0)=0, Q(V=0)=0
@@ -1637,8 +1638,8 @@ def get_batch_constraints(values_of_constraints, expressions_of_batches):
         return casadi.SX(values_notna.to_numpy()) - expr
     return _SX_0r1c
 
-def get_optimize_vk(model, expressions):
-    """Prepares a function which optimizes node voltages and scaling factors.
+def get_optimize(model, expressions):
+    """Prepares a function which optimizes node voltages and factors.
 
     Parameters
     ----------
@@ -1668,7 +1669,7 @@ def get_optimize_vk(model, expressions):
     count_of_vri = 2 * model.shape_of_Y[0]
     Vmin = [-np.inf] * count_of_vri
     Vmax = [np.inf] * count_of_vri
-    def optimize_vk(
+    def optimize(
         Vnode_ri_ini, factordata, Inode_inj, objective, constraints, lbg, ubg):
         """Solves an optimization task.
 
@@ -1739,7 +1740,7 @@ def get_optimize_vk(model, expressions):
             x0=ini, p=values_of_parameters, lbg=lbg_, ubg=ubg_,
             lbx=lbx, ubx=ubx)
         return solver.stats()['success'], r['x']
-    return optimize_vk
+    return optimize
 
 def _rm_slack_entries(expr, count_of_slacks):
     """Removes rows of slack nodes.
@@ -1759,7 +1760,7 @@ def _rm_slack_entries(expr, count_of_slacks):
     return casadi.vertcat(
         upper[count_of_slacks:, :], lower[count_of_slacks:, :])
 
-def get_optimize_vk2(model, expressions, positions=None):
+def get_optimize2(model, expressions, positions=None):
     """Prepares a function which optimizes node voltages and scaling factors.
 
     Processes slack differently than function 'get_optimize_vk'. Slackrows
@@ -1802,7 +1803,7 @@ def get_optimize_vk2(model, expressions, positions=None):
     Vmax = [np.inf] * count_of_vri
     # constraints
     Y_by_V = _rm_slack_entries(expressions['Y_by_V'], count_of_slacks)
-    def optimize_vk(
+    def optimize(
         Vnode_ri_ini, factordata, Inode_inj, objective,
         constraints, lbg, ubg):
         """Solves an optimization task.
@@ -1878,7 +1879,7 @@ def get_optimize_vk2(model, expressions, positions=None):
         return (
             solver.stats()['success'],
             casadi.vertcat(Vre_slack, parta, Vim_slack, partb))
-    return optimize_vk
+    return optimize
 
 #
 # organize data
@@ -2086,14 +2087,16 @@ def get_step_data(
         other characters are ignored
     constraints: str
         optional, default ''
-        string of characters 'I'|'P'|'Q'|'V' or empty string ''
-        addresses quantities of batches (measured values or setpoints)
-        to be kept constant, the values are obtained from a previous
-        calculation/initialization step, the characters are symbols for
-        given current magnitude, active power, reactive power or
-        magnitude of voltage, other characters are ignored,
-        values must be given with argument 'values_of_constraints',
-        conditions must be satisfied
+        string of characters 'I'|'P'|'Q'|'V'|'U' or empty string ''
+        addresses quantities of batches (except 'U',
+        measured values or setpoints) to be kept constant, the values are
+        obtained from a previous calculation/initialization step,
+        'U' triggers voltage constraints of, the characters are symbols for
+        given current magnitude, active power, reactive power,
+        magnitude of voltage or voltage limits, other characters,
+        are ignored, values of constraints ('IPQV') must be given with
+        argument 'values_of_constraints', constraints, including voltage
+        constraints, must be satisfied with initial values
     values_of_constraints: tuple
         optional, default False
         * [0] numpy.array<str>, quantities,
@@ -2131,7 +2134,7 @@ def get_step_data(
         _SX_0r1c
         if values_of_constraints is None or len(expr_of_batches[0])==0 else
         get_batch_constraints(values_of_constraints, expr_of_batches))
-    process_vlimits = 'B' in constraints
+    process_vlimits = 'U' in constraints
     vlimits, lbg_v, ubg_v = _get_vlimits(
         process_vlimits, model, expressions['Vnode_syms'][:,2], step)
     constraints = casadi.vertcat(batch_constraints, vlimits)
@@ -2146,7 +2149,7 @@ def get_step_data(
         Inode_inj=Inode_inj, objective=objective,
         constraints=constraints, lbg=lbg, ubg=ubg)
 
-def get_step_data_fns(model, gen_factor_symbols):
+def get_step_data_fn(model, gen_factor_symbols):
     """Creates two functions for generating step specific data.
 
     Function 'ini_step_data' creates the step_data structure for the first run
@@ -2164,23 +2167,15 @@ def get_step_data_fns(model, gen_factor_symbols):
     Returns
     -------
     tuple
-        * ini_step_data: function
-            ()->(Stepdata), optional parameters:
-              objectives: str
-                  optional, default ''
-                  string of characters 'I'|'P'|'Q'|'V'|'L'|'C'
-                  or empty string '',
-                  addresses quantities (of measurements/setpoints),
-                  branch losses and cost
-              step: int
-                  optional, default 0
-              f_prev: factors calculated by previous step
-                  optional, default None
-              constraints: str
-                  optional, default ''
-                  string of characters 'I'|'P'|'Q'|'V' or empty string ''
-              value_of_constraints: data made by function 'get_batch_values'
-                  optional, default None
+        * dict:
+            * ['model'], egrid.model.Model
+            * ['expressions'], dict
+            * ['factordata'], factors.Factordata
+            * ['Inode_inj'], casadi.SX
+            * ['objective'], str
+            * ['constraints'], str
+            * ['lbg'], casadi.DM
+            * ['ubg'], casadi.DM
         * next_step_data: function
             (int, Stepdata, casadi.DM, casadi.DM)->(Stepdata), parameters:
               step: int
@@ -2217,24 +2212,22 @@ def get_step_data_fns(model, gen_factor_symbols):
             string of characters 'I'|'P'|'Q'|'V'|'L'|'C'|'T' or empty string ''
         constraints: str (optional)
             optional, default ''
-            string of characters 'I'|'P'|'Q'|'V' or empty string ''
+            string of characters 'I'|'P'|'Q'|'V'|'U' or empty string ''
         floss: float
             optional, default is 1.0
             multiplier for branch losses
 
         Returns
         -------
-        tuple
-            * dict
-                * ['model']
-                * ['expressions']
-                * ['factordata']
-                * ['Inode_inj']
-                * ['objective'], str
-                * ['constraints'], str
-                * ['lbg']
-                * ['ubg']
-            * numpy.array, values of val_factors"""
+        dict
+            * ['model'], egrid.model.Model
+            * ['expressions'], dict
+            * ['factordata'], factors.Factordata
+            * ['Inode_inj'], casadi.SX
+            * ['objective'], str
+            * ['constraints'], str
+            * ['lbg'], casadi.DM
+            * ['ubg'], casadi.DM"""
         # calculate values of previous step
         voltages_ri2 = ri_to_ri2(voltages_ri)
         factordata = ft.make_factordata(model, gen_factor_symbols, step, k)
@@ -2248,11 +2241,11 @@ def get_step_data_fns(model, gen_factor_symbols):
             constraints=constraints,
             values_of_constraints=batch_values,
             floss=floss)
-    return make_step_data, next_step_data
+    return make_step_data(step=0), next_step_data
 
 def optimize_step(
     *, model, expressions, factordata, Inode_inj, objective,
-    constraints, lbg, ubg, Vnode_ri_ini=None):
+    constraints, lbg, ubg, Vnode_ri_ini):
     """Runs one optimization step.
 
     Calculates initial voltages if not provided.
@@ -2286,7 +2279,6 @@ def optimize_step(
     ubg: casadi.DM (shape m,1)
         upper bound of additional constraints
     Vnode_ri_ini: array_like (shape 2n,1)
-        optional, default is None
         initial node voltages separated real and imaginary values
 
     Returns
@@ -2298,12 +2290,7 @@ def optimize_step(
         n values for real part then n values for imaginary part
     factors : numpy.array, float (shape m,1)
         values for factors"""
-    if Vnode_ri_ini is None:
-        # power flow calculation for initial voltages
-        succ, Vnode_ri_ini = calculate_power_flow2(
-            model, expressions, factordata, Inode_inj)
-        assert succ, 'calculation of power flow failed'
-    optimize = get_optimize_vk(model, expressions)
+    optimize = get_optimize(model, expressions)
     succ, x = optimize(
         Vnode_ri_ini, factordata, Inode_inj, objective, constraints, lbg, ubg)
     # result processing
@@ -2315,6 +2302,106 @@ def optimize_step(
         return succ, v.toarray(), f.toarray()
     # just voltages, no factors
     return succ, x.toarray(), _EMPTY_0r1c
+
+#
+# api
+#
+
+def calculate_initial_powerflow(ini_data):
+    """Calculates power flow.
+
+    Wraps calculate_power_flow2. Provides a modified signature.
+
+    Parameters
+    ----------
+    ini_data: dict
+        * ['model'], egrid.model.Model
+        * ['expressions'], dict
+        * ['factordata'], factors.Factordata
+        * ['Inode_inj'], casadi.SX
+        * ['objective'], str
+        * ['constraints'], str
+        * ['lbg'], casadi.DM
+        * ['ubg'], casadi.DM
+
+    Returns
+    -------
+    tuple
+        * bool, success?
+        * numpy.array (nx1),float, node voltages, real then imaginary part
+        * numpy.array (mx1), float values_of_vars"""
+    factordata = ini_data['factordata']
+    succ, voltages_ri = calculate_power_flow2(
+        ini_data['model'],
+        ini_data['expressions'],
+        factordata,
+        ini_data['Inode_inj'])
+    values_of_vars = factordata.values_of_vars
+    return succ, voltages_ri, values_of_vars
+
+def _make_step_data(
+        step_data_fn, step_params, step,
+        succ, voltages_ri, values_of_vars, factordata):
+    """Controls the optimization loop.
+
+    Creates data for steps. Optimization loop stops when '_make_step_data'
+    returns None.
+
+    The function uses predefined step_params.
+
+    Parameters
+    ----------
+    step_data_fn : TYPE
+        DESCRIPTION.
+    step_params : TYPE
+        DESCRIPTION.
+    step : TYPE
+        DESCRIPTION.
+    succ : TYPE
+        DESCRIPTION.
+    voltages_ri : TYPE
+        DESCRIPTION.
+    values_of_vars : TYPE
+        DESCRIPTION.
+    factordata : TYPE
+        DESCRIPTION.
+
+    Returns
+    -------
+    dict
+        * ['model'], egrid.model.Model
+        * ['expressions'], dict
+        * ['factordata'], factors.Factordata
+        * ['Inode_inj'], casadi.SX
+        * ['objective'], str
+        * ['constraints'], str
+        * ['lbg'], casadi.DM
+        * ['ubg'], casadi.DM"""
+    if step < len(step_params) and succ:
+        kv = step_params[step]
+        objectives = kv.get('objectives', '').upper()
+        constraints = kv.get('constraints', '').upper()
+        floss = kv.get('floss', 1.)
+        factor_values = ft.get_factor_values(factordata, values_of_vars)
+        return step_data_fn(
+            step=step, voltages_ri=voltages_ri, k=factor_values,
+            objectives=objectives, constraints=constraints, floss=floss)
+    return None
+
+def optimization_loop(ini_data, make_step_data):
+    factordata = ini_data['factordata']
+    succ, voltages_ri, values_of_vars = calculate_initial_powerflow(ini_data)
+    yield -1, succ, voltages_ri, values_of_vars, factordata
+    for step in count():
+        step_data = make_step_data(
+            step, succ, voltages_ri, values_of_vars, factordata)
+        if step_data is None:
+            return
+        factordata = step_data['factordata']
+        # estimation
+        succ, voltages_ri, values_of_vars = optimize_step(
+            **step_data, Vnode_ri_ini=voltages_ri)
+        yield step, succ, voltages_ri, values_of_vars, factordata
 
 def optimize_steps(model, gen_factorsymbols, step_params=(), vminsqr=_VMINSQR):
     """Estimates grid status stepwise.
@@ -2331,7 +2418,7 @@ def optimize_steps(model, gen_factorsymbols, step_params=(), vminsqr=_VMINSQR):
               'floss': float, factor for losses}
             if empty the function calculates power flow,
             each dict triggers an estimation step
-        * objectives, ''|'P'|'Q'|'I'|'V'|'L'|'C' (also string of characters)
+        * objectives, ''|'P'|'Q'|'I'|'V'|'L'|'C'|'T' (string of characters)
           'P' - objective function is created with terms for active power
           'Q' - objective function is created with terms for reactive power
           'I' - objective function is created with terms for electric current
@@ -2339,7 +2426,7 @@ def optimize_steps(model, gen_factorsymbols, step_params=(), vminsqr=_VMINSQR):
           'L' - objective function is created with terms for losses in branches
           'C' - objective function is created with terms for cost
           'T' - objective function is created with terms of model.terms
-        * constraints, ''|'P'|'Q'|'I'|'V'|'B' (string or tuple of characters)
+        * constraints, ''|'P'|'Q'|'I'|'V'|'U' (string of characters)
           'P' - adds constraints keeping the initial values
                 of active powers at the location of given values
           'Q' - adds constraints keeping the initial values
@@ -2348,7 +2435,7 @@ def optimize_steps(model, gen_factorsymbols, step_params=(), vminsqr=_VMINSQR):
                 of electric current at the location of given values
           'V' - adds constraints keeping the initial values
                 of voltages at the location of given values
-          'B' - consider voltage limits (if any)
+          'U' - consider voltage limits (if any)
     vminsqr: float (default _VMINSQR)
         minimum voltage at injection, if the voltage is below this limit
         affected injections are interpolated and do not follow the given
@@ -2360,36 +2447,17 @@ def optimize_steps(model, gen_factorsymbols, step_params=(), vminsqr=_VMINSQR):
     ------
     tuple
         * int, index of estimation step,
-          (-1 for initial power flow calculation, 0 for first estimation)
+          (-1 for initial power flow calculation, 0 for first estimation, ...)
         * bool, success?
         * voltages_ri, casadi.DM (shape 2n,1)
           calculated node voltages, real voltages then imaginary voltages
         * k, casadi.DM (shape m,1)
-          factors for injections
+          factors
         * factordata, Factordata,
           factor data of step"""
-    make_step_data, next_step_data = get_step_data_fns(
-        model, gen_factorsymbols)
-    step_data = make_step_data(step=0)
-    factordata = step_data['factordata']
-    # power flow calculation for initial voltages
-    succ, voltages_ri = calculate_power_flow2(
-        model, step_data['expressions'], factordata, step_data['Inode_inj'])
-    values_of_vars = factordata.values_of_vars
-    yield -1, succ, voltages_ri, values_of_vars, factordata
-    for step, kv in enumerate(step_params):
-        objectives = kv.get('objectives', '').upper()
-        constraints = kv.get('constraints', '').upper()
-        floss = kv.get('floss', 1.)
-        factor_values = ft.get_factor_values(factordata, values_of_vars)
-        step_data = next_step_data(
-            step=step, voltages_ri=voltages_ri, k=factor_values,
-            objectives=objectives, constraints=constraints, floss=floss)
-        factordata = step_data['factordata']
-        # estimation
-        succ, voltages_ri, values_of_vars = optimize_step(
-            **step_data, Vnode_ri_ini=voltages_ri)
-        yield step, succ, voltages_ri, values_of_vars, factordata
+    ini_data, step_data_fn = get_step_data_fn(model, gen_factorsymbols)
+    make_step_data = partial(_make_step_data, step_data_fn, step_params)
+    yield from optimization_loop(ini_data, make_step_data)
 
 def get_Vcx_factors(factordata, voltages_ri, factorvalues):
     """Helper. Arranges solver result.
@@ -2431,7 +2499,9 @@ def estimate(model, step_params=(), vminsqr=_VMINSQR):
     model: egrid.model.Model
 
     step_params: array_like
-        dict {'objectives': objectives, 'constraints': constraints}
+        dict {'objectives': objectives,
+              'constraints': constraints,
+              'floss': float, factor for losses}
             if empty the function calculates power flow,
             each dict triggers an estimation step
         * objectives, ''|'P'|'Q'|'I'|'V'|'L'|'C'|'T' (also string of characters)
@@ -2442,7 +2512,7 @@ def estimate(model, step_params=(), vminsqr=_VMINSQR):
           'L' - objective function is created with terms for losses of branches
           'C' - objective function is created with terms for cost
           'T' - objective function is created with terms of model.terms
-        * constraints, ''|'P'|'Q'|'I'|'V'|'B' (also string of characters)
+        * constraints, ''|'P'|'Q'|'I'|'V'|'U' (also string of characters)
           'P' - adds constraints keeping the initial values
                 of active powers at the location of given
                 active power values during this step
@@ -2455,7 +2525,7 @@ def estimate(model, step_params=(), vminsqr=_VMINSQR):
           'V' - adds constraints keeping the initial values
                 of voltages at the location of given
                 voltage values during this step
-          'B' - consider voltage limits (if any, 'B' for bounds)
+          'U' - consider voltage limits (if any, 'U' for bounds)
     vminsqr: float (default _VMINSQR)
         minimum
 
