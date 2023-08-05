@@ -25,7 +25,7 @@ import numpy as np
 import dssex.factors as ft
 from functools import partial
 from collections import defaultdict
-from itertools import count
+from itertools import count, chain
 from scipy.sparse import coo_matrix
 from egrid.model import get_vlimits_for_step, get_terms_for_step
 from dssex.injections import calculate_cubic_coefficients
@@ -411,10 +411,10 @@ def _create_gb_mn_tot_terms(terminals, terminalfactors, gen_factor_symbols):
     -------
     casadi.SX
         * 'gb_mn_tot', conductance g / susceptance b per branch terminal
-                * gb_mn_tot[:,0] g_mn, mutual conductance
-                * gb_mn_tot[:,1] b_mn, mutual susceptance
-                * gb_mn_tot[:,2] g_tot, self conductance + mutual conductance
-                * gb_mn_tot[:,3] b_tot, self susceptance + mutual susceptance
+            * gb_mn_tot[:,0] g_mn, mutual conductance
+            * gb_mn_tot[:,1] b_mn, mutual susceptance
+            * gb_mn_tot[:,2] g_tot, self conductance + mutual conductance
+            * gb_mn_tot[:,3] b_tot, self susceptance + mutual susceptance
     """
     # create gb_mn_mm
     #   g_mn, b_mn, g_mm, b_mm
@@ -462,10 +462,10 @@ def create_v_symbols_gb_expressions(model, gen_factor_symbols):
         * 'Vslack_syms', casadi.SX, symbols of slack voltages,
            Vslack_syms[:,0] real part, Vslack_syms[:,1] imaginary part
         * 'gb_mn_tot', conductance g / susceptance b per branch terminal
-                * gb_mn_tot[:,0] g_mn, mutual conductance
-                * gb_mn_tot[:,1] b_mn, mutual susceptance
-                * gb_mn_tot[:,2] g_tot, self conductance + mutual conductance
-                * gb_mn_tot[:,3] b_tot, self susceptance + mutual susceptance
+            * gb_mn_tot[:,0] g_mn, mutual conductance
+            * gb_mn_tot[:,1] b_mn, mutual susceptance
+            * gb_mn_tot[:,2] g_tot, self conductance + mutual conductance
+            * gb_mn_tot[:,3] b_tot, self susceptance + mutual susceptance
         * 'Y_by_V', casadi.SX, expression for Y @ V"""
     Vnode_syms = create_V_symbols(model.shape_of_Y[0])
     count_of_slacks = model.count_of_slacks
@@ -1331,7 +1331,7 @@ def _get_expression_function(name):
     return _expression_functions.get(name, lambda _:_SX_0r1c)
 
 def _get_symbols(symbols, id_to_idx, ids):
-    """Fetches symbols for given IDs
+    """Fetches symbols for given IDs.
 
     Parameters
     ----------
@@ -1672,6 +1672,8 @@ def get_optimize(model, expressions):
     def optimize(
         Vnode_ri_ini, factordata, Inode_inj, objective, constraints, lbg, ubg):
         """Solves an optimization task.
+
+        Calls 'casadi.nlpsol'.
 
         Parameters
         ----------
@@ -2248,8 +2250,6 @@ def optimize_step(
     constraints, lbg, ubg, Vnode_ri_ini):
     """Runs one optimization step.
 
-    Calculates initial voltages if not provided.
-
     Parameters
     ----------
     model: egrid.model.Model
@@ -2283,12 +2283,12 @@ def optimize_step(
 
     Returns
     -------
-    succ : bool
+    succ: bool
         success?
-    voltages_ri : numpy.array, complex (shape 2n,1)
+    voltages_ri: numpy.array, complex (shape 2n,1)
         calculated node voltages for n nodes,
         n values for real part then n values for imaginary part
-    factors : numpy.array, float (shape m,1)
+    factors: numpy.array, float (shape m,1)
         values for factors"""
     optimize = get_optimize(model, expressions)
     succ, x = optimize(
@@ -2351,20 +2351,27 @@ def _make_step_data(
 
     Parameters
     ----------
-    step_data_fn : TYPE
-        DESCRIPTION.
-    step_params : TYPE
-        DESCRIPTION.
-    step : TYPE
-        DESCRIPTION.
-    succ : TYPE
-        DESCRIPTION.
-    voltages_ri : TYPE
-        DESCRIPTION.
-    values_of_vars : TYPE
-        DESCRIPTION.
-    factordata : TYPE
-        DESCRIPTION.
+    step_data_fn: function
+        (step, voltages_ri, factor_values, objectives, constraints, floss) ->
+        (dict)
+    step_params: array_like
+        dict {'objectives': objectives,
+              'constraints': constraints,
+              'floss': float, factor for losses}
+    step: int
+        index of step
+    succ: bool
+        success?
+    voltages_ri : casadi.DM (shape 2n,1)
+        real part of node voltages, imaginary part of node voltages
+    values_of_vars: casadi.DM
+        initial values of decision variables
+    factordata: Factordata
+        * .values_of_consts,
+            array_like, float, column vector, values for consts
+        * .var_const_to_factor,
+            array_like int, index_of_factor=>index_of_var_const
+            converts var_const to factor (var_const[var_const_to_factor])
 
     Returns
     -------
@@ -2388,10 +2395,42 @@ def _make_step_data(
             objectives=objectives, constraints=constraints, floss=floss)
     return None
 
-def optimization_loop(ini_data, make_step_data):
-    factordata = ini_data['factordata']
-    succ, voltages_ri, values_of_vars = calculate_initial_powerflow(ini_data)
-    yield -1, succ, voltages_ri, values_of_vars, factordata
+def _optimization_loop(
+        make_step_data, succ, voltages_ri, values_of_vars, factordata):
+    """Repeatedly calls 'optimize_step' with data provided by 'make_step_data'.
+
+    The loop is controlled by 'make_step_data'. The loop stops once
+    'make_step_data' returns None.
+
+    Parameters
+    ----------
+    make_step_data: function
+        (step, success, voltages_ri, values_of_vars, factordata) -> (dict)
+    succ: bool
+        success
+    voltages_ri: casadi.DM
+        voltages at nodes, first real voltages then imaginary voltages
+    values_of_vars: casadi.DM
+        initial values of decision variables
+    factordata: Factordata
+        * .values_of_consts,
+            array_like, float, column vector, values for consts
+        * .var_const_to_factor,
+            array_like int, index_of_factor=>index_of_var_const
+            converts var_const to factor (var_const[var_const_to_factor])
+
+    Yields
+    ------
+    tuple
+        * int, index of estimation step,
+          (initial power flow calculation result is -1,
+           first estimation is 0, ...)
+        * bool, success?
+        * voltages_cx : numpy.array, complex (shape n,1)
+            calculated complex node voltages
+        * numpy.array, float (shape m,2)
+            values of factors
+        * tappositions"""
     for step in count():
         step_data = make_step_data(
             step, succ, voltages_ri, values_of_vars, factordata)
@@ -2420,10 +2459,10 @@ def get_Vcx_factors(factordata, voltages_ri, factorvalues):
         * .var_const_to_kq
             int, converts var_const to kq, one reactive power scaling factor
             for each injection (var_const[var_const_to_kq])
-    voltages_ri : casadi.DM (shape 2n,1)
+    voltages_ri: casadi.DM (shape 2n,1)
         real part of node voltages, imaginary part of node voltages
     factorvalues: casasdi.DM
-        values of decision variables
+        values of factor decision variables
 
     Returns
     -------
@@ -2458,10 +2497,10 @@ def estimate_stepwise(model, step_params=(), vminsqr=_VMINSQR):
           'T' - objective function is created with terms of model.terms
         * constraints, ''|'P'|'Q'|'I'|'V'|'U' (also string of characters)
           'P' - adds constraints keeping the initial values
-                of active powers at the location of given
+                of active power at the location of given
                 active power values during this step
           'Q' - adds constraints keeping the initial values
-                of reactive powers at the location of given
+                of reactive power at the location of given
                 reactive power values during this step
           'I' - adds constraints keeping the initial values
                 of electric current at the location of given
@@ -2469,7 +2508,7 @@ def estimate_stepwise(model, step_params=(), vminsqr=_VMINSQR):
           'V' - adds constraints keeping the initial values
                 of voltages at the location of given
                 voltage values during this step
-          'U' - consider voltage limits (if any, 'U' for bounds)
+          'U' - consider voltage limits
     vminsqr: float (default _VMINSQR)
         minimum
 
@@ -2479,18 +2518,25 @@ def estimate_stepwise(model, step_params=(), vminsqr=_VMINSQR):
         tuple
             * int, index of estimation step,
               (initial power flow calculation result is -1,
-               first estimation is 0)
+               first estimation is 0, ...)
             * bool, success?
             * voltages_cx : numpy.array, complex (shape n,1)
                 calculated complex node voltages
-            * pq_factors : numpy.array, float (shape m,2)
-                scaling factors for injections
+            * numpy.array, float (shape m,2)
+                values of factors
             * tappositions"""
     gen_factorsymbols = ft._create_symbols_with_ids(
         model.factors.gen_factordata.index)
     ini_data, step_data_fn = get_step_data_fn(model, gen_factorsymbols)
+    factordata = ini_data['factordata']
+    succ, voltages_ri, values_of_vars = calculate_initial_powerflow(ini_data)
+    pfc_res = (
+        -1, succ, *get_Vcx_factors(factordata, voltages_ri, values_of_vars))
     make_step_data = partial(_make_step_data, step_data_fn, step_params)
-    return (
-        (step, succ, *get_Vcx_factors(factordata, v_ri, factorvalues))
+    return chain(
+        [pfc_res],
+        ((step, succ, *get_Vcx_factors(factordata, v_ri, factorvalues))
         for step, succ, v_ri, factorvalues, factordata in
-            optimization_loop(ini_data, make_step_data))
+            _optimization_loop(
+                make_step_data, succ, voltages_ri, values_of_vars,
+                factordata)))
