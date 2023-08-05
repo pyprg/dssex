@@ -2473,17 +2473,19 @@ def estimate_stepwise(model, step_params=(), vminsqr=_VMINSQR):
     vminsqr: float (default _VMINSQR)
         minimum
 
-    Yields
-    ------
-    tuple
-        * int, index of estimation step,
-          (initial power flow calculation result is -1, first estimation is 0)
-        * bool, success?
-        * voltages_cx : numpy.array, complex (shape n,1)
-            calculated complex node voltages
-        * pq_factors : numpy.array, float (shape m,2)
-            scaling factors for injections
-        * tappositions"""
+    Returns
+    -------
+    iterator
+        tuple
+            * int, index of estimation step,
+              (initial power flow calculation result is -1,
+               first estimation is 0)
+            * bool, success?
+            * voltages_cx : numpy.array, complex (shape n,1)
+                calculated complex node voltages
+            * pq_factors : numpy.array, float (shape m,2)
+                scaling factors for injections
+            * tappositions"""
     gen_factorsymbols = ft._create_symbols_with_ids(
         model.factors.gen_factordata.index)
     ini_data, step_data_fn = get_step_data_fn(model, gen_factorsymbols)
