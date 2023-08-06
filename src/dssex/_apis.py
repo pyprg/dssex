@@ -47,31 +47,38 @@ def calculate_pf(model, step_params=()):
     model: egrid.model.Model
         data of electric distribution network
     step_params: array_like
-        dict {'objectives': objectives, 'constraints': constraints}
+        dict
+
+            {'objectives': objectives,
+            'constraints': constraints,
+            'floss': float, factor for losses}
+
             if empty the function calculates power flow,
             each dict triggers an estimation step
-        * objectives, ''|'P'|'Q'|'I'|'V'|'L'|'C'|'T' (also string of characters)
-          'P' - objective function is created with terms for active power
-          'Q' - objective function is created with terms for reactive power
-          'I' - objective function is created with terms for electric current
-          'V' - objective function is created with terms for voltage
-          'L' - objective function is created with terms for losses of branches
-          'C' - objective function is created with terms for cost
-          'T' - objective function is created with terms of model.terms
-        * constraints, ''|'P'|'Q'|'I'|'V'|'U' (also string of characters)
-          'P' - adds constraints keeping the initial values
-                of active powers at the location of given
-                active power values during this step
-          'Q' - adds constraints keeping the initial values
-                of reactive powers at the location of given
-                reactive power values during this step
-          'I' - adds constraints keeping the initial values
-                of electric current at the location of given
-                current values during this step
-          'V' - adds constraints keeping the initial values
-                of voltages at the location of given
-                voltage values during this step
-          'U' - consider voltage limits
+
+        * objectives, string of ''|'P'|'Q'|'I'|'V'|'U'|'L'|'C'|'T',
+          objective function is created with terms:
+
+          * 'P' for active power
+          * 'Q' for reactive power
+          * 'I' for electric current
+          * 'V' for voltage
+          * 'U' for voltage violation
+          * 'L' for losses of branches
+          * 'C' for cost
+          * 'T' of model.terms
+
+        * constraints, string of ''|'P'|'Q'|'I'|'V'|'U', adds constraints:
+
+          * 'P' keeping the initial values of active power at the location of
+             given active power values during this step
+          * 'Q' keeping the initial values of reactive power at the location of
+             given reactive power values during this step
+          * 'I' keeping the initial values of electric current at the location
+             of given current values during this step
+          * 'V' keeping the initial values of voltages at the location of given
+            voltage values during this step
+          * 'U' considering voltage limits
 
     Returns
     -------

@@ -107,49 +107,46 @@ slack +--------+   (-Branch-------------+ n +-------||||| heating_
 
 
 #.Deft(id=ltc type=var min=-16 max=16 value=0 is_discrete=True)
-#.Defk(id=kcap type=var min=0 max=10 value=0 is_discrete=True)
+#.Defk(id=kcap type=var min=0 max=5 value=0 is_discrete=True)
 #.Klink(id_of_injection=cap id_of_factor=kcap part=q)
 #.Vlimit(min=.95)
 """
 
 model_vvc = make_model_checked(schema_vvc)
+messages_vvc = model_vvc.messages
+
+res_vvc = list(estim.estimate_stepwise(
+    model_vvc,
+    step_params=[
+        # first step: minimize voltage violations
+        dict(objectives='U', constraints='U')]))
+calc_vvc = list(rt.get_printable_results(model_vvc, res_vvc))
+
+
+
+#%%
 
 import dssex.factors as ft
-from egrid.model import initial_voltage_limits
 from dssex.estim import (
     get_step_data_fn, calculate_initial_powerflow, get_Vcx_factors)
 
-messages_vvc = model_vvc.messages
 #initial power flow calculation
 gen_factorsymbols = ft._create_symbols_with_ids(
     model_vvc.factors.gen_factordata.index)
 ini_data, step_data_fn = get_step_data_fn(model_vvc, gen_factorsymbols)
 factordata = ini_data['factordata']
 succ, voltages_ri, values_of_vars = calculate_initial_powerflow(ini_data)
-vcx_vvc, kp, positions = get_Vcx_factors(factordata, voltages_ri, values_of_vars)
+vcx_vvc, kp, positions = get_Vcx_factors(
+    factordata, voltages_ri, values_of_vars)
 pfc_res = -1, succ, vcx_vvc, kp, positions
 # check voltage violations
 from dssex.estim import (
-    optimize_step, get_expressions, get_vprofile_step_data, get_violated_nodes)
-
-
-
+    optimize, get_expressions, get_step_data)
 expressions = get_expressions(model_vvc, gen_factorsymbols)
-
-#%%
-vlimits = initial_voltage_limits(model_vvc)
-violated_nodes, target_voltages = get_violated_nodes(vlimits, vcx_vvc)[-1]()
-
-#%%
-
-if violated_nodes.size:
-    # at least one voltage limit is violated
-    #   insert a step for drawing voltages into the not violated range
-    vprofile_step_data = get_vprofile_step_data(
-        model_vvc, expressions, violated_nodes=violated_nodes,
-        target_voltages=target_voltages)
-    succ, voltages_ri2, values_of_vars = optimize_step(
-            **vprofile_step_data, Vnode_ri_ini=voltages_ri)
+vprofile_step_data = get_step_data(
+    model_vvc, expressions, objectives='U', constraints='U', vnode_cx=vcx_vvc)
+succ, voltages_ri2, values_of_vars = optimize(
+        **vprofile_step_data, Vnode_ri_ini=voltages_ri)
 
 
 

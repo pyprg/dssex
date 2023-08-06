@@ -67,7 +67,7 @@ class Optimize_step(unittest.TestCase):
         step_data = estim.get_step_data(
             model, expressions, objectives='P')
         _, voltages_ri, __ = estim.calculate_initial_powerflow(step_data)
-        succ, x_V, x_scaling = estim.optimize_step(
+        succ, x_V, x_scaling = estim.optimize(
             **step_data, Vnode_ri_ini=voltages_ri)
         self.assertTrue(succ, 'estimation succeeds')
         V, k, pos = estim.get_Vcx_factors(
@@ -108,7 +108,7 @@ class Optimize_step(unittest.TestCase):
         step_data = estim.get_step_data(
             model, expressions, objectives='P')
         _, voltages_ri, __ = estim.calculate_initial_powerflow(step_data)
-        succ, x_V, x_scaling = estim.optimize_step(
+        succ, x_V, x_scaling = estim.optimize(
             **step_data, Vnode_ri_ini=voltages_ri)
         self.assertTrue(succ, 'estimation succeeds')
         V, k, pos = estim.get_Vcx_factors(
@@ -149,7 +149,7 @@ class Optimize_step(unittest.TestCase):
         step_data = estim.get_step_data(
             model, expressions, objectives='Q')
         _, voltages_ri, __ = estim.calculate_initial_powerflow(step_data)
-        succ, x_V, x_scaling = estim.optimize_step(
+        succ, x_V, x_scaling = estim.optimize(
             **step_data, Vnode_ri_ini=voltages_ri)
         self.assertTrue(succ, 'estimation succeeds')
         V, k, pos = estim.get_Vcx_factors(
@@ -190,7 +190,7 @@ class Optimize_step(unittest.TestCase):
         step_data = estim.get_step_data(
             model, expressions, objectives='Q')
         _, voltages_ri, __ = estim.calculate_initial_powerflow(step_data)
-        succ, x_V, x_scaling = estim.optimize_step(
+        succ, x_V, x_scaling = estim.optimize(
             **step_data, Vnode_ri_ini=voltages_ri)
         self.assertTrue(succ, 'estimation succeeds')
         V, k, pos = estim.get_Vcx_factors(
@@ -231,7 +231,7 @@ class Optimize_step(unittest.TestCase):
         step_data = estim.get_step_data(
             model, expressions, objectives='I')
         _, voltages_ri, __ = estim.calculate_initial_powerflow(step_data)
-        succ, x_V, x_scaling = estim.optimize_step(
+        succ, x_V, x_scaling = estim.optimize(
             **step_data, Vnode_ri_ini=voltages_ri)
         self.assertTrue(succ, 'estimation succeeds')
         V, k, pos = estim.get_Vcx_factors(
@@ -272,7 +272,7 @@ class Optimize_step(unittest.TestCase):
         step_data = estim.get_step_data(
             model, expressions, objectives='I')
         _, voltages_ri, __ = estim.calculate_initial_powerflow(step_data)
-        succ, x_V, x_scaling = estim.optimize_step(
+        succ, x_V, x_scaling = estim.optimize(
             **step_data, Vnode_ri_ini=voltages_ri)
         self.assertTrue(succ, 'estimation succeeds')
         V, k, pos = estim.get_Vcx_factors(
@@ -312,7 +312,7 @@ class Optimize_step(unittest.TestCase):
         step_data = estim.get_step_data(
             model, expressions, objectives='V')
         _, voltages_ri, __ = estim.calculate_initial_powerflow(step_data)
-        succ, x_V, x_scaling = estim.optimize_step(
+        succ, x_V, x_scaling = estim.optimize(
             **step_data, Vnode_ri_ini=voltages_ri)
         self.assertTrue(succ, 'estimation succeeds')
         V, k, pos = estim.get_Vcx_factors(

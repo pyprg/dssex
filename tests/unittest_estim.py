@@ -405,8 +405,8 @@ grid_pfc3 = [
 
 class Power_flow_calculation_basic2(unittest.TestCase):
 
-    def test_optimize_step(self):
-        """Calculating power flow using function 'optimize_step' creates same
+    def test_optimize(self):
+        """Calculating power flow using function 'optimize' creates same
         results like function 'dssex.pfcnum.calculate_power_flow'."""
         model = make_model(grid_pfc3)
         gen_factor_symbols = ft._create_symbols_with_ids(
@@ -414,7 +414,7 @@ class Power_flow_calculation_basic2(unittest.TestCase):
         expressions = estim.get_expressions(model, gen_factor_symbols)
         step_data = estim.get_step_data(model, expressions)
         _, voltages_ri, __ = estim.calculate_initial_powerflow(step_data)
-        succ_estim, Vnode_ri_estim, _ = estim.optimize_step(
+        succ_estim, Vnode_ri_estim, _ = estim.optimize(
             **step_data, Vnode_ri_ini=voltages_ri)
         self.assertTrue(succ_estim, 'estimation succeeds')
         Vnode_cx_estim = estim.ri_to_complex(Vnode_ri_estim)
@@ -425,7 +425,7 @@ class Power_flow_calculation_basic2(unittest.TestCase):
             norm(Vnode_cx_pfc - Vnode_cx_estim, np.inf),
             0.,
             delta=1e-10,
-            msg='result of optimize_step equals result of numeric calculation')
+            msg='result of optimize equals result of numeric calculation')
 
 class Calculate_power_flow(unittest.TestCase):
 
