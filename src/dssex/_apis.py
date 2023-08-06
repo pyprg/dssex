@@ -71,7 +71,7 @@ def calculate_pf(model, step_params=()):
           'V' - adds constraints keeping the initial values
                 of voltages at the location of given
                 voltage values during this step
-          'U' - consider voltage limits (if any, 'U' for bounds)
+          'U' - consider voltage limits
 
     Returns
     -------
@@ -133,7 +133,6 @@ def print_power_flow(*args):
     lines with first character '#' are not part of input graph
 
     lines starting with '#.' provide non-graph input data e.g. scaling factors
-
 
     Parameters
     ----------

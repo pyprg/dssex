@@ -61,7 +61,8 @@ def get_term_to_factor_n(terminalfactors, positions):
         * .n, float
     positions : array_like | None
         float, tap positions, one value for each row in terminalfactors,
-        ordered according to terminalfactors
+        ordered according to terminalfactors,
+        the function falls back to terminalfactors.value if positions is None
 
     Returns
     -------
@@ -269,7 +270,8 @@ def _get_squared_injected_power_fn(injections, kpq):
         * .Exp_v_p
         * .Exp_v_q
     kpq: numpy.array, float, (nx2) | None
-        scaling factors for active and reactive power
+        scaling factors for active and reactive power,
+        if not given the function applies factor of 1.0
 
     Returns
     -------
@@ -321,7 +323,8 @@ def _get_original_injected_power_fn(injections, kpq):
         * .Exp_v_p
         * .Exp_v_q
     kpq: numpy.array, float, (nx2) | None
-        scaling factors for active and reactive power
+        scaling factors for active and reactive power,
+        if not given the function applies factor of 1.0
 
     Returns
     -------
@@ -370,7 +373,8 @@ def _get_interpolated_injected_power_fn(vminsqr, injections, kpq):
         * .Exp_v_p
         * .Exp_v_q
     kpq: numpy.array, float, (nx2) | None
-        factors for active and reactive power
+        factors for active and reactive power,
+        if not given the function applies factor of 1.0
 
     Returns
     -------
@@ -436,7 +440,8 @@ def get_calc_injected_power_fn(
         * .Exp_v_q
     kpq: numpy.array, float, (nx2)
         optional
-        scaling factors for active and reactive power
+        scaling factors for active and reactive power,
+        if not given the function applies factor of 1.0
     loadcurve: 'original' | 'interpolated' | 'square'
         optional, default 'interpolated'
 
@@ -1080,7 +1085,9 @@ def get_residual_current_fn(model, get_injected_power):
             complex, voltage at nodes
         positions : array_like | None
             float, tap positions, one value for each row in terminalfactors,
-            ordered according to model.factors.terminalfactors
+            ordered according to model.factors.terminalfactors,
+            the function falls back to model.factors.terminalfactors.value 
+            if positions is None
 
         Returns
         -------
@@ -1160,10 +1167,13 @@ def eval_residual_current(model, get_injected_power, Vnode, positions=None):
     get_injected_power: function
         (numpy.array<float>) -> (numpy.array<float>, numpy.array<float>)
         (square_of_absolute_node-voltage) -> (active power P, reactive power Q)
-    Vnode: array_like, complex
-        node voltage vector
-    positions: numpy.array
-        float, tap-position
+    Vnode: array_like
+        complex, voltage at nodes
+    positions : array_like | None
+        float, tap positions, one value for each row in terminalfactors,
+        ordered according to model.factors.terminalfactors,
+        the function falls back to model.factors.terminalfactors.value
+        if positions is not given
 
     Returns
     -------
@@ -1174,7 +1184,7 @@ def eval_residual_current(model, get_injected_power, Vnode, positions=None):
         .reshape(-1, 1))
 
 def calculate_residual_current(
-        model, /, Vnode, *, positions=None, kpq=None,
+        model, /, Vnode, *, kpq=None, positions=None,
         loadcurve='interpolated', vminsqr=_VMINSQR):
     """Calculates residual current per power-flow-calculation node.
 
@@ -1184,12 +1194,14 @@ def calculate_residual_current(
         model of grid for calculation
     Vnode: array_like, complex
         node voltage vector
-    positions: numpy.array
-        optional, default None
-        float, tap-position
     kpq: numpy.array, float, (nx2)
         optional, default None
         scaling factors for active and reactive power
+    positions : array_like | None
+        float, tap positions, one value for each row in terminalfactors,
+        ordered according to model.factors.terminalfactors,
+        the function falls back to model.factors.terminalfactors.value
+        if positions is not given
     loadcurve: 'original' | 'interpolated' | 'square'
         optional, default 'interpolated'
     vminsqr: float
