@@ -27,7 +27,7 @@ from functools import partial
 from collections import defaultdict
 from itertools import count, chain
 from scipy.sparse import coo_matrix
-from egrid.model import get_vlimits_for_step, get_terms_for_step
+from egrid.model import get_vminmax_for_step, get_terms_for_step
 from dssex.injections import calculate_cubic_coefficients
 from dssex.batch import (
     get_values, get_batches, value_of_voltages, get_batch_values)
@@ -40,6 +40,7 @@ _EPSILON = 1e-12
 # empty vector of values
 _DM_0r1c = casadi.DM(0,1)
 _EMPTY_0r1c = np.empty((0,1), dtype=float)
+_EMPTY_0r1cx = np.empty((0,1), dtype=np.complex128)
 # empty vector of expressions
 _SX_0r1c = casadi.SX(0,1)
 # options for solver IPOPT
@@ -627,9 +628,6 @@ def calculate_power_flow2(model, expr, factordata, Inode, Vinit=None):
     factordata: Factordata
         * .vars, casadi.SX, symbols of factors (decision variables)
         * .values_of_vars, casadi.DM, initial values for vars
-        * .var_min, casadi.DM, lower limits of vars
-        * .var_max, casadi.DM, upper limits of vars
-        * .is_discrete, numpy.array, bool, flag for variable
         * .consts, casadi.SX, symbols of constant factors
         * .values_of_consts, casadi.DM, values for parameters ('consts')
     Inode: casadi.SX (shape n,2)
@@ -1545,9 +1543,10 @@ def get_objective_expression(
 
     Creates a vector (casadi.SX, shape n,1) expressing the difference
     between measured and calculated values for absolute current, active power
-    or reactive power and voltage includes expressions for active power
-    losses of branches. The expressions are based on the batch
+    or reactive power and voltage. The expressions are based on the batch
     definitions or referenced node. Losses are calculated for all branches.
+    Adds expressions for active power losses of branches and terms given
+    by model.
 
     Parameters
     ----------
@@ -2009,19 +2008,22 @@ def get_calculate_from_result(model, vsyms, factordata, x):
 #
 #
 
-def _get_vlimits(process_vlimts, model, Vnode_sqr, step):
+def _get_vbound_constraints(vminmax, Vnode_sqr, exclude):
     """Fetches expressions, lower and upper bound of voltage limits.
 
     Parameters
     ----------
-    process_vlimts: bool
-        flag, switches voltage limits
-    model: egrid.model.Model
-        data of electric distribution network
+    vminmax: pandas.DataFrame (index: index_of_node)
+        * .index_of_node, int
+        * .min, float
+        * .max, float
     Vnode_sqr: casasdi.SX
         expressions for selected node voltages squared
     step : int
         index of optimization step
+    exclude: array_like
+        int, indices of nodes which shall not have voltage limits
+        even if defined in model
 
     Returns
     -------
@@ -2029,20 +2031,22 @@ def _get_vlimits(process_vlimts, model, Vnode_sqr, step):
         * casadi.SX, expressions for square of selected node voltages
         * casadi.DM, lower bound for square of selected node voltages
         * casadi.DM, upper bound for square of selected node voltages"""
-    if process_vlimts:
-        vlimits = get_vlimits_for_step(model.vlimits, step)
-        if len(vlimits):
-            Vlimit_sqr = Vnode_sqr[vlimits.index]
-            return (
-                Vlimit_sqr[vlimits.index],
-                casadi.DM(vlimits['min'] * vlimits['min']),
-                casadi.DM(vlimits['max'] * vlimits['max']))
-    return _SX_0r1c, _DM_0r1c, _DM_0r1c
+    vminmax_ = vminmax[~vminmax.index.isin(exclude)]
+    if len(vminmax_):
+        vmin = vminmax_['min']
+        vmax = vminmax_['max']
+        return (
+            Vnode_sqr[vminmax_.index],
+            casadi.DM(vmin * vmin),
+            casadi.DM(vmax * vmax))
 
 def get_step_data(
     model, expressions, *, step=0, f_prev=_EMPTY_0r1c, objectives='',
     constraints='', values_of_constraints=None,  floss=1.):
     """Prepares data for call of function optimize_step.
+
+    'get_step_data' creates expressions for the objective function and
+    for constraints.
 
     Parameters
     ----------
@@ -2116,8 +2120,8 @@ def get_step_data(
         * ['expressions'], dict
         * ['factordata'], factors.Factordata
         * ['Inode_inj'], casadi.SX
-        * ['objective'], str
-        * ['constraints'], str
+        * ['objective'], casadi.SX
+        * ['constraints'], casadi.SX
         * ['lbg'], casadi.DM
         * ['ubg'], casadi.DM"""
     factordata, Iinj_data = (
@@ -2136,9 +2140,12 @@ def get_step_data(
         _SX_0r1c
         if values_of_constraints is None or len(expr_of_batches[0])==0 else
         get_batch_constraints(values_of_constraints, expr_of_batches))
-    process_vlimits = 'U' in constraints
-    vlimits, lbg_v, ubg_v = _get_vlimits(
-        process_vlimits, model, expressions['Vnode_syms'][:,2], step)
+    if 'U' in constraints:
+        vminmax = get_vminmax_for_step(model.vlimits, step)
+        vlimits, lbg_v, ubg_v = _get_vbound_constraints(
+            vminmax, expressions['Vnode_syms'][:,2], exclude=())
+    else:
+        vlimits, lbg_v, ubg_v = _SX_0r1c, _DM_0r1c, _DM_0r1c
     constraints = casadi.vertcat(batch_constraints, vlimits)
     # bounds of batch constraints
     number_of_constraints = batch_constraints.size1()
@@ -2150,6 +2157,268 @@ def get_step_data(
         model=model, expressions=expressions, factordata=factordata,
         Inode_inj=Inode_inj, objective=objective,
         constraints=constraints, lbg=lbg, ubg=ubg)
+
+def get_vprofile_step_data(
+    model, expressions, *, violated_nodes, target_voltages):
+    """Prepares data for call of function optimize_step.
+
+    'get_vprofile_step_data' creates expressions for the objective function and
+    for constraints. 'get_vprofile_step_data' uses data given by model for
+    step 0.
+
+    Parameters
+    ----------
+    model: egrid.model.Model
+        data of electric grid
+    expressions: dict
+        * 'Vnode_syms', casadi.SX, expressions of node Voltages
+        * 'Vslack_syms', casadi.SX, symbols of slack voltages,
+           Vslack_syms[:,0] real part, Vslack_syms[:,1] imaginary part
+        * 'gb_mn_tot', conductance g / susceptance b per branch terminal
+            * gb_mn_tot[:,0] g_mn, mutual conductance
+            * gb_mn_tot[:,1] b_mn, mutual susceptance
+            * gb_mn_tot[:,2] g_tot, self conductance + mutual conductance
+            * gb_mn_tot[:,3] b_tot, self susceptance + mutual susceptance
+        * 'Y_by_V', casadi.SX, expression for Y @ V
+        * 'get_factor_and_injection_data', function
+
+          (int, numpy.array<float>) -> (tuple - Factordata, casadi.SX)
+
+          which is a function
+
+          (index_of_step, factors_of_previous_step)
+            -> (tuple - Factordata, injection_data)
+        * 'inj_to_node', casadi.SX, matrix, maps from
+          injections to power flow calculation nodes
+    violated_nodes: numpy.array (shape n,)
+        int, indices of nodes with voltage violations
+    target_voltages: numpy.array (shape n,)
+        float, target voltages for nodes with voltage violation
+
+    Returns
+    -------
+    dict
+        * ['model'], egrid.model.Model
+        * ['expressions'], dict
+        * ['factordata'], factors.Factordata
+        * ['Inode_inj'], casadi.SX
+        * ['objective'], casadi.SX
+        * ['constraints'], casadi.SX
+        * ['lbg'], casadi.DM
+        * ['ubg'], casadi.DM"""
+    factordata, Iinj_data = (
+        expressions['get_factor_and_injection_data'](0, _EMPTY_0r1c))
+    Vslack_syms = expressions['Vslack_syms']
+    Inode_inj = _reset_slack_current(
+        model.slacks.index_of_node,
+        Vslack_syms[:,0], Vslack_syms[:,1],
+        expressions['inj_to_node'] @ Iinj_data[:,:2])
+    objective = casadi.sumsqr(
+        target_voltages
+        - expressions['Vnode_syms'][violated_nodes, 2].sqrt())
+    vminmax = get_vminmax_for_step(model.vlimits, 0)
+    vlimits, lbg_v, ubg_v = _get_vbound_constraints(
+        vminmax, expressions['Vnode_syms'][:,2], exclude=violated_nodes)
+    return dict(
+        model=model, expressions=expressions, factordata=factordata,
+        Inode_inj=Inode_inj, objective=objective,
+        constraints=vlimits, lbg=lbg_v, ubg=ubg_v)
+
+def get_violated_nodes(vlimits, /, vnode_cx):
+    """Checks voltage limits at nodes.
+
+    Returns functions for:
+        * Calculating bounds for violated nodes
+        * Calculating target values for violated nodes
+
+    Parameters
+    ----------
+    vlimits: pandas.DataFrame (index: index of pfc-node)
+        * ['min'], float, lower bound of voltage
+        * ['max'], float, upper bound of voltage
+    vnode_cx: numpy.array (shape n,1)
+        complex, node voltages
+    margin: float
+
+
+    Returns
+    -------
+    tuple
+        * function (float) ->
+          (numpy.array int, numpy.array float,
+           numpy.array int, numpy.array float)
+
+          (margin=.000001, float, difference of calculated bound to
+           voltage value)
+
+          ->
+
+          (numpy.array, int, indices of loads with undervoltage violation,
+           numpy.array, float, lower bounds for nodes with undervoltage,
+           numpy.array, int, indices of loads with overvoltage violation,
+           numpy.array, float, upper bounds for nodes with overvoltage)
+
+        * function (float) -> (numpy.array int, numpy.array float)
+            (margin=.04, float, difference of calculated target value to
+             violated limit)
+
+            ->
+
+            (numpy.array, int, indices of violated nodes,
+             numpy.array, float, target value for optimization)"""
+    index_of_node = vlimits.index
+    vnode_abs = np.abs(vnode_cx[index_of_node]).reshape(-1)
+    vmin = vlimits['min'].to_numpy().reshape(-1)
+    vmax = vlimits['max'].to_numpy().reshape(-1)
+    idxs_st_min = index_of_node[vnode_abs < vmin]
+    idxs_gt_max = index_of_node[vmax < vnode_abs]
+    return (
+        lambda margin=.000001:(
+            idxs_st_min, (1.-margin) * vnode_abs[idxs_st_min],
+            idxs_gt_max, (1.+margin) * vnode_abs[idxs_gt_max]),
+        lambda margin=.04:(
+            np.hstack([idxs_st_min, idxs_gt_max]),
+            np.hstack(
+                [(1.+margin) * vmin[idxs_st_min],
+                 (1.-margin) * vmax[idxs_gt_max]])))
+
+# def get_vvc_step_data(
+#     model, expressions, *, step=0, f_prev=_EMPTY_0r1c, objectives='',
+#     constraints='', values_of_constraints=None,  floss=1.,
+#     vnode_cx=_EMPTY_0r1cx):
+#     """Prepares data for call of function optimize_step.
+
+#     'get_vvc_step_data' creates expressions for the objective function and
+#     for voltage constraints.
+
+#     Parameters
+#     ----------
+#     model: egrid.model.Model
+#         data of electric grid
+#     expressions: dict
+#         * 'Vnode_syms', casadi.SX, expressions of node Voltages
+#         * 'Vslack_syms', casadi.SX, symbols of slack voltages,
+#            Vslack_syms[:,0] real part, Vslack_syms[:,1] imaginary part
+#         * 'gb_mn_tot', conductance g / susceptance b per branch terminal
+#             * gb_mn_tot[:,0] g_mn, mutual conductance
+#             * gb_mn_tot[:,1] b_mn, mutual susceptance
+#             * gb_mn_tot[:,2] g_tot, self conductance + mutual conductance
+#             * gb_mn_tot[:,3] b_tot, self susceptance + mutual susceptance
+#         * 'Y_by_V', casadi.SX, expression for Y @ V
+#         * 'get_factor_and_injection_data', function
+
+#           (int, numpy.array<float>) -> (tuple - Factordata, casadi.SX)
+
+#           which is a function
+
+#           (index_of_step, factors_of_previous_step)
+#             -> (tuple - Factordata, injection_data)
+#         * 'inj_to_node', casadi.SX, matrix, maps from
+#           injections to power flow calculation nodes
+#     step: int
+#         optional, default 0
+#         index of estimation step
+#     f_prev: numpy.array
+#         optional
+#         result output of factors (only) calculated in previous step, if any
+#     objectives: str
+#         optional, default ''
+#         string of characters 'I'|'P'|'Q'|'V'|'U'|'L'|'C'|'T' or empty string ''
+#         the characters are symbols for minimization of:
+#             * 'I' difference of calculated and given current magnitude
+#             * 'P' difference of calculated and given active power
+#             * 'Q' difference of calculated and given reactive power
+#             * 'V' difference of calculated and given voltage
+#             * 'U' voltage violations (needs vnode_cx)
+#             * 'L' losses of branches
+#             * 'C' cost
+#             * 'T' terms from model.terms
+#         other characters are ignored
+#     constraints: str
+#         optional, default ''
+#         string of characters 'I'|'P'|'Q'|'V'|'U' or empty string ''
+#         addresses quantities of batches (except 'U',
+#         measured values or setpoints) to be kept constant, the values are
+#         obtained from a previous calculation/initialization step,
+#         'U' triggers voltage constraints of, the characters are symbols for
+#         given current magnitude, active power, reactive power,
+#         magnitude of voltage or voltage limits, other characters,
+#         are ignored, values of constraints ('IPQV') must be given with
+#         argument 'values_of_constraints', constraints, including voltage
+#         constraints, must be satisfied with initial values
+#     values_of_constraints: tuple
+#         optional, default False
+#         * [0] numpy.array<str>, quantities,
+#         * [1] numpy.array<str>, id_of_batch
+#         * [2] numpy.array<float>, vector (shape n,1), value
+#         values for constraints (refer to argument 'constraints')
+#     floss: float
+#         optional, default is 1.0
+#         multiplier for branch losses
+#     vnode_cx: numpy.array (shape n,1)
+#         optional
+#         complex, node voltages
+
+#     Returns
+#     -------
+#     dict
+#         * ['model'], egrid.model.Model
+#         * ['expressions'], dict
+#         * ['factordata'], factors.Factordata
+#         * ['Inode_inj'], casadi.SX
+#         * ['objective'], casadi.SX
+#         * ['constraints'], casadi.SX
+#         * ['lbg'], casadi.DM
+#         * ['ubg'], casadi.DM"""
+#     factordata, Iinj_data = (
+#         expressions['get_factor_and_injection_data'](step, f_prev))
+#     Vslack_syms = expressions['Vslack_syms']
+#     Inode_inj = _reset_slack_current(
+#         model.slacks.index_of_node,
+#         Vslack_syms[:,0], Vslack_syms[:,1],
+#         expressions['inj_to_node'] @ Iinj_data[:,:2])
+#     oterms = get_terms_for_step(model.terms, step)
+#     objective = get_objective_expression(
+#         model, expressions, factordata, Iinj_data, floss, oterms, objectives)
+
+
+#     expr_of_batches = get_diff_expressions(
+#         model, expressions, Iinj_data, constraints)
+#     batch_constraints = (
+#         _SX_0r1c
+#         if values_of_constraints is None or len(expr_of_batches[0])==0 else
+#         get_batch_constraints(values_of_constraints, expr_of_batches))
+
+
+#     objective_vlimits = 'U' in objectives
+#     constraint_vlimts = 'U' in constraints
+
+
+#     if objective_vlimits or constraint_vlimts:
+#         get_violated_nodes(vlimits, vnode_cx)
+
+
+#     vlimits, lbg_v, ubg_v = _get_vlimits(
+#         model.vlimits,
+#         process_vlimts=constraint_vlimts,
+#         Vnode_sqr=expressions['Vnode_syms'][:,2],
+#         step=step,
+#         exclude=())
+
+
+#     lbg_v[uvnodes] = lbuvnodes
+#     ubg_v[ovnodes] = ubovnodes
+#     constraints = casadi.vertcat(batch_constraints, vlimits)
+#     # bounds of batch constraints
+#     number_of_constraints = batch_constraints.size1()
+#     # lower and upper bound of Inode
+#     bg_inode = casadi.DM.zeros(number_of_constraints)
+#     lbg = casadi.vertcat(bg_inode, lbg_v)
+#     ubg = casadi.vertcat(bg_inode, ubg_v)
+#     return dict(
+#         model=model, expressions=expressions, factordata=factordata,
+#         Inode_inj=Inode_inj, objective=objective,
+#         constraints=vlimits, lbg=lbg, ubg=ubg)
 
 def get_step_data_fn(model, gen_factor_symbols):
     """Creates two functions for generating step specific data.
@@ -2474,7 +2743,7 @@ def get_Vcx_factors(factordata, voltages_ri, factorvalues):
     V = ri_to_complex(voltages_ri)
     return V, kpq, pos
 
-def estimate_stepwise(model, step_params=(), vminsqr=_VMINSQR):
+def estimate_stepwise(model, *, step_params=(), vminsqr=_VMINSQR):
     """Estimates grid status stepwise.
 
     Parameters
@@ -2536,7 +2805,7 @@ def estimate_stepwise(model, step_params=(), vminsqr=_VMINSQR):
     return chain(
         [pfc_res],
         ((step, succ, *get_Vcx_factors(factordata, v_ri, factorvalues))
-        for step, succ, v_ri, factorvalues, factordata in
-            _optimization_loop(
-                make_step_data, succ, voltages_ri, values_of_vars,
-                factordata)))
+         for step, succ, v_ri, factorvalues, factordata in
+             _optimization_loop(
+                 make_step_data, succ, voltages_ri, values_of_vars,
+                 factordata)))

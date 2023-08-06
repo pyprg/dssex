@@ -82,7 +82,7 @@ residual_current = pfc.calculate_residual_current(
     model, vcx, positions=positions, kpq=kpq)
 #%% State Estimation
 import dssex.estim as estim
-model = make_model_checked()
+model = make_model_checked(schema)
 res = list(estim.estimate_stepwise(
     model,
     step_params=[
@@ -114,28 +114,42 @@ slack +--------+   (-Branch-------------+ n +-------||||| heating_
 
 model_vvc = make_model_checked(schema_vvc)
 
-from egrid.model import initial_values, initial_voltage_limits
+import dssex.factors as ft
+from egrid.model import initial_voltage_limits
+from dssex.estim import (
+    get_step_data_fn, calculate_initial_powerflow, get_Vcx_factors)
 
-ini = initial_values(model_vvc)
 messages_vvc = model_vvc.messages
-success_vvc, vcx_vvc = pfc.calculate_power_flow(model_vvc, **ini)
-calc_vvc = rt.get_printable_result(model_vvc, vcx_vvc, **ini)
-#%%VVC
+#initial power flow calculation
+gen_factorsymbols = ft._create_symbols_with_ids(
+    model_vvc.factors.gen_factordata.index)
+ini_data, step_data_fn = get_step_data_fn(model_vvc, gen_factorsymbols)
+factordata = ini_data['factordata']
+succ, voltages_ri, values_of_vars = calculate_initial_powerflow(ini_data)
+vcx_vvc, kp, positions = get_Vcx_factors(factordata, voltages_ri, values_of_vars)
+pfc_res = -1, succ, vcx_vvc, kp, positions
+# check voltage violations
+from dssex.estim import (
+    optimize_step, get_expressions, get_vprofile_step_data, get_violated_nodes)
 
 
-def get_violated_voltages(vlimits, vcx):
-    index_of_node = vlimits.index
-    vnode_abs = np.abs(vcx_vvc[index_of_node]).reshape(-1)
-    vmin = vlimits['min'].to_numpy().reshape(-1)
-    vmax = vlimits['max'].to_numpy().reshape(-1)
-    idxs_st_min = index_of_node[vnode_abs < vmin]
-    idxs_gt_max = index_of_node[vmax < vnode_abs]
-    vtarget = np.hstack([1.05 * vmin[idxs_st_min], .95 * vmax[idxs_gt_max]])
-    idxs = np.hstack([idxs_st_min, idxs_gt_max])
-    return idxs, vtarget
 
+expressions = get_expressions(model_vvc, gen_factorsymbols)
+
+#%%
 vlimits = initial_voltage_limits(model_vvc)
-idxs, vtarget = get_violated_voltages(vlimits, vcx_vvc)
+violated_nodes, target_voltages = get_violated_nodes(vlimits, vcx_vvc)[-1]()
+
+#%%
+
+if violated_nodes.size:
+    # at least one voltage limit is violated
+    #   insert a step for drawing voltages into the not violated range
+    vprofile_step_data = get_vprofile_step_data(
+        model_vvc, expressions, violated_nodes=violated_nodes,
+        target_voltages=target_voltages)
+    succ, voltages_ri2, values_of_vars = optimize_step(
+            **vprofile_step_data, Vnode_ri_ini=voltages_ri)
 
 
 
