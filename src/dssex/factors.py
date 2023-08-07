@@ -135,7 +135,8 @@ def make_factor_symbols(
 Factordata = namedtuple(
     'Factordata',
     'all id_to_idx kpq vars consts '
-    'values_of_vars cost_of_change var_min var_max is_discrete '
+    'values_of_vars values_of_vars_model cost_of_change '
+    'var_min var_max is_discrete '
     'values_of_consts '
     'var_const_to_factor var_const_to_kp var_const_to_kq var_const_to_ftaps')
 Factordata.__doc__="""
@@ -155,6 +156,8 @@ vars: casadi.SX
 consts: casadi.SX
     column vector, symbols for constants of scaling factors
 values_of_vars: casadi.DM
+    column vector, initial values for vars
+values_of_vars_model: casadi.DM
     column vector, initial values for vars
 cost_of_change: casadi.DM
     vector of costs for change of factor variables
@@ -211,6 +214,8 @@ def make_factordata(model, gen_factor_symbols, step=0, f_prev=_NPARRAY_0r1c):
         consts=symbols.consts,
         # initial values, argument in solver call
         values_of_vars=_make_DM_vector(fm.values_of_vars),
+        # reference values, for cost of change calculation
+        values_of_vars_model=_make_DM_vector(fm.values_of_vars_model),
         cost_of_change=_make_DM_vector(fm.cost_of_change),
         # lower bound of scaling factors, argument in solver call
         var_min=_make_DM_vector(fm.var_min),

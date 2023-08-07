@@ -1461,16 +1461,20 @@ def get_change_cost_expression(factordata):
 
     Cost are equivalent to
     ::
-        some_factor * abs(value_before_change - value_after_change)
+        some_factor * abs(value_of_model - value)
 
     Parameters
     ----------
     factordata: factors.Factordata
 
+        * .values_of_vars_model
+        * .vars
+        * .cost_of_change
+
     Returns
     -------
     casadi.SX"""
-    change = factordata.values_of_vars - factordata.vars
+    change = factordata.values_of_vars_model - factordata.vars
     # sigmoid for calculation of absolute value, smooth, differentiable
     change_abs = casadi.erf(100*change) * change
     return casadi.sum1(change_abs * factordata.cost_of_change)

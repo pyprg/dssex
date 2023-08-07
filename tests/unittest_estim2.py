@@ -44,7 +44,6 @@ class Optimize_step(unittest.TestCase):
         grid.Branch('line_1', 'n_1', 'n_2', y_lo=1e3-1e3j),
         grid.Injection('consumer', 'n_2', P10=30.0, Q10=10.0))
 
-
     def test_scale_p_meet_p(self):
         """Scale active power of consumer in order to meet the
         given active power P at a terminal of a branch (measurement or

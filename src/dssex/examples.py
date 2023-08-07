@@ -106,8 +106,8 @@ slack +--------+   (-Branch-------------+ n +-------||||| heating_
                           Exp_v_q=2                        Q10=10
 
 
-#.Deft(id=ltc type=var min=-16 max=16 value=0 is_discrete=True)
-#.Defk(id=kcap type=var min=0 max=5 value=0 is_discrete=True)
+#.Deft(id=ltc type=var min=-16 max=16 value=0 is_discrete=True cost=.03)
+#.Defk(id=kcap type=var min=0 max=5 value=0 is_discrete=True cost=.05)
 #.Klink(id_of_injection=cap id_of_factor=kcap part=q)
 #.Vlimit(min=.95)
 """
@@ -119,34 +119,33 @@ res_vvc = list(estim.estimate_stepwise(
     model_vvc,
     step_params=[
         # first step: minimize voltage violations
-        dict(objectives='U', constraints='U')]))
+        dict(objectives='U', constraints='U'),
+        # second step: minimize cost
+        dict(objectives='CL', constraints='U', floss=2)]))
 calc_vvc = list(rt.get_printable_results(model_vvc, res_vvc))
-
-
-
 #%%
 
-import dssex.factors as ft
-from dssex.estim import (
-    get_step_data_fn, calculate_initial_powerflow, get_Vcx_factors)
+# import dssex.factors as ft
+# from dssex.estim import (
+#     get_step_data_fn, calculate_initial_powerflow, get_Vcx_factors)
 
-#initial power flow calculation
-gen_factorsymbols = ft._create_symbols_with_ids(
-    model_vvc.factors.gen_factordata.index)
-ini_data, step_data_fn = get_step_data_fn(model_vvc, gen_factorsymbols)
-factordata = ini_data['factordata']
-succ, voltages_ri, values_of_vars = calculate_initial_powerflow(ini_data)
-vcx_vvc, kp, positions = get_Vcx_factors(
-    factordata, voltages_ri, values_of_vars)
-pfc_res = -1, succ, vcx_vvc, kp, positions
-# check voltage violations
-from dssex.estim import (
-    optimize, get_expressions, get_step_data)
-expressions = get_expressions(model_vvc, gen_factorsymbols)
-vprofile_step_data = get_step_data(
-    model_vvc, expressions, objectives='U', constraints='U', vnode_cx=vcx_vvc)
-succ, voltages_ri2, values_of_vars = optimize(
-        **vprofile_step_data, Vnode_ri_ini=voltages_ri)
+# #initial power flow calculation
+# gen_factorsymbols = ft._create_symbols_with_ids(
+#     model_vvc.factors.gen_factordata.index)
+# ini_data, step_data_fn = get_step_data_fn(model_vvc, gen_factorsymbols)
+# factordata = ini_data['factordata']
+# succ, voltages_ri, values_of_vars = calculate_initial_powerflow(ini_data)
+# vcx_vvc, kp, positions = get_Vcx_factors(
+#     factordata, voltages_ri, values_of_vars)
+# pfc_res = -1, succ, vcx_vvc, kp, positions
+# # check voltage violations
+# from dssex.estim import (
+#     optimize, get_expressions, get_step_data)
+# expressions = get_expressions(model_vvc, gen_factorsymbols)
+# vprofile_step_data = get_step_data(
+#     model_vvc, expressions, objectives='U', constraints='U', vnode_cx=vcx_vvc)
+# succ, voltages_ri2, values_of_vars = optimize(
+#         **vprofile_step_data, Vnode_ri_ini=voltages_ri)
 
 
 
