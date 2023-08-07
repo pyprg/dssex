@@ -2171,7 +2171,7 @@ def get_violated_nodes(vlimits, /, vnode_cx):
                  (1.-margin) * vmax[idxs_gt_max]])))
 
 def get_step_data_fn(model, gen_factor_symbols):
-    """Creates two functions for generating step specific data.
+    """Creates initial data and a function for optimization data of next steps.
 
     Function 'ini_step_data' creates the step_data structure for the first run
     of function 'optimize'. Function 'next_step_data' for all
@@ -2189,31 +2189,34 @@ def get_step_data_fn(model, gen_factor_symbols):
     -------
     tuple
         * dict:
+
             * ['model'], egrid.model.Model
             * ['expressions'], dict
             * ['factordata'], factors.Factordata
             * ['Inode_inj'], casadi.SX
-            * ['objective'], str
-            * ['constraints'], str
-            * ['lbg'], casadi.DM
-            * ['ubg'], casadi.DM
+            * ['objective'], casadi.SX, objective function
+            * ['constraints'], casadi.SX, vector of constraints
+            * ['lbg'], casadi.DM, vector, lower bound of constraints
+            * ['ubg'], casadi.DM, vector, upper bound of constraints
+
         * next_step_data: function
-            (int, Stepdata, casadi.DM, casadi.DM)->(Stepdata), parameters:
+          (int, casadi.DM, str, str, float)->(Stepdata), parameters:
               step: int
                   index of optimizatin step
-              step_data: Stepdata
-                  made in previous calculation step
               voltages_ri: casadi.DM
                   node voltages calculated by previous calculation step
               k: casadi.DM
-                  scaling factors calculated by previous calculation step
+                  factors calculated by previous calculation step
               objectives: str (optional)
                   optional, default ''
                   string of characters 'I'|'P'|'Q'|'V'|'U'|'L'|'C'
                   or empty string
               constraints: str (optional)
                   optional, default ''
-                  string of characters 'I'|'P'|'Q'|'V'|'U'"""
+                  string of characters 'I'|'P'|'Q'|'V'|'U'
+              floss: float
+                  optional, default=1.0,
+                  factor for losses used for optimization of cost"""
     expressions = get_expressions(model, gen_factor_symbols)
     make_step_data = partial(get_step_data, model, expressions)
     def next_step_data(
@@ -2245,10 +2248,10 @@ def get_step_data_fn(model, gen_factor_symbols):
             * ['expressions'], dict
             * ['factordata'], factors.Factordata
             * ['Inode_inj'], casadi.SX
-            * ['objective'], str
-            * ['constraints'], str
-            * ['lbg'], casadi.DM
-            * ['ubg'], casadi.DM"""
+            * ['objective'], casadi.SX, objective function
+            * ['constraints'], casadi.SX, vector of constraints
+            * ['lbg'], casadi.DM, vector, lower bound of constraints
+            * ['ubg'], casadi.DM, vector, upper bound of constraints"""
         # calculate values of previous step
         voltages_ri2 = ri_to_ri2(voltages_ri)
         factordata = ft.make_factordata(model, gen_factor_symbols, step, k)
