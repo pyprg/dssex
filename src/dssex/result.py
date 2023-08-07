@@ -17,6 +17,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 Created on Fri Dec 16 00:14:07 2022
 
 @author: pyprg
+
+Purpose is calculation of current and power for all devices from a model
+and a voltage vector. Additionally solves switch flow.
 """
 import numpy as np
 import pandas as pd
@@ -36,12 +39,18 @@ def _calculate_injected_si(injections, Vinj, kpq, loadcurve, vminsqr):
 
     Parameters
     ----------
-    injections : TYPE
-        DESCRIPTION.
+    injections: pandas.DataFrame (index_of_terminal)
+        * .P10
+        * .Q10
+        * .Exp_v_p
+        * .Exp_v_q
+
     Vinj: numpy.array
         complex, voltage per injection
+
     kpq: numpy.array, float, (nx2)
         scaling factors for active and reactive power
+
     loadcurve: 'original' | 'interpolated' | 'square'
 
     vminsqr: float
@@ -50,7 +59,8 @@ def _calculate_injected_si(injections, Vinj, kpq, loadcurve, vminsqr):
     Returns
     -------
     numpy.array (shape 2,n)
-        complex, [0] - complex power (single phase), [1] - complex current"""
+        * [0] - complex, power (single phase)
+        * [1] - complex, current"""
     power_fn = get_calc_injected_power_fn(vminsqr, injections, kpq, loadcurve)
     P_pu, Q_pu, _  = get_injected_power_per_injection(power_fn, Vinj)
     Ssinglephase = (
@@ -73,12 +83,15 @@ def _calculate_injection_results(injections, Vinj, SI, kpq):
         * .Exp_v_q, float
         * .P10, float
         * .Q10, float
+
     Vinj: numpy.array
         complex, vector of voltages at terminals of injections
+
     SI: numpy.array (shape 2,n)
         complex
-        [0] - complex power (single phase)
-        [1] - complex current
+
+        * [0] - complex power (single phase)
+        * [1] - complex current
 
     Returns
     -------
@@ -154,8 +167,10 @@ def _calculate_f_tot_mn_all(terminalfactors, positions, branchterminals):
         * .index_of_other_terminal
         * .m, float
         * .n, float
+
     positions: numpy.array
         float, tap positions, one entry for each record in terminalfactors
+
     branchterminals: pandas.DataFrame (index_of_terminal)
         * .index_of_other_terminal, int
         * .m, float
@@ -180,6 +195,7 @@ def _vterm_from_vnode(branchterminals, Vnode):
     branchterminals: pandas.DataFrame
         * .index_of_node, int
         * .index_of_other_node, int
+
     Vnode: numpy.array (shape m,1)
         complex, node voltage (at power-flow-calculation node)
 
@@ -197,13 +213,17 @@ def _calc_term_current(f_tot_mn, branchterminals, vcx_term_ab):
     ----------
     f_tot_mn: numpy.array (shape n,2)
         float, terminal factors for considering taps
+
         [:, 0] f_tot
         [:, 1] f_mn
+
     branchterminals : pandas.DataFrame
+
         * .y_tr_half, half of complex admittance of branch, transversal
         * .y_lo, complex admittance of branch, longitudinal
         * .index_of_node, int
         * .index_of_other_node,int
+
     vcx_term_ab: numpy.array (shape n,2)
         complex, Vcx_term_a, Vcx_term_b
 
@@ -224,8 +244,10 @@ def _calculate_terminal_current(model, Vcx_term_ab, positions):
     ----------
     model: egrid.model.Model
         data of the electric power network
+
     Vcx_term_ab: numpy.array (shape n,2)
         complex, vector of terminal voltages for terminals A and B
+
     positions: numpy.array
         float, tap positions, one entry for each record in
         model.factors.terminalfactors
@@ -424,6 +446,7 @@ def _get_slack_for_switchflow(terminals):
     terminals: pandas.DataFrame (index_of_terminal)
         group of terminals sharing one power-flow-calculation node, which
         means they are connected via short circuits
+
         * .id_of_node
         * .switch_flow_index
         * .at_slack
@@ -506,9 +529,12 @@ def _calculate_switch_flow(Iterminj, group_of_terminals):
     Iterminj: pandas.DataFrame (switch_flow_index)
         switch_flow_index, int, index of connectivity node for
             switch-flow-calculation)
+
         * .Icx, complex, current flowing out of the
           switch-flow-calculation node
+
     group_of_terminals: pandas.DataFrame (index_of_terminal)
+
         * .index_of_node, int
         * .switch_flow_index, int
         * .index_of_other_terminal, int
@@ -545,19 +571,24 @@ def _calculate_switch_flows(Iterm_df, Iinj_df, groups_of_terminals):
     ----------
     Iterm_df: pandas.DataFrame
         current flowing into branch terminals
+
         * .index_of_node, int, index of power flow calculation node
         * .switch_flow_index, ind, index of switch flow calculation node
         * .Icx, complex, current flowing out of the
           switch-flow-calculation node
+
     Iinj_df: pandas.DataFrame
         current flowing into injections
+
         * .index_of_node, int, index of power flow calculation node
         * .switch_flow_index, ind, index of switch flow calculation node
         * .Icx, complex, current flowing out of the
           switch-flow-calculation node
+
     groups_of_terminals: pandas.groupby
         terminals of short circuit branches which to calculate current flow for
         grouped by 'index_of_node' (index of power flow calculation node)
+
             * .index_of_node
             * .switch_flow_index
             * .index_of_other_terminal
@@ -587,22 +618,29 @@ def get_switch_flow(bridgeterminals, Icx_branchterm, Icx_injection):
     Parameters
     ----------
     bridgeterminals: pandas.DataFrame (index_of_terminal)
+
         * .id_of_node, str, identifier of connectivity node
         * .index_of_node, int, index of power flow calculation node
         * .switch_flow_index, int, index of switch flow calculation node
         * .index_of_other_terminal, index of other terminal at same branch
         * .at_slack, bool, indicates if power flow calculation node is
           a slack node
+
     Icx_branchterm: pandas.DataFrame
+
         * .index_of_node
         * .switch_flow_index
         * .Icx, complex, current flowing into branch terminal
+
         current for all branchterminals in model
+
     Icx_injection: pandas.DataFrame
+
         * .index_of_node
         * .switch_flow_index
         * .in_super_node
         * .Icx, complex, current flowing into injection
+
         current for all injections in model
 
     Returns
@@ -635,22 +673,29 @@ def _calculate_bridge_results(
     Parameters
     ----------
     bridgeterminals: pandas.DataFrame (index_of_terminal)
+
         * .index_of_node, int, index of power flow calculation node
         * .switch_flow_index, int, index of switch flow calculation node
         * .index_of_other_terminal, index of other terminal at same branch
         * .at_slack, bool, indicates if power flow calculation node is
           a slack node
+
     Icx_branchterm: pandas.DataFrame
+
         * .index_of_node
         * .switch_flow_index
         * .Icx, complex, current flowing into branch terminal
         current for all branchterminals in model
+
     Icx_injection: pandas.DataFrame
+
         * .index_of_node
         * .switch_flow_index
         * .in_super_node
         * .Icx, complex, current flowing into injection
+
         current for all injections in model
+
     Vnode: numpy.array (shape m,1)
         complex, node voltage (at power-flow-calculation node)
 
@@ -793,6 +838,7 @@ def calculate_electric_data2(model, result):
     ----------
     model: egrid.model.Model
         data of the electric power network
+
     result : tuple
         * int, index of estimation step,
           (initial power flow calculation result is -1, first estimation is 0)
@@ -826,8 +872,10 @@ def _calculate_f_tot_mn(terminalfactors, positions, selected_terminals):
         * .index_of_other_terminal
         * .m, float
         * .n, float
+
     positions: numpy.array
         float, tap positions, one entry for each record in terminalfactors
+
     selected_terminals: pandas.DataFrame (index_of_terminal)
         * .index_of_other_terminal, int
 
@@ -860,8 +908,10 @@ def calc_inj_current(injections, kpq, loadcurve, vcx, vminsqr):
         * .Q10
         * .Exp_v_p
         * .Exp_v_q
+
     kpq: numpy.array, float, (nx2)
         scaling factors for active and reactive power
+
     loadcurve: 'original' | 'interpolated' | 'square'
 
     vcx: numpy.array (shape n,1)

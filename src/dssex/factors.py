@@ -237,9 +237,11 @@ def separate_factors(factordata, factors):
     Extracts  from the result provided by the solver.
     Enhances factors calculated by optimization with values of parameters and
     reorders the factors according to order of injections and terminals.
+
     Returns kp and kq for each injection. Returns a factor ftaps for terminals
     addressed by 'Factordefs.index_of_terminal' which is an argument to the
     function 'make_factordata'.
+
     The function creates a vector of values for factors which are
     decision variables and those which are constants. This vector is ordered
     for use as initial factor values in next estimation step.
@@ -247,6 +249,7 @@ def separate_factors(factordata, factors):
     Parameters
     ----------
     factordata: Factordata
+
         * .values_of_consts,
             array_like, float, column vector, values for consts
         * .var_const_to_factor,
@@ -261,6 +264,7 @@ def separate_factors(factordata, factors):
         * .var_const_to_ftaps,
             array_like int, converts var_const to ftaps, factor assigned to
             (selected) terminals (var_const[var_const_to_ftaps])
+
     factors: numpy.array|casadi.DM, shape(k,1)
         float, result of optimization (subset) without voltages
 
@@ -285,11 +289,13 @@ def get_factor_values(factordata, values_of_vars):
     Parameters
     ----------
     factordata: Factordata
+
         * .values_of_consts,
             array_like, float, column vector, values for consts
         * .var_const_to_factor,
             array_like int, index_of_factor=>index_of_var_const
             converts var_const to factor (var_const[var_const_to_factor])
+
     values_of_vars: array_like
         float, calculated values of decision variables without voltages
 

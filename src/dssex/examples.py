@@ -97,7 +97,7 @@ schema_vvc = """
                    (                                 ~~~
                +-->(                                 ~~~
 slack +--------+   (-Branch-------------+ n +-------||||| heating_
-        Tlink=ltc     y_lo=1e3-1e3j       |                P10=200
+        Tlink=tap     y_lo=1e3-1e3j       |                P10=200
                       y_tr=1e-6+1e-6j     |
                                           |        \<-+->/
                                           |           |
@@ -105,16 +105,13 @@ slack +--------+   (-Branch-------------+ n +-------||||| heating_
                           Q10=-10                          P10=160
                           Exp_v_q=2                        Q10=10
 
-
-#.Deft(id=ltc type=var min=-16 max=16 value=0 is_discrete=True cost=.03)
+#.Deft(id=tap type=var min=-16 max=16 value=0 is_discrete=True cost=.03)
 #.Defk(id=kcap type=var min=0 max=5 value=0 is_discrete=True cost=.05)
 #.Klink(id_of_injection=cap id_of_factor=kcap part=q)
 #.Vlimit(min=.95)
 """
-
 model_vvc = make_model_checked(schema_vvc)
 messages_vvc = model_vvc.messages
-
 res_vvc = list(estim.estimate_stepwise(
     model_vvc,
     step_params=[

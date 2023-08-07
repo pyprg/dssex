@@ -56,9 +56,11 @@ def get_term_to_factor_n(terminalfactors, positions):
     Parameters
     ----------
     terminalfactors : pandas.DataFrame
+
         * .value, float
         * .m, float
         * .n, float
+
     positions : array_like | None
         float, tap positions, one value for each row in terminalfactors,
         ordered according to terminalfactors,
@@ -83,9 +85,11 @@ def values_per_terminal(arr, terminalfactors, positions):
     ----------
     arr: numpy.array (shape n,2)
 
-    terminalfactors: pandas.DataFrame (index_of_factor) ->
+    terminalfactors: pandas.DataFrame (index_of_factor)
+
         * .index_of_terminal
         * .index_of_other_terminal
+
     positions: array_like
         float, one position for each terminal factor
 
@@ -110,9 +114,12 @@ def calculate_f_mn_tot_n(count_of_terminals, terminalfactors, term_to_factor):
     ----------
     count_of_terminals: int
         number of branch terminals
+
     terminalfactors: pandas.DataFrame
+
         * .index_of_terminal, int
         * .index_of_other_terminal, int
+
     term_to_factor: numpy.array
         float, voltage factor (m * position + n)
 
@@ -157,10 +164,12 @@ def create_gb_of_terminals_n(branchterminals, f_mn_tot):
     Parameters
     ----------
     branchterminals: pandas.DataFrame (index_of_terminal)
+
         * .g_lo, float, longitudinal conductance
         * .b_lo, float, longitudinal susceptance
         * .g_tr_half, float, transversal conductance
         * .b_tr_half, float, transversal susceptance
+
     f_mn_tot: numpy.array (shape n,2)
         float, f_mn - [:, 0], f_tot - [:, 1]
 
@@ -234,7 +243,6 @@ def create_gb_matrix(model, f_mn_tot):
     Returns
     -------
     scipy.sparse.matrix"""
-
     count_of_nodes = model.shape_of_Y[0]
     terms = model.branchterminals[~model.branchterminals.is_bridge]
     factors = f_mn_tot[terms.index,:]
@@ -367,11 +375,14 @@ def _get_interpolated_injected_power_fn(vminsqr, injections, kpq):
     ----------
     vminsqr: float
         upper limit of interpolation, interpolates if |V|² < vminsqr
+
     injections: pandas.DataFrame (index_of_terminal)
+
         * .P10
         * .Q10
         * .Exp_v_p
         * .Exp_v_q
+
     kpq: numpy.array, float, (nx2) | None
         factors for active and reactive power,
         if not given the function applies factor of 1.0
@@ -433,15 +444,19 @@ def get_calc_injected_power_fn(
     ----------
     vminsqr: float
         upper limit of interpolation, interpolates if |V|² < vminsqr
+
     injections: pandas.DataFrame (index_of_terminal)
+
         * .P10
         * .Q10
         * .Exp_v_p
         * .Exp_v_q
+
     kpq: numpy.array, float, (nx2)
         optional
         scaling factors for active and reactive power,
         if not given the function applies factor of 1.0
+
     loadcurve: 'original' | 'interpolated' | 'square'
         optional, default 'interpolated'
 
@@ -515,10 +530,10 @@ def next_voltage(
     mnodeinjT: scipy.sparse.matrix
         mnodeinjT @ values_per_node -> values_per_injection
     calc_injected_power: function
-        (numpy.array, float) ->
-            (numpy.array<float>, numpy.array<float>)
-        (square of absolute voltages at injection terminals) ->
-            (active power, reactive power)
+    ::
+        (numpy.array, float) -> (numpy.array<float>, numpy.array<float>)
+        (square of absolute voltages at injection terminals)
+                             -> (active power, reactive power)
     gb_lu: scipy.linalg.SolveLU
         LU-decomposition of gb-matrix (conductance, susceptance)
     idx_slack: array_like, int
@@ -665,25 +680,23 @@ def get_y_terms(branchterminals, f_mn_tot):
     y_tot = y_tr + y_mn
     return y_mn * f_mn_tot[:,[0]], y_tot * f_mn_tot[:,[1]]
 
-    # y_mn_tot = branchterminals[['y_lo', 'y_tr_half']].to_numpy()
-    # y_mn_tot[:,1] += y_mn_tot[:,0]
-    # return y_mn_tot * f_mn_tot
-
-
 def create_y(branchterminals, count_of_nodes, f_mn_tot):
     """Generates the branch-admittance matrix.
 
     Parameters
     ----------
     branchterminals: pandas.DataFrame (index_of_terminal)
+
         * .g_lo, float, longitudinal conductance
         * .b_lo, float, longitudinal susceptance
         * .g_tr_half, float, transversal conductance
         * .b_tr_half, float, transversal susceptance
         * .index_of_node, int
         * .index_of_other_node, int
+
     count_of_nodes: int
         number of power flow calculation nodes
+
     f_mn_tot: numpy.array (shape n,2)
         float, f_mn - [:, 0], f_tot - [:, 1]
 
@@ -710,16 +723,20 @@ def create_y_matrix(
     Parameters
     ----------
     branchterminals: pandas.DataFrame (index_of_terminal)
+
         * .g_lo, float, longitudinal conductance
         * .b_lo, float, longitudinal susceptance
         * .g_tr_half, float, transversal conductance
         * .b_tr_half, float, transversal susceptance
         * .index_of_node, int
         * .index_of_other_node, int
+
     count_of_nodes: int
         number of power-flow-calulation nodes
+
     count_of_slacks: int
         number of slack busbars
+
     f_mn_tot: numpy.array (shape n,2)
         float, f_mn - [:, 0], f_tot - [:, 1]
 
@@ -1086,7 +1103,7 @@ def get_residual_current_fn(model, get_injected_power):
         positions : array_like | None
             float, tap positions, one value for each row in terminalfactors,
             ordered according to model.factors.terminalfactors,
-            the function falls back to model.factors.terminalfactors.value 
+            the function falls back to model.factors.terminalfactors.value
             if positions is None
 
         Returns
