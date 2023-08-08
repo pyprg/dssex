@@ -37,7 +37,7 @@ DEFAULT_NETWORK = """
 # lines with first character '#' are not part of the schema
 """
 
-def estimate(model, step_params=()):
+def _estimate(model, step_params=()):
     """Calculates the power flow of given network model.
 
     With given step_params the function estimates the network state.
@@ -114,6 +114,26 @@ def estimate(model, step_params=()):
     res['messages'] = m
     return res
 
+def estimate(netelements, *, step_params=()):
+    """Calculates the power flow of a given network model.
+
+    Parameters
+    ----------
+    netelements: str
+
+    Returns
+    dict
+        * messages, pandas.DataFrame
+        * branches, pandas.DataFrame
+        * injection, pandas.DataFrame
+        * nodes, pandas.DataFrame"""
+    from egrid import make_model_checked
+    from dssex.result import make_printable
+    model = make_model_checked(netelements)
+    return {
+        title: df
+        for title,df in make_printable(_estimate(model, step_params)).items()}
+
 def print_powerflow(*args):
     """Calculates the power flow of a given network model. Prints the result.
 
@@ -148,13 +168,10 @@ def print_powerflow(*args):
             Branch | Slacknode | Injection | Output |
             PValue | QValue | IValue | Vvalue | Vlimit |
             Defk | Deft | Defoterm | Klink | Tlink | Message) | str"""
-    from egrid import make_model_checked
-    from dssex.result import make_printable
     if not args:
         args = DEFAULT_NETWORK
         print(args)
-    model = make_model_checked(args)
-    for title, df in make_printable(estimate(model)).items():
+    for title, df in estimate(args).items():
         print(f'\n>{title.upper()}>')
         print(df.fillna('-').to_markdown())
 

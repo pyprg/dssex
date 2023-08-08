@@ -121,7 +121,6 @@ res_vvc = list(estim.estimate_stepwise(
         dict(objectives='CL', constraints='U', floss=2)]))
 calc_vvc = list(rt.get_printable_results(model_vvc, res_vvc))
 #%%
-
 # import dssex.factors as ft
 # from dssex.estim import (
 #     get_step_data_fn, calculate_initial_powerflow, get_Vcx_factors)
