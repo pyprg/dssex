@@ -57,7 +57,7 @@ The optimization problem is setup using instance of:
     * given flow value (PQI-measurements, real value)
     * given node value (measurement or setpoint of voltage, real value)
 
-## Math Aproach
+## Math Approach
 
 IPOPT is an Interior Point solver which minimizes a scalar-valued objective
 function with respect to multiple constraints of different types
