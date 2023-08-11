@@ -114,12 +114,13 @@ def _estimate(model, step_params=()):
     res['messages'] = m
     return res
 
-def estimate(netelements, *, step_params=()):
+def estimate(elements, *, step_params=()):
     """Calculates the power flow of a given network model.
 
     Parameters
     ----------
-    netelements: str
+    elements: str
+        input data making up a network model
 
     Returns
     dict
@@ -129,7 +130,7 @@ def estimate(netelements, *, step_params=()):
         * nodes, pandas.DataFrame"""
     from egrid import make_model_checked
     from dssex.result import make_printable
-    model = make_model_checked(netelements)
+    model = make_model_checked(elements)
     return {
         title: df
         for title,df in make_printable(_estimate(model, step_params)).items()}
