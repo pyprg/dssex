@@ -30,7 +30,7 @@ and prints the results. If args are not provided the function calculates
 the power flow for a simple configuration, prints this simple configuration
 and the results.
 
-## Abstract Elements
+## Abstract Network Elements
 
 **dssex** processes two types of network devices and connectivity nodes.
 
@@ -39,8 +39,8 @@ Transformers and lines share the PI-equivalent circuit. Both are mapped to the
 
 Loads, PV/PQ-generators, batteries, and shunt capacitors are instances of
 **Injection**. Injections have attributes P10 and Q10 for active and reactive
-power at voltage of 1&nbsp;pu and Exp_v_p and Exp_v_q for modeling the voltage
-dependency. The voltage exponents of the injection instances Exp_v_p,
+power at voltage of 1.0&nbsp;pu and Exp_v_p and Exp_v_q for modeling the
+voltage dependency. The voltage exponents of the injection instances Exp_v_p,
 Exp_v_q are set to 0 for PQ-generators, constant and measured loads. Those
 injections and the injections of shunt capacitors are not scaled. Injections
 of shunt capacitors have an active power setting P10 of 0 and a negative
@@ -56,6 +56,13 @@ The optimization problem is setup using instance of:
     * slack node, marker of a node, source of given complex voltage
     * given flow value (PQI-measurements, real value)
     * given node value (measurement or setpoint of voltage, real value)
+
+As there are separate decision variables for real and imaginary parts of
+node voltages and internally build expressions of real and imaginary parts
+for currents of both device abstractions (branches and injections) using
+**phasor measurements** would be a natural fit. However, the focus was up to
+now including the more difficult to process but widely-used measurement
+values of V/I magnitude. Hence, including phasor measurements is not yet done.
 
 ## Math Approach
 
@@ -79,27 +86,34 @@ into a node equals the injected current&nbsp;- except for slacks
                            V - complex node voltage vector
                            I - complex node current vector
 
-Scaling factors and node voltages are the results of the optimization process.
-Variables for voltages and factors are named decision variables. The injected
-node current I is expressed in terms of the node voltages and scaling factors.
-The objective function is also expressed in decision variables and attributes
-of the devices and the topology. P_calculated in the term of an active power
-measurement at the terminals of a branch (P_measured - P_calculated)\*\*2,
-for example, is expressed in decision variables of the node voltages and
-admittance values of the branch.
+(Scaling) factors and node voltages are the results of the optimization
+process. Variables for voltages and factors are named decision variables.
+The injected node current I is expressed in terms of the node voltages and
+scaling factors. The objective function is also expressed in decision variables
+and attributes of the devices and the topology. P_calculated in the term of an
+active power measurement at the terminals of a branch
+(P_measured&nbsp;-&nbsp;P_calculated)\*\*2, for example, is expressed in
+decision variables of the node voltages and admittance values of the branch.
 
 Initial node voltages for the optimization process are currently calculated
 by a rootfinding function created and solved by CasADi (using IPOPT).
 
-The complete estimation process can consist of several minimization steps.
+One of the goals is to **avoid weighting factors** and not to trade off e.g.
+meeting power measurement values for meeting voltage measurements or
+vice versa. Selected sets of weighting factors tend to fit for a particular
+configuration only and selecting requires some kind of magic. Additionally
+they introduce some tradeoffs which hopefully can be avoided when using
+multiple optimization steps. Therefore, the complete estimation process of
+this implementation can consist of several minimization steps.
+
 Each step has a specific objective funtion. E.g. after opimizing towards
-P/Q measurements the next step might optimize to meet the voltage
-measurements/setpoints. P and Q values of the first step can be
+P/Q measurements the next step might optimize to meet the current/voltage
+measurements. P and Q values of the first step can be
 fixed by adding constraints accordingly. A separate handling of flow and
 voltage measurements and optimization of additional criteria is thus possible.
-This split avoids numeric problems created by different magnitudes of
-voltages, powers and currents. Weighting factors shall be avoided.
-Including additional (consistent) measurements shall yield better results.
+
+The split avoids numeric problems created by different magnitudes of
+voltages, powers and currents.
 
 Function **estim.estimate_stepwise** implements described method.
 
@@ -124,6 +138,9 @@ multiplication of two matrices.
     | Yim  Yre |   | Vim  Vre |   | (Yim*Vre + Yre*Vim)   (Yre*Vre - Yim*Vim) |
     +-        -+   +-        -+   +-                                         -+
 
+The separate processing of real and imaginary parts in the described manner
+enables a straight forward integration of phasor measurements in the future.
+
 ## Numeric Power Flow Calculation and Result Processing
 
 Function **pfcnum.calculate_power_flow** solves the non-linear
@@ -143,8 +160,15 @@ numerically.
 Features added for studying of Volt-Var-Control (VVC) problems:
 
     * discrete decision variables (shunt capacitors)
-    * decision variables for tap positions
+    * decision variables for tap positions (also discrete)
     * minimum and maximum limits for absolute voltages at nodes
     * expressions for power losses of branches used in objective function
     * cost for active and reactive power (e.g. import/generation)
     * cost for change of factors (e.g. position of taps)
+
+Control variables of VVC could be discrete or continuous values for active and
+reactive power of injections (shunt capacitors with taps, batteries,
+generators, PV-units, ...) and load-tap-changers of transformers.
+
+The VVC-Algorithm also benefits from the described multi step approach when
+for instance initially resolving voltage violations and then minimizing costs.
