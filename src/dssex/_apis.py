@@ -124,7 +124,7 @@ def estimate(model, step_params=(), vmin=.8):
         'optimization_result':(-1, False, v_cx, factors, tappositions)}]
 
 def create_model_and_estimate(args=(), step_params=(), vmin=.8):
-    """Calculates the power flow of a given network model. Prints the result.
+    """Calculates the power flow of a given network model.
 
     Parameters
     ----------

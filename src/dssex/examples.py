@@ -65,6 +65,7 @@ import numpy as np
 import dssex.pfcnum as pfc
 import dssex.result as rt
 import egrid.builder as grid
+import dssex.estim as estim
 from egrid import make_model_checked
 from egrid.model import get_positions
 
@@ -80,8 +81,123 @@ calc_pf = rt.get_printable_result(model, vcx, kpq=kpq, positions=positions)
 # accuracy
 residual_current = pfc.calculate_residual_current(
     model, vcx, positions=positions, kpq=kpq)
+#%% Power Flow Calculation with PV-Generator
+schema_pfc_pfgen = """
+                y_lo=1e3-1e3j                  Q10=40
+                y_tr=1e-6+1e-6j                P10=100
+slack----------branch-------------n0--------> consumer_
+                                  |
+                   _pv_gen ((~))--n0
+                     P10=17        V=.98
+                     Q10=50
+
+#.Defk(id=kq_gen min=-1 max=1 value=0)
+#.Klink(id_of_factor=kq_gen id_of_injection=pv_gen part=q)
+"""
+model_pfc_pvgen = make_model_checked(schema_pfc_pfgen)
+messages_pfc_pvgen = model_pfc_pvgen.messages
+res_pfc_pvgen = estim.estimate_stepwise(
+    model_pfc_pvgen,
+    step_params=[
+        # try to meet V-setpoint
+        dict(objectives='V')])
+vals_pfc_pvgen = list(rt.get_printable_results(model_pfc_pvgen, res_pfc_pvgen))
+#%% State Estimation 0 (P measurement)
+schema_dsse0 = """
+       P=80     y_lo=1e3-1e3j                  Q10=40
+                y_tr=1e-6+1e-6j                P10=100
+slack----------branch-------------n0--------> consumer_
+                                  |
+                                  n0--------> consumer2_
+                                               P10=50
+                                               Q10=10
+#.Defk(id=kpq min=0 max=1 value=1)
+#.Klink(id_of_factor(kpq kpq) part(p q) id_of_injection(consumer consumer2))
+"""
+model_dsse0 = make_model_checked(schema_dsse0)
+messages_dsse0 = model_dsse0.messages
+res_dsse0 = estim.estimate_stepwise(
+    model_dsse0,
+    step_params=[
+        # try to meet P-measurement
+        dict(objectives='P')])
+vals_dsse0 = list(rt.get_printable_results(model_dsse0, res_dsse0))
+#%% State Estimation 1 (P,Q-measurements)
+schema_dsse1 = """
+       P=80     y_lo=1e3-1e3j                  Q10=40
+       Q=40     y_tr=1e-6+1e-6j                P10=100
+slack----------branch-------------n0--------> consumer_
+                                  |
+                                  n0--------> consumer2_
+                                               P10=50
+                                               Q10=10
+#.Defk(id(kp kq) min=0 max=1 value=1)
+#.Klink(id_of_factor(kp kq) part(p q) id_of_injection(consumer consumer2))
+"""
+model_dsse1 = make_model_checked(schema_dsse1)
+messages_dsse1 = model_dsse1.messages
+res_dsse1 = estim.estimate_stepwise(
+    model_dsse1,
+    step_params=[
+        # try to meet P,Q-measurement
+        dict(objectives='PQ')])
+vals_dsse1 = list(rt.get_printable_results(model_dsse1, res_dsse1))
+#%% State Estimation 2 (P,Q,I-measurements)
+schema_dsse2 = """
+       P=80     y_lo=1e3-1e3j                  Q10=40
+       Q=40     y_tr=1e-6+1e-6j       I=25     P10=100
+slack----------branch-------------n0--------> consumer_
+                                  |
+                                  n0--------> consumer2_
+                                               P10=50
+                                               Q10=10
+#.Defk(id(kp kq kp2 kq2) min=0 max=1 value=1)
+#.Klink(id_of_factor(kp kq) part(p q) id_of_injection=consumer)
+#.Klink(id_of_factor(kp2 kq2) part(p q) id_of_injection=consumer2)
+"""
+model_dsse2 = make_model_checked(schema_dsse2)
+messages_dsse2 = model_dsse2.messages
+res_dsse2 = estim.estimate_stepwise(
+    model_dsse2,
+    step_params=[
+        # try to meet P,Q,I-measurement
+        dict(objectives='PQI')])
+vals_dsse2 = list(rt.get_printable_results(model_dsse2, res_dsse2))
+#%% State Estimation 3 (P,Q,I-measurements, equally scale consumer)
+schema_dsse3 = """
+       P=70     y_lo=1e3-1e3j                  Q10=40
+       Q=40     y_tr=1e-6+1e-6j       I=22     P10=100
+slack----------branch-------------n0--------> consumer_
+                                  |
+                                  n0--------> consumer2_
+                                               P10=50
+                                               Q10=10
+#.Defk(id(kp kq kp2 kq2) min=0 max=1 value=1)
+#.Klink(id_of_factor(kp kq) part(p q) id_of_injection=consumer)
+#.Klink(id_of_factor(kp2 kq2) part(p q) id_of_injection=consumer2)
+#.Defoterm(args(kp kq))
+"""
+model_dsse3 = make_model_checked(schema_dsse3)
+messages_dsse3 = model_dsse3.messages
+res_dsse3 = estim.estimate_stepwise(
+    model_dsse3,
+    step_params=[
+        # try to meet P,Q,I-measurement
+        dict(objectives='PQIT')])
+vals_dsse3 = list(rt.get_printable_results(model_dsse3, res_dsse3))
+#%%
+res_dsse4 = list(estim.estimate_stepwise(
+    model_dsse3,
+    step_params=[
+        # try to meet P,Q,I-measurement, include objective kp==kq
+        dict(objectives='PQI'),
+        dict(objective='T', constraints='PQI')]))
+vals_dsse4 = list(rt.get_printable_results(model_dsse3, res_dsse4))
+# accuracy
+opt_idx_dsse4, succ_dsse4, vcx_dsse4, kpq_dsse4, positions_dsse4 = res_dsse4[2]
+residual_current_dsse4 = pfc.calculate_residual_current(
+    model_dsse3, vcx_dsse4, positions=positions_dsse4 , kpq=kpq_dsse4 )
 #%% State Estimation
-import dssex.estim as estim
 model = make_model_checked(schema)
 res = list(estim.estimate_stepwise(
     model,

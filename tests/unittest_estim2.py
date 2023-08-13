@@ -1245,7 +1245,7 @@ class Term(unittest.TestCase):
             id_of_injection='injection',
             part=('p', 'q'),
             id_of_factor=('kp', 'kq')),
-        grid.Defoterm(args=('kp', 'kq')),
+        grid.Defoterm(args=('kp', 'kq'), weight=1.0, step=1),
         grid.Defoterm(args=('kp', 'kq'), weight=3.0, step=2))
 
     def test_diff_pq(self):

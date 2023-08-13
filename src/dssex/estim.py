@@ -1369,11 +1369,13 @@ def _get_branch_loss_expression(model, v_syms_gb_ex):
         return casadi.sum1(p_term_a + p_term_b)
     return casadi.SX(0)
 
-def _get_diff_expression(symbols):
+def _get_diff_expression(multiplier, symbols):
     """Generates squared difference expression.
 
     Parameters
     ----------
+    multiplier: casadi.DM(shape n,1)
+
     symbols: casadi.SX (shape n,1)
         symbols
 
@@ -1381,11 +1383,12 @@ def _get_diff_expression(symbols):
     -------
     casadi.SX (shape 1,1)"""
     size = symbols.size1()
+    symbols_ = multiplier * symbols
     return (
         casadi.sumsqr(
             # value - average
-            symbols - (casadi.sum1(symbols) / size))
-        if 1 < size else casadi.sumsqr(symbols))
+           symbols_ - (casadi.sum1(symbols_) / size))
+        if 1 < size else casadi.sumsqr(symbols_))
 
 _expression_functions = {
     'diff': _get_diff_expression}
@@ -1402,7 +1405,65 @@ def _get_expression_function(name):
     -------
     function
         (casadi.SX (shape n,1)) -> (casadi.SX (shape 1,1))"""
-    return _expression_functions.get(name, lambda _:_SX_0r1c)
+    return _expression_functions.get(name, lambda _, __:_SX_0r1c)
+
+def _get_float(s):
+    """Converts a string into a float if possible.
+
+    Parameters
+    ----------
+    s: string
+
+    Returns
+    -------
+    tuple
+        * bool, is_float
+        * float | str"""
+    try:
+        return True, float(s)
+    except ValueError:
+        return False, s
+
+def _multiply(t_iter):
+    """Reads a sequence of tuples. Multiplies float values
+    until next string. Yields a tuple of the product and the string.
+
+    Parameters
+    ----------
+    t_iter: iterator
+        * bool, is_float?
+        * float | str
+
+    Yields
+    ------
+    tuple
+        * float, factor
+        * str, id of symbol"""
+    f = 1.
+    for is_float, val in t_iter:
+        if is_float:
+            f *= val
+        else:
+            yield f, val
+            f = 1.
+
+def _get_f_id(s_iter):
+    """Creates a pandas.DataFrame with factors and ids.
+
+
+    Parameters
+    ----------
+    s_iter: iterable
+        str
+
+    Returns
+    -------
+    pandas.DataFrame
+        * .f, float
+        * .id, str"""
+    return pd.DataFrame.from_records(
+        _multiply(map(_get_float, s_iter)),
+        columns=['f', 'id'])
 
 def _get_symbols(symbols, id_to_idx, ids):
     """Fetches symbols for given IDs.
@@ -1416,14 +1477,15 @@ def _get_symbols(symbols, id_to_idx, ids):
         int, index of symbol in argument symbols
 
     ids: iterable
-        string, identifiers of symbols
+        string, strings for float values, identifiers of symbols
 
     Returns
     -------
     casadi.SX
         (shape n,1)"""
     try:
-        return symbols[id_to_idx.loc[list(ids)]]
+        f_id = _get_f_id(ids)
+        return casadi.DM(f_id.f), symbols[id_to_idx.loc[f_id.id]]
     except:
         return _SX_0r1c
 
@@ -1440,6 +1502,7 @@ def _get_oterm_expressions(symbols, id_to_idx, oterms):
 
     oterms: pandas.DataFrame
 
+        * ['weight'], float
         * ['args'], iterable string, identifiers of arguments
         * ['fn'], str, identifier of function
 
@@ -1449,8 +1512,9 @@ def _get_oterm_expressions(symbols, id_to_idx, oterms):
         term of objective function"""
     get_symbols = partial(_get_symbols, symbols, id_to_idx)
     return casadi.sum1(
+        casadi.DM(oterms.weight) *
         casadi.vcat(
-            [_get_expression_function(row.fn.lower())(get_symbols(row.args))
+            [_get_expression_function(row.fn.lower())(*get_symbols(row.args))
              for _, row in oterms.iterrows()]))
 
 def get_batch_flow_expressions(model, v_syms_gb_ex, ipqv, quantity, cost):

@@ -512,17 +512,44 @@ class Calculate_power_flow(unittest.TestCase):
         # without slack node, slack is at index 0
         max_dev1 = norm(Inode1[model1.count_of_slacks:], np.inf)
         self.assertLess(max_dev1, 3e-8, 'residual node current is 0')
-        res = rt.calculate_electric_data(model1, vnode_cx1, kpq=kpq)
         idx_v = model1.nodes.reindex(self.order_of_nodes.index).index_of_node
-        # df_Vcx1 = pd.DataFrame(
-        #     {'id_of_node': order_of_nodes.index,
-        #      'Vcx': vnode_cx1[idx_v].reshape(-1)})
-        # print(df_Vcx1)
         diff_max = norm(
             #                                       10% | no slack
             (vnode_cx0[idx_v] - (vnode_cx1[idx_v] / 1.1))[1:],
             np.inf)
         self.assertLess(diff_max, 6e-3, "voltage increase about 10%")
+
+class Get_symbols(unittest.TestCase):
+
+    def test_get_f_id(self):
+        df = estim._get_f_id(('kp','2.5', '4','kq', '3'))
+        self.assertEqual(df.f.to_list(), [ 1., 10.])
+        self.assertEqual(df.id.to_list(), ['kp', 'kq'])
+
+    def test_get_symbols(self):
+        import casadi
+        symbols = casadi.SX.sym('test', 4)
+        id_to_idx = pd.Series(
+            [2,3,0,1], index=['test_2', 'test_3', 'test_0', 'test_1'])
+        ids = ['test_1', 'test_0']
+        f, my_symbols = estim._get_symbols(symbols, id_to_idx, ids)
+        my_names = [el.name() for el in my_symbols.elements()]
+        self.assertEqual(my_names, ids)
+
+    def test_get_symbols2(self):
+        import casadi
+        symbols = casadi.SX.sym('test', 4)
+        id_to_idx = pd.Series(
+            [2,3,0,1], index=['test_2', 'test_3', 'test_0', 'test_1'])
+        ids = ['test_1', '3.2', 'test_0']
+        f, my_symbols = estim._get_symbols(symbols, id_to_idx, ids)
+        self.assertTrue(casadi.is_equal(f, [1, 3.2]))
+
+class Get_oterm_expressions(unittest.TestCase):
+
+    def test_get_oterm_expressions(self):
+        import casadi
+        # estim._get_oterm_expressions
 
 if __name__ == '__main__':
     unittest.main()
