@@ -2375,10 +2375,6 @@ def get_violated_nodes(vlimits, /, vnode_cx):
 def get_opt_data_fn(model, step_params):
     """Creates initial data and a function for optimization data of next steps.
 
-    Function 'ini_step_data' creates the step_data structure for the first run
-    of function 'optimize'. Function 'next_step_data' for all
-    subsequent runs.
-
     Parameters
     ----------
     model: egrid.model.Model

@@ -32,7 +32,7 @@ schema = """
                        |                      |                      |                      |                      |
     Tlink=taps         |                      |                      |                      |                      |
     I=11               |                      |                      |                      |                      |
-    P=35 Q=10          |                      |                      |                      |                      |
+    P=30 Q=15          |                      |                      |                      |                      |
 n0(--------line_1-----)n1(--------line_2-----)n2(--------line_3-----)n3(--------line_4-----)n4(------line_5-------)n5-------> load_52_
 slack=True  y_lo=1e3-1e3j          y_lo=1k-1kj            y_lo=0.9k-0.95kj       y_lo=1k-1kj           y_lo=1k-1kj |           P10=2 Q10=1
 V=1.00      y_tr=1e-6+1e-6j        y_tr=1µ+1µj            y_tr=1.3µ+1.5µj        y_tr=1e-6+1e-6j       y_tr=1e-6+1e-6j
@@ -41,7 +41,7 @@ V=1.00      y_tr=1e-6+1e-6j        y_tr=1µ+1µj            y_tr=1.3µ+1.5µj   
                        |                                                                                           |
                        |                                                                                           |
                        |           y_lo=1e3-1e3j          y_lo=1e3-1e3j                       y_lo=1e3-1e3j        |
-                       |   I=10    y_tr=1e-6+1e-6j        y_tr=1e-6+1e-6j           V=1.0     y_tr=1e-6+1e-6j      |
+                       |   I=10    y_tr=1e-6+1e-6j        y_tr=1e-6+1e-6j           V=.99     y_tr=1e-6+1e-6j      |
                        n1(--------line_6-----)n6(--------line_7--------------------)n7(------line_8---------------)n5
                                               |                                     |
                                               |                                     |
@@ -53,12 +53,12 @@ V=1.00      y_tr=1e-6+1e-6j        y_tr=1µ+1µj            y_tr=1.3µ+1.5µj   
 
 #. Defk(id=(kp kq))
 #. Klink(id_of_injection=(load_2 load_3) part=(p q) id_of_factor=(kp kq))
-# Klink(id_of_injection=(load_51 load_6) part=q id_of_factor=kq)
-# Defk(id=kq_Gen7 max=7)
-# Klink(id_of_injection=Gen_7 part=q id_of_factor=kq_Gen7)
-# Deft(id=taps value=0)
-#. Defoterm(args=(kp kq))
-#. Defvl(min=.85 max=1.15)
+#. Klink(id_of_injection=(load_51 load_6) part=q id_of_factor=kq)
+#. Defk(id=kq_Gen7 max=7)
+#. Klink(id_of_injection=Gen_7 part=q id_of_factor=kq_Gen7)
+#. Deft(id=taps value=0)
+# Defoterm(args=(kp kq))
+# Defvl(min=.85 max=1.15)
 """
 
 import numpy as np
@@ -158,10 +158,8 @@ slack----------branch-------------n0--------> consumer_
 model_dsse2 = make_model_checked(schema_dsse2)
 messages_dsse2 = model_dsse2.messages
 res_dsse2 = estim.estimate_stepwise(
-    model_dsse2,
-    step_params=[
-        # try to meet P,Q,I-measurement
-        dict(objectives='PQI')])
+    # try to meet P,Q,I-measurement
+    model_dsse2, step_params=[dict(objectives='PQI')])
 vals_dsse2 = list(rt.get_printable_results(model_dsse2, res_dsse2))
 #%% State Estimation 3 (P,Q,I-measurements, equally scale consumer)
 schema_dsse3 = """
@@ -180,17 +178,16 @@ slack----------branch-------------n0--------> consumer_
 model_dsse3 = make_model_checked(schema_dsse3)
 messages_dsse3 = model_dsse3.messages
 res_dsse3 = estim.estimate_stepwise(
-    model_dsse3,
-    step_params=[
-        # try to meet P,Q,I-measurement
-        dict(objectives='PQIT')])
+    # try to meet P,Q,I-measurement, include objective kp==kq
+    model_dsse3, step_params=[dict(objectives='PQIT')])
 vals_dsse3 = list(rt.get_printable_results(model_dsse3, res_dsse3))
-#%%
+#%% State Estimation 4 (P,Q,I-measurements, equally scale consumer), 2 step
 res_dsse4 = list(estim.estimate_stepwise(
     model_dsse3,
     step_params=[
-        # try to meet P,Q,I-measurement, include objective kp==kq
+        # try to meet P,Q,I-measurement
         dict(objectives='PQI'),
+        # try to meet kp==kq
         dict(objective='T', constraints='PQI')]))
 vals_dsse4 = list(rt.get_printable_results(model_dsse3, res_dsse4))
 # accuracy
@@ -198,7 +195,6 @@ opt_idx_dsse4, succ_dsse4, vcx_dsse4, kpq_dsse4, positions_dsse4 = res_dsse4[2]
 residual_current_dsse4 = pfc.calculate_residual_current(
     model_dsse3, vcx_dsse4, positions=positions_dsse4 , kpq=kpq_dsse4 )
 #%% State Estimation
-model = make_model_checked(schema)
 res = list(estim.estimate_stepwise(
     model,
     step_params=[

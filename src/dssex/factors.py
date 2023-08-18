@@ -74,6 +74,7 @@ Factorsymbols.__doc__ = """Symbols for factors of one step.
 Parameters
 ----------
 all: casadi.SX
+
 kpq: casadi.SX
     shape nx2, scaling factors for active and reactive power
     (for each injection)
@@ -207,15 +208,21 @@ def make_factordata(model, gen_factor_symbols, step=0, f_prev=_NPARRAY_0r1c):
         fm.index_of_var_symbol,
         fm.index_of_const_symbol)
     return Factordata(
+        # all variables
         all=symbols.all,
+        # id of factor to index of factor in all
         id_to_idx=fm.id_to_idx,
+        # scaling factors
         kpq=symbols.kpq,
+        # decision variables
         vars=symbols.vars,
+        # parameters
         consts=symbols.consts,
         # initial values, argument in solver call
         values_of_vars=_make_DM_vector(fm.values_of_vars),
         # reference values, for cost of change calculation
         values_of_vars_model=_make_DM_vector(fm.values_of_vars_model),
+        # cost for change of decision variables
         cost_of_change=_make_DM_vector(fm.cost_of_change),
         # lower bound of scaling factors, argument in solver call
         var_min=_make_DM_vector(fm.var_min),
