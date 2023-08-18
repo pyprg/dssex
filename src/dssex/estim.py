@@ -2422,7 +2422,7 @@ def get_step_data_fn(model, gen_factor_symbols):
                   optional, default=1.0,
                   factor for losses used for optimization of cost"""
     expressions = get_expressions(model, gen_factor_symbols)
-    make_step_data = partial(get_step_data, model, expressions)
+    make_opt_data = partial(get_step_data, model, expressions)
     def next_step_data(
             *, step, voltages_ri, k, objectives='', constraints='', floss=1.):
         """Creates data for function 'optimize'.
@@ -2462,7 +2462,7 @@ def get_step_data_fn(model, gen_factor_symbols):
         kpq, ftaps, values_of_factors = ft.separate_factors(factordata, k)
         batch_values = get_batch_values(
             model, voltages_ri2, kpq, ftaps, constraints)
-        return  make_step_data(
+        return  make_opt_data(
             step=step,
             f_prev=values_of_factors,
             objectives=objectives,
@@ -2470,7 +2470,7 @@ def get_step_data_fn(model, gen_factor_symbols):
             values_of_constraints=batch_values,
             floss=floss,
             vnode_cx=voltages_ri2.view(dtype=np.complex128))
-    return make_step_data(step=0), next_step_data
+    return make_opt_data(step=0), next_step_data
 
 def optimize(
     *, model, expressions, factordata, Inode_inj, objective,
@@ -2573,12 +2573,12 @@ def calculate_initial_powerflow(ini_data):
     values_of_vars = factordata.values_of_vars
     return succ, voltages_ri, values_of_vars
 
-def _make_step_data(
+def _make_opt_data(
         step_data_fn, step_params, step,
-        succ, voltages_ri, values_of_vars, factordata):
+        succ, voltages_ri, values_of_vars, prev_opt_data):
     """Controls the optimization loop according to parameters 'step_params'.
 
-    Creates data for steps. Optimization loop stops when '_make_step_data'
+    Creates data for steps. Optimization loop stops when '_make_opt_data'
     returns None.
 
     The function uses predefined step_params.
@@ -2606,13 +2606,14 @@ def _make_step_data(
     values_of_vars: casadi.DM
         initial values of decision variables
 
-    factordata: Factordata
+    prev_opt_data: dict
 
-        * .values_of_consts,
-            array_like, float, column vector, values for consts
-        * .var_const_to_factor,
-            array_like int, index_of_factor=>index_of_var_const
-            converts var_const to factor (var_const[var_const_to_factor])
+        * ['factordata'], Factordata
+            * .values_of_consts,
+                array_like, float, column vector, values for consts
+            * .var_const_to_factor,
+                array_like int, index_of_factor=>index_of_var_const
+                converts var_const to factor (var_const[var_const_to_factor])
 
     Returns
     -------
@@ -2630,6 +2631,7 @@ def _make_step_data(
         objectives = kv.get('objectives', '').upper()
         constraints = kv.get('constraints', '').upper()
         floss = kv.get('floss', 1.)
+        factordata = prev_opt_data['factordata']
         factor_values = ft.get_factor_values(factordata, values_of_vars)
         return step_data_fn(
             step=step, voltages_ri=voltages_ri, k=factor_values,
@@ -2637,15 +2639,16 @@ def _make_step_data(
     return None
 
 def _optimization_loop(
-        make_step_data, succ, voltages_ri, values_of_vars, factordata):
-    """Repeatedly calls 'optimize' with data provided by 'make_step_data'.
+        make_opt_data, succ, voltages_ri, values_of_vars, ini_data):
+        # make_opt_data, succ, voltages_ri, values_of_vars, factordata):
+    """Repeatedly calls 'optimize' with data provided by 'make_opt_data'.
 
-    The loop is controlled by 'make_step_data'. The loop stops once
-    'make_step_data' returns None.
+    The loop is controlled by 'make_opt_data'. The loop stops once
+    'make_opt_data' returns None.
 
     Parameters
     ----------
-    make_step_data: function
+    make_opt_data: function
         (step, success, voltages_ri, values_of_vars, factordata) -> (dict)
 
     succ: bool
@@ -2657,13 +2660,13 @@ def _optimization_loop(
     values_of_vars: casadi.DM
         initial values of decision variables
 
-    factordata: Factordata
-
-        * .values_of_consts,
-            array_like, float, column vector, values for consts
-        * .var_const_to_factor,
-            array_like int, index_of_factor=>index_of_var_const
-            converts var_const to factor (var_const[var_const_to_factor])
+    ini_data: dict
+        * ['factordata'], Factordata
+            * .values_of_consts,
+                array_like, float, column vector, values for consts
+            * .var_const_to_factor,
+                array_like int, index_of_factor=>index_of_var_const
+                converts var_const to factor (var_const[var_const_to_factor])
 
     Yields
     ------
@@ -2673,37 +2676,45 @@ def _optimization_loop(
            first estimation is 0, ...)
         * bool, success?
         * numpy.array, complex (shape n,1), calculated complex node voltages
-        * numpy.array, float (shape m,2), values of factors
-        * tappositions"""
+        * numpy.array, float (shape m,1), values of decision variables
+        * dict
+            * ['factordata'], Factordata
+                * .values_of_consts,
+                    array_like, float, column vector, values for consts
+                * .var_const_to_factor,
+                    array_like int, index_of_factor=>index_of_var_const
+                    converts var_const to factor
+                    (var_const[var_const_to_factor])"""
+    opt_data = ini_data
     for step in count():
-        step_data = make_step_data(
-            step, succ, voltages_ri, values_of_vars, factordata)
-        if step_data is None:
+        opt_data = make_opt_data(
+            step, succ, voltages_ri, values_of_vars, opt_data)
+        if opt_data is None:
             return
-        factordata = step_data['factordata']
         # estimation
         succ, voltages_ri, values_of_vars = optimize(
-            **step_data, Vnode_ri_ini=voltages_ri)
-        yield step, succ, voltages_ri, values_of_vars, factordata
+            **opt_data, Vnode_ri_ini=voltages_ri)
+        yield step, succ, voltages_ri, values_of_vars, opt_data
 
-def get_Vcx_factors(factordata, voltages_ri, factorvalues):
+def get_Vcx_factors(opt_data, voltages_ri, factorvalues):
     """Helper. Arranges solver result.
 
     Parameters
     ----------
-    factordata: Factordata
+    opt_data: dict
+        * ['factordata'], Factordata
 
-        * .values_of_consts, float
-            column vector, values for consts
-        * .var_const_to_factor
-            int, index_of_factor=>index_of_var_const
-            converts var_const to factor (var_const[var_const_to_factor])
-        * .var_const_to_kp
-            int, converts var_const to kp, one active power scaling factor
-            for each injection (var_const[var_const_to_kp])
-        * .var_const_to_kq
-            int, converts var_const to kq, one reactive power scaling factor
-            for each injection (var_const[var_const_to_kq])
+            * .values_of_consts, float
+                column vector, values for consts
+            * .var_const_to_factor
+                int, index_of_factor=>index_of_var_const
+                converts var_const to factor (var_const[var_const_to_factor])
+            * .var_const_to_kp
+                int, converts var_const to kp, one active power scaling factor
+                for each injection (var_const[var_const_to_kp])
+            * .var_const_to_kq
+                int, converts var_const to kq, one reactive power scaling
+                factor for each injection (var_const[var_const_to_kq])
 
     voltages_ri: casadi.DM (shape 2n,1)
         real part of node voltages, imaginary part of node voltages
@@ -2717,7 +2728,8 @@ def get_Vcx_factors(factordata, voltages_ri, factorvalues):
         * numpy.array (shape n,1), complex, node voltages
         * numpy.array (shape m,2), float, scaling factors per injection
         * numpy.array (shape n,1), float, positions"""
-    kpq, pos, vars_consts = ft.separate_factors(factordata, factorvalues)
+    kpq, pos, vars_consts = ft.separate_factors(
+        opt_data['factordata'], factorvalues)
     V = ri_to_complex(voltages_ri)
     return V, kpq, pos
 
@@ -2781,15 +2793,14 @@ def estimate_stepwise(model, *, step_params=(), vminsqr=_VMINSQR):
     gen_factorsymbols = ft._create_symbols_with_ids(
         model.factors.gen_factordata.index)
     ini_data, step_data_fn = get_step_data_fn(model, gen_factorsymbols)
-    factordata = ini_data['factordata']
+    make_opt_data = partial(_make_opt_data, step_data_fn, step_params)
+    #
     succ, voltages_ri, values_of_vars = calculate_initial_powerflow(ini_data)
     pfc_res = (
-        -1, succ, *get_Vcx_factors(factordata, voltages_ri, values_of_vars))
-    make_step_data = partial(_make_step_data, step_data_fn, step_params)
+        -1, succ, *get_Vcx_factors(ini_data, voltages_ri, values_of_vars))
     return chain(
         [pfc_res],
-        ((step, succ, *get_Vcx_factors(factordata, v_ri, factorvalues))
-         for step, succ, v_ri, factorvalues, factordata in
+        ((step, succ, *get_Vcx_factors(opt_data, v_ri, factorvalues))
+         for step, succ, v_ri, factorvalues, opt_data in
              _optimization_loop(
-                 make_step_data, succ, voltages_ri, values_of_vars,
-                 factordata)))
+                 make_opt_data, succ, voltages_ri, values_of_vars, ini_data)))
