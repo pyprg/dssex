@@ -2372,7 +2372,7 @@ def get_violated_nodes(vlimits, /, vnode_cx):
                 [(1.+margin) * vmin[idxs_st_min],
                  (1.-margin) * vmax[idxs_gt_max]])))
 
-def get_step_data_fn(model, gen_factor_symbols):
+def get_opt_data_fn(model, step_params):
     """Creates initial data and a function for optimization data of next steps.
 
     Function 'ini_step_data' creates the step_data structure for the first run
@@ -2383,9 +2383,6 @@ def get_step_data_fn(model, gen_factor_symbols):
     ----------
     model: egrid.model.Model
         data of a balanced distribution network
-    gen_factor_symbols: casadi.SX
-        generic factor symbols, decision variables or parameters for
-        scaling factors of injections and terminal factors (taps factors)
 
     Returns
     -------
@@ -2403,27 +2400,47 @@ def get_step_data_fn(model, gen_factor_symbols):
 
         * next_step_data: function
           ::
-              (int, casadi.DM, casadi.DM, str, str, float)->(Stepdata),
-          parameters of functions:
-              step: int
-                  index of optimizatin step
-              voltages_ri: casadi.DM
-                  node voltages calculated by previous calculation step
-              k: casadi.DM
-                  factors calculated by previous calculation step
-              objectives: str (optional)
-                  optional, default ''
-                  string of characters 'I'|'P'|'Q'|'V'|'U'|'L'|'C'
-                  or empty string
-              constraints: str (optional)
-                  optional, default ''
-                  string of characters 'I'|'P'|'Q'|'V'|'U'
-              floss: float
-                  optional, default=1.0,
-                  factor for losses used for optimization of cost"""
-    expressions = get_expressions(model, gen_factor_symbols)
+              (int, bool, casadi.DM, casadi.DM, dict)->(dict),
+
+          parameters of function
+            step: int
+                index of step
+
+            succ: bool
+                success?
+
+            voltages_ri : casadi.DM (shape 2n,1)
+                real part of node voltages, imaginary part of node voltages
+
+            values_of_vars: casadi.DM
+                initial values of decision variables
+
+            prev_opt_data: dict
+
+                * ['factordata'], Factordata
+                    * .values_of_consts,
+                        array_like, float, column vector, values for consts
+                    * .var_const_to_factor,
+                        array_like int, index_of_factor=>index_of_var_const
+                        converts var_const to factor
+                        (var_const[var_const_to_factor])
+
+            Returns
+            -------
+            dict
+                * ['model'], egrid.model.Model
+                * ['expressions'], dict
+                * ['factordata'], factors.Factordata
+                * ['Inode_inj'], casadi.SX
+                * ['objective'], casadi.SX
+                * ['constraints'], casadi.SX
+                * ['lbg'], casadi.DM
+                * ['ubg'], casadi.DM"""
+    gen_factorsymbols = ft._create_symbols_with_ids(
+        model.factors.gen_factordata.index)
+    expressions = get_expressions(model, gen_factorsymbols)
     make_opt_data = partial(get_step_data, model, expressions)
-    def next_step_data(
+    def get_next_step_data(
             *, step, voltages_ri, k, objectives='', constraints='', floss=1.):
         """Creates data for function 'optimize'.
 
@@ -2458,7 +2475,7 @@ def get_step_data_fn(model, gen_factor_symbols):
             * ['ubg'], casadi.DM, vector, upper bound of constraints"""
         # calculate values of previous step
         voltages_ri2 = ri_to_ri2(voltages_ri)
-        factordata = ft.make_factordata(model, gen_factor_symbols, step, k)
+        factordata = ft.make_factordata(model, gen_factorsymbols, step, k)
         kpq, ftaps, values_of_factors = ft.separate_factors(factordata, k)
         batch_values = get_batch_values(
             model, voltages_ri2, kpq, ftaps, constraints)
@@ -2470,7 +2487,9 @@ def get_step_data_fn(model, gen_factor_symbols):
             values_of_constraints=batch_values,
             floss=floss,
             vnode_cx=voltages_ri2.view(dtype=np.complex128))
-    return make_opt_data(step=0), next_step_data
+    return (
+        make_opt_data(step=0),
+        partial(_make_opt_data, get_next_step_data, step_params))
 
 def optimize(
     *, model, expressions, factordata, Inode_inj, objective,
@@ -2790,11 +2809,7 @@ def estimate_stepwise(model, *, step_params=(), vminsqr=_VMINSQR):
                 calculated complex node voltages
             * numpy.array, float (shape m,2), values of factors
             * numpy.array, float (shape n,1), tappositions"""
-    gen_factorsymbols = ft._create_symbols_with_ids(
-        model.factors.gen_factordata.index)
-    ini_data, step_data_fn = get_step_data_fn(model, gen_factorsymbols)
-    make_opt_data = partial(_make_opt_data, step_data_fn, step_params)
-    #
+    ini_data, make_opt_data = get_opt_data_fn(model, step_params)
     succ, voltages_ri, values_of_vars = calculate_initial_powerflow(ini_data)
     pfc_res = (
         -1, succ, *get_Vcx_factors(ini_data, voltages_ri, values_of_vars))
