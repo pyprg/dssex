@@ -37,6 +37,36 @@ DEFAULT_NETWORK = """
 # lines with first character '#' are not part of the schema
 """
 
+def _check_step_params(step_params):
+    """Checks if all keys of step_params will be processed by 'estimate'.
+
+    Issues error messages, if any errors.
+
+    Parameters
+    ----------
+    step_params: iterable
+        dict
+
+    Yields
+    ------
+    str"""
+    if not isinstance(step_params, (list, tuple)):
+        yield "step_params of function 'estimate' shall be a list or a tuple"
+        return
+    _keys = "objectives", "constraints", "floss"
+    for idx, params in enumerate(step_params):
+        if not isinstance(params, dict):
+            yield (
+                f'parameters for step {idx} must be provided as dict '
+                f'with optional keys: {", ".join(_keys)}')
+        else:
+            for k in params.keys():
+                if k not in _keys:
+                    yield (
+                        f'unkown key "{k}" in step_params of function '
+                        f'estimate for optimization step {idx} '
+                        f'(processed keys: {", ".join(_keys)})')
+
 def estimate(model, step_params=(), vmin=.8):
     """Calculates the power flow of given network model.
 
@@ -106,6 +136,10 @@ def estimate(model, step_params=(), vmin=.8):
     from pandas import DataFrame, concat
     from numpy import empty
     messages = model.messages
+    msg_param_check = list(_check_step_params(step_params))
+    if len(msg_param_check):
+        messages = concat(
+            [messages, DataFrame(dict(message=msg_param_check, level=1))])
     if all(messages.level < 2):
         results = list(estimate_stepwise(
             model, step_params=step_params, vminsqr=vmin**2))
@@ -115,7 +149,7 @@ def estimate(model, step_params=(), vmin=.8):
             for r, p in zip(results, printables))
     # return messages and empty result structure
     txt = 'not calculated, error(s) in model'
-    msgs = concat([messages, DataFrame([dict(message=txt, level=2)])])
+    msgs = concat([messages, DataFrame(dict(message=txt, level=2))])
     v_cx = empty(shape=(0,1), dtype=complex)
     res = get_printable_result(make_model(), v_cx)
     factors = empty(shape=(0,2), dtype=float)
