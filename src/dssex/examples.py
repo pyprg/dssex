@@ -232,11 +232,22 @@ res_vvc = list(estim.estimate_stepwise(
         # second step: minimize cost
         dict(objectives='CL', constraints='U', floss=2)]))
 calc_vvc = list(rt.get_printable_results(model_vvc, res_vvc))
-
-
-
-
-
-
-
-
+#%% Tap Controller
+schema05 = """
+      Tlink=taps         V=1
+slack ---tr-------------n00----line-----n01---> load01
+          y_lo=10k-10kj  |      y_lo=2k-2kj      P10=200 Q10=40
+          y_tr=1µ+8µj    |      y_tr=2µ+2µj
+                         |
+     _load00 <----------n00---|| cap_
+       P10=400 Q10=140            Q10=-40
+       Exp_v_p=1                  Exp_v_q=2
+       Exp_v_q=1
+#.
+Deft(id=taps type=var min=-9 max=9 value=0)
+"""
+model05 = make_model_checked(schema05)
+messages05 = model05.messages
+res05 = list(estim.estimate_stepwise(
+    model05, step_params=[dict(objectives='V')]))
+calc05 = list(rt.get_printable_results(model05, res05))
